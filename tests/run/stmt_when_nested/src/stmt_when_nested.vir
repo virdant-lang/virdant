@@ -22,17 +22,17 @@ import virt
 mod WhenNest {
     //> Outer `match` selector: 0 enters the nested `when`s, 1 takes
     //> the `match` `else` arm and ignores `a` and `b` entirely.
-    incoming op : Word[1]
+    incoming op : Word[1] async
 
     //> Middle `when` condition: its arm contains the inner `when`.
-    incoming a : Bit
+    incoming a : Bit async
 
     //> Inner `when` condition, nested inside the `when a` arm.
-    incoming b : Bit
+    incoming b : Bit async
 
     //> Code identifying the path taken through the nesting: 1, 2, 3,
     //> or 4 as listed above.
-    outgoing r : Word[3] dependson op, a, b
+    outgoing r : Word[3] async dependson op, a, b
 
     match op {
         with 0 {

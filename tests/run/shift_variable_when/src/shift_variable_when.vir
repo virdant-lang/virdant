@@ -17,16 +17,16 @@ import virt
 //> through 3) using a `when` expression, `word()`, and bit slices.
 mod VariableShift {
     //> Value to shift.
-    incoming x : Word[8]
+    incoming x : Word[8] async
 
     //> Shift amount, 0 through 3.
-    incoming s : Word[2]
+    incoming s : Word[2] async
 
     //> `x` shifted left by `s`: drop the top `s` bits (shifted out
     //> and lost) and append `s` zero bits at the bottom.  The slice
     //> `x[8-s..0]` keeps the bottom `8-s` bits; the top slice index is
     //> exclusive.
-    outgoing left : Word[8] dependson x, s {
+    outgoing left : Word[8] async dependson x, s {
         it := if {
             when s == 0 => x
             when s == 1 => word(x[7..0], 0w1)
@@ -37,7 +37,7 @@ mod VariableShift {
 
     //> `x` shifted right by `s`: prepend `s` zero bits at the top and
     //> drop the bottom `s` bits (shifted out and lost).
-    outgoing right : Word[8] dependson x, s {
+    outgoing right : Word[8] async dependson x, s {
         it := if {
             when s == 0 => x
             when s == 1 => word(0w1, x[8..1])

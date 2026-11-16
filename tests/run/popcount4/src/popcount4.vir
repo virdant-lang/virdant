@@ -16,20 +16,20 @@ import virt
 //> each arm of which contains a nested match on the two low bits.
 mod Popcount4 {
     //> The 4-bit word whose set bits are counted.
-    incoming x : Word[4]
+    incoming x : Word[4] async
 
     //> The two high bits of `x`, most-significant first.
-    wire high : Word[2] {
+    wire high : Word[2] async {
         it := word(x[3], x[2])
     }
 
     //> The two low bits of `x`, most-significant first.
-    wire low : Word[2] {
+    wire low : Word[2] async {
         it := word(x[1], x[0])
     }
 
     //> Number of set bits in `x`, 0 through 4.
-    outgoing count : Word[3] dependson x {
+    outgoing count : Word[3] async dependson x {
         it := match high {
             with 0 => match low {
                 with 0 => 0

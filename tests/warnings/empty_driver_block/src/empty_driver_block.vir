@@ -4,12 +4,12 @@
 // (Submodule and socket cases are planned new tests; see TESTING_REPORT.)
 
 mod ComponentModule {
-    incoming a : Bit {
+    incoming a : Bit async {
         b := it
     }
 
     // CHECK: Empty driver block
-    outgoing b : Bit dependson a {
+    outgoing b : Bit async dependson a {
     }
 }
 

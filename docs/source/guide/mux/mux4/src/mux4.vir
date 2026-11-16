@@ -1,12 +1,12 @@
 pub mod Mux4 {
-    incoming a : Word[8]
-    incoming b : Word[8]
-    incoming c : Word[8]
-    incoming d : Word[8]
+    incoming a : Word[8] async
+    incoming b : Word[8] async
+    incoming c : Word[8] async
+    incoming d : Word[8] async
 
-    incoming select : Word[2]
+    incoming select : Word[2] async
 
-    outgoing out : Word[8] dependson a, b, c, d, select {
+    outgoing out : Word[8] async dependson a, b, c, d, select {
         it := match select {
             with 0 => a
             with 1 => b

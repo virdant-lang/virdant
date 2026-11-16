@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A `reg`, `outgoing reg`, or `memory` declared `async` is an error: clocked components always live on a Sync domain. Other kinds may be `async` freely."
+filecheck = "src/async_registers.vir"

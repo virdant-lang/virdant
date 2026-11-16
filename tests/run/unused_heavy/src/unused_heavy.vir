@@ -38,12 +38,12 @@ mod Peer {
 
     //> The used response: `addr + 1`, computed from `addr` alone --
     //> `sel` is ignored, so the transform must never depend on it.
-    wire rsp : Word[8] {
+    wire rsp : Word[8] async {
         it := link.addr + 1w8
     }
 
     //> The ignored-by-client response: the low nibble of `addr`.
-    wire addr_low : Word[4] {
+    wire addr_low : Word[4] async {
         it := link.addr[4..0]
     }
 }
@@ -53,17 +53,17 @@ mod Peer {
 //> are suppressed with `unused` in the instantiation.
 mod Extras {
     //> Port the harness actually consumes.
-    outgoing kept_out : Word[8] {
+    outgoing kept_out : Word[8] async {
         it := 0xabw8
     }
 
     //> Port the harness ignores.
-    outgoing spare_a : Word[8] {
+    outgoing spare_a : Word[8] async {
         it := 0x11w8
     }
 
     //> Another port the harness ignores.
-    outgoing spare_b : Word[8] {
+    outgoing spare_b : Word[8] async {
         it := 0x22w8
     }
 }

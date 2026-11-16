@@ -25,7 +25,7 @@ socket Bus[A : Type, B : Type] {
 //> Client side of the wide-request instantiation: drives an 8-bit
 //> request and ignores the 4-bit response.
 mod Req8to4 {
-    incoming d : Word[8]
+    incoming d : Word[8] async
     client socket busif of Bus[Word[8], Word[4]]
         where it.req dependson d
     {
@@ -45,7 +45,7 @@ mod Rsp8to4 {
 //> Client side of the narrow-request instantiation: drives a 4-bit
 //> request and ignores the 8-bit response.
 mod Req4to8 {
-    incoming d : Word[4]
+    incoming d : Word[4] async
     client socket busif of Bus[Word[4], Word[8]]
         where it.req dependson d
     {

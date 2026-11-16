@@ -19,13 +19,13 @@ import virt
 //> requests pending at all, `valid` drops and `grant` holds 0.
 mod PrioEnc {
     //> Four request bits; `req[3]` has the highest priority.
-    incoming req : Word[4]
+    incoming req : Word[4] async
 
     //> Index of the granted request, 0 through 3.
-    outgoing grant : Word[2] dependson req
+    outgoing grant : Word[2] async dependson req
 
     //> High when any request is pending.
-    outgoing valid : Bit dependson req
+    outgoing valid : Bit async dependson req
 
     if {
         when req[3] {

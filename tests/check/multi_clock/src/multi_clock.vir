@@ -25,8 +25,10 @@ pub mod DualDomain {
         it <= inp_b
     }
 
-    outgoing out_a : Word[4]
-    outgoing out_b : Word[4]
+    // With no unique clock there is no implicit domain: `outgoing`
+    // components carry explicit `on` clauses just like everything else.
+    outgoing out_a : Word[4] on clk_a
+    outgoing out_b : Word[4] on clk_b
 
     out_a := buf_a
     out_b := buf_b
@@ -45,7 +47,7 @@ pub mod PortAndSocket {
         it <= 0
     }
 
-    outgoing out : Word[8] {
+    outgoing out : Word[8] on clock {
         it := data_buf
     }
 }

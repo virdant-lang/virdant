@@ -17,10 +17,10 @@ import mem
 //> the external RAM, entirely in Virdant.
 mod AddOne {
     //> Word read from the external RAM (the `ext mod` boundary).
-    incoming data : Word[32]
+    incoming data : Word[32] async
 
     //> `data + 1`.
-    outgoing sum : Word[32] dependson data {
+    outgoing sum : Word[32] async dependson data {
         it := data + 1
     }
 }

@@ -82,7 +82,7 @@ pub mod AnnotationsTest {
     // Boolean literals as annotation arguments
     @parameter("active", true)
     @parameter("active", false)
-    incoming test_port : Bit
+    incoming test_port : Bit async
 
     unused test_port
 }

@@ -21,7 +21,7 @@ socket Handshake {
 //> Client side: drives the union-typed channel from `d` and ignores
 //> the server's `ready`.
 mod Sender {
-    incoming d : Valid[Word[8]]
+    incoming d : Valid[Word[8]] async
 
     client socket hs of Handshake
         where it.data dependson d

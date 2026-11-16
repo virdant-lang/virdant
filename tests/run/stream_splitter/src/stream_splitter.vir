@@ -79,7 +79,7 @@ mod StreamSplitter {
 
     //> The incoming item as a plain word (`0` when `@Invalid()`, which
     //> never reaches an output because `inp_fires` is false then).
-    wire in_item : Word[8] {
+    wire in_item : Word[8] async {
         it := match inp.data {
             with @Valid(item) => item
             with @Invalid() => 0
@@ -87,18 +87,18 @@ mod StreamSplitter {
     }
 
     //> The header bit carried with the incoming item: its top bit.
-    wire route : Bit {
+    wire route : Bit async {
         it := in_item[7]
     }
 
     //> The payload carried with the incoming item: its low 7 bits.
-    wire item_data : Word[7] {
+    wire item_data : Word[7] async {
         it := in_item[7..0]
     }
 
     //> An input transfer lands this cycle: incoming payload with the
     //> selected output ready.
-    wire inp_fires : Bit {
+    wire inp_fires : Bit async {
         it := match inp.data {
             with @Valid(dontcare) => mux(route, out_b.ready, out_a.ready)
             with @Invalid() => false

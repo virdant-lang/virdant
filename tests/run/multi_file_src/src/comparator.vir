@@ -13,13 +13,13 @@ import bits
 //> inside this package; the harness top never references it.
 mod Ne {
     //> First 8-bit operand.
-    incoming x : Word[8]
+    incoming x : Word[8] async
 
     //> Second 8-bit operand.
-    incoming y : Word[8]
+    incoming y : Word[8] async
 
     //> `x != y`.
-    outgoing out : Bit dependson x, y {
+    outgoing out : Bit async dependson x, y {
         it := x != y
     }
 }

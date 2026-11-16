@@ -10,23 +10,23 @@ import virt
 //> Computes the three bitwise operators on its `Word[8]` input ports.
 mod WordBitwise {
     //> First operand.
-    incoming a : Word[8]
+    incoming a : Word[8] async
 
     //> Second operand.
-    incoming b : Word[8]
+    incoming b : Word[8] async
 
     //> Bitwise AND of the two operands.
-    outgoing and_out : Word[8] dependson a, b {
+    outgoing and_out : Word[8] async dependson a, b {
         it := a & b
     }
 
     //> Bitwise OR of the two operands.
-    outgoing or_out : Word[8] dependson a, b {
+    outgoing or_out : Word[8] async dependson a, b {
         it := a | b
     }
 
     //> Bitwise XOR of the two operands.
-    outgoing xor_out : Word[8] dependson a, b {
+    outgoing xor_out : Word[8] async dependson a, b {
         it := a ^ b
     }
 }

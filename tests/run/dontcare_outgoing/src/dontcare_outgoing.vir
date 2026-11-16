@@ -14,12 +14,12 @@ import virt
 //> deterministic sibling the harness can check.
 mod DontcareSource {
     //> Deterministic sibling of the `dontcare` port.
-    outgoing fixed : Bit {
+    outgoing fixed : Bit async {
         it := true
     }
 
     //> Outgoing port driven `dontcare`.
-    outgoing out : Word[8] {
+    outgoing out : Word[8] async {
         it := dontcare
     }
 }

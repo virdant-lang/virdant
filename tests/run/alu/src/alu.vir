@@ -23,16 +23,16 @@ enum type AluOp {
 //> Tiny ALU: `opcode` selects the operation applied to `a` and `b`.
 mod Alu {
     //> First operand.
-    incoming a : Word[8]
+    incoming a : Word[8] async
 
     //> Second operand.
-    incoming b : Word[8]
+    incoming b : Word[8] async
 
     //> Selects add, sub, and, or, or xor.
-    incoming opcode : AluOp
+    incoming opcode : AluOp async
 
     //> Result of the operation selected by `opcode`.
-    outgoing result : Word[8] dependson a, b, opcode {
+    outgoing result : Word[8] async dependson a, b, opcode {
         it := match opcode {
             with #Add => a + b
             with #Sub => a - b

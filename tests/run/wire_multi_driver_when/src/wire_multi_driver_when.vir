@@ -17,20 +17,20 @@ import virt
 //> `when`.
 mod WireMultiDriverWhen {
     //> First operand.
-    incoming a : Word[8]
+    incoming a : Word[8] async
 
     //> Second operand.
-    incoming b : Word[8]
+    incoming b : Word[8] async
 
     //> Arm selector: high runs the `case` arm, low the `else` arm.
-    incoming sel : Bit
+    incoming sel : Bit async
 
     //> Value carried by the multi-driver wire under test.
-    outgoing result : Word[8] dependson a, b, sel
+    outgoing result : Word[8] async dependson a, b, sel
 
     //> Wire with a driver in each arm of the statement `when` below.
     //> Being a wire, the `when` must be total: every arm assigns it.
-    wire picked : Word[8]
+    wire picked : Word[8] async
 
     // Both arms drive `picked`: `case` computes the sum, `else` the
     // wrapping difference.  Evaluated in order; `else` catches every

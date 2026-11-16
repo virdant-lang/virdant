@@ -1,10 +1,10 @@
 pub mod Mux2 {
-    incoming a : Word[8]
-    incoming b : Word[8]
+    incoming a : Word[8] async
+    incoming b : Word[8] async
 
-    incoming select : Bit
+    incoming select : Bit async
 
-    outgoing out : Word[8] dependson a, b, select {
+    outgoing out : Word[8] async dependson a, b, select {
         it := mux(select, a, b)
     }
 }

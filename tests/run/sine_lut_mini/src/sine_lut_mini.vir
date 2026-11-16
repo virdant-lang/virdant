@@ -16,10 +16,10 @@ import virt
 //> shows the sine sample stored at that position.
 mod SineLut {
     //> Table index, 0 through 3.
-    incoming index : Word[2]
+    incoming index : Word[2] async
 
     //> Sine sample stored at `index`.
-    outgoing sample : Word[8] dependson index
+    outgoing sample : Word[8] async dependson index
 
     match index {
         with 0 {

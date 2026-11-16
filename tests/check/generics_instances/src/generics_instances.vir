@@ -11,7 +11,7 @@ socket Bus[T : Type] {
 }
 
 mod Master[W : Type] {
-    incoming d : W
+    incoming d : W async
     client socket busif of Bus[W]
         where it.req dependson d
     {

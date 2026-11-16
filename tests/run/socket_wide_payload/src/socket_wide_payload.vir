@@ -34,7 +34,7 @@ mod WideEcho {
 //> the response channel (the harness reads it from the server side).
 mod WideClient {
     //> 32-bit value presented on the request channel.
-    incoming d : Word[32]
+    incoming d : Word[32] async
 
     client socket busif of Wide
         where it.req dependson d

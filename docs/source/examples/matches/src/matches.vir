@@ -4,8 +4,8 @@ pub union type MaybeWord {
 }
 
 pub mod Top {
-    incoming inp : MaybeWord
-    outgoing out : Word[8] dependson inp
+    incoming inp : MaybeWord async
+    outgoing out : Word[8] async dependson inp
 
     out :=
         match inp {

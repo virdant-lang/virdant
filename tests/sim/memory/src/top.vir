@@ -38,10 +38,10 @@ pub mod Ram {
 //> An 8-word ROM from a text hex file, one word per line.
 pub mod HexRom {
     //> Read address.
-    incoming read_addr : Word[3]
+    incoming read_addr : Word[3] async
 
     //> The addressed word.
-    outgoing read_data : Word[8] dependson read_addr {
+    outgoing read_data : Word[8] async dependson read_addr {
         it := rom[dyn read_addr]
     }
 

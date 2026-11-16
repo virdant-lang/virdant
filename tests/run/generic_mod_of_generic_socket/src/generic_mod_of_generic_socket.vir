@@ -19,7 +19,7 @@ socket Chan[T : Type] {
 //> `Chan[W]`, generic in the same parameter `W`.  It drives `req`
 //> combinationally from `d`.
 mod Producer[W : Type] {
-    incoming d : W
+    incoming d : W async
     client socket link of Chan[W]
         where it.req dependson d
     {

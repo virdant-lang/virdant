@@ -1,0 +1,82 @@
+// The clock checker rejects combining signals on distinct clocks:
+// every operand of a combinational expression (binop operands, `when`
+// guards and arm results, `match` subjects and arm results, struct
+// fields, memory indices) must join to one domain.  Constants join
+// with anything; two distinct `Sync` domains never do.
+
+mod CrossClock {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming a_data : Word[4] on clk_a
+    incoming b_data : Word[4] on clk_b
+
+    // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+    wire bad_add : Word[4] on clk_a {
+        it := a_data + b_data
+    }
+
+    // The same shape with a constant operand is fine — constants
+    // upcast to either clock — so the mismatch is specifically about
+    // the two clocked operands above.  (This wire checks clean.)
+    wire good_add : Word[4] on clk_a {
+        it := a_data + 1w4
+    }
+    unused good_add
+
+    // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+    outgoing bad_match : Word[4] on clk_a dependson a_data, b_data {
+        it := match a_data {
+            with 0w4 => b_data
+            else => a_data
+        }
+    }
+
+    // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+    outgoing bad_when : Word[4] on clk_a dependson a_data, b_data {
+        it := if {
+            when a_data[0] => a_data
+            else => b_data
+        }
+    }
+}
+
+struct type Pair {
+    hi : Word[2]
+    lo : Word[2]
+}
+
+mod CrossStruct {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming a_data : Word[4] on clk_a
+    incoming b_data : Word[4] on clk_b
+
+    // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+    wire bad_struct : Pair on clk_a {
+        it := ${ hi = a_data[3..1], lo = b_data[2..0] }
+    }
+
+    // A memory on clk_a indexed by a clk_b signal.
+    memory mem[16] : Word[8] on clk_a
+
+    // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+    wire bad_read : Word[8] on clk_a {
+        it := mem[dyn b_data]
+    }
+
+    // Statement `when` guards must share one domain too.
+    reg stage : Word[4] on clk_a {
+        initial it <= 0
+        // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+        if {
+            when a_data[0] {
+                it <= a_data
+            }
+            when b_data[0] {
+                it <= b_data
+            }
+        }
+    }
+}
+
+// CHECK: Check failed

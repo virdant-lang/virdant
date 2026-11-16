@@ -20,17 +20,17 @@ import virt
 //> bit slices.
 mod ShiftOne {
     //> Value to shift.
-    incoming x : Word[8]
+    incoming x : Word[8] async
 
     //> `x` shifted left by 1: drop the top bit (shifted out and
     //> lost) and append a 0 at the bottom.
-    outgoing left1 : Word[8] dependson x {
+    outgoing left1 : Word[8] async dependson x {
         it := word(x[7..0], 0w1)
     }
 
     //> `x` shifted right by 1: prepend a 0 at the top and drop the
     //> bottom bit (shifted out and lost).
-    outgoing right1 : Word[8] dependson x {
+    outgoing right1 : Word[8] async dependson x {
         it := word(0w1, x[8..1])
     }
 }

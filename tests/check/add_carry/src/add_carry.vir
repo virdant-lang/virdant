@@ -6,17 +6,17 @@
 // CHECK: Check OK
 
 pub mod AddCarryBoth {
-    incoming a : Word[4]
-    incoming b : Word[4]
-    outgoing out : Word[5] dependson a, b {
+    incoming a : Word[4] async
+    incoming b : Word[4] async
+    outgoing out : Word[5] async dependson a, b {
         // Both operands are Word[4]; the result is one bit wider.
         it := a +. b
     }
 }
 
 pub mod AddCarryInferFromLhs {
-    incoming a : Word[4]
-    outgoing out : Word[5] dependson a {
+    incoming a : Word[4] async
+    outgoing out : Word[5] async dependson a {
         // Only the LHS is inferrable; the RHS literal is checked
         // against Word[4], and the result is widened to Word[5].
         it := a +. 4w4
@@ -24,8 +24,8 @@ pub mod AddCarryInferFromLhs {
 }
 
 pub mod SubBorrowInferFromRhs {
-    incoming a : Word[4]
-    outgoing out : Word[5] dependson a {
+    incoming a : Word[4] async
+    outgoing out : Word[5] async dependson a {
         // Only the RHS is inferrable; the LHS literal is checked
         // against Word[4], and the result is widened to Word[5].
         it := 4w4 -. a
@@ -33,9 +33,9 @@ pub mod SubBorrowInferFromRhs {
 }
 
 pub mod SubBorrowBoth {
-    incoming a : Word[8]
-    incoming b : Word[8]
-    outgoing out : Word[9] dependson a, b {
+    incoming a : Word[8] async
+    incoming b : Word[8] async
+    outgoing out : Word[9] async dependson a, b {
         it := a -. b
     }
 }
@@ -43,15 +43,15 @@ pub mod SubBorrowBoth {
 pub mod CarryBitOperands {
     // A Bit is a one-bit word: two Bits combined with `+.` produce a
     // two-bit result.
-    outgoing out : Word[2] {
+    outgoing out : Word[2] async {
         it := true +. false
     }
 }
 
 pub mod CarryInExpression {
-    incoming a : Word[4]
-    incoming b : Word[4]
-    outgoing out : Word[1] dependson a, b {
+    incoming a : Word[4] async
+    incoming b : Word[4] async
+    outgoing out : Word[1] async dependson a, b {
         // The carry bit can be sliced out of the widened result.
         it := (a +. b)[5..4]
     }

@@ -19,21 +19,21 @@ import virt
 //> `total` stays below `threshold`.
 mod ThresholdUnit {
     //> Constant added onto `value`, tied to a literal by the parent.
-    incoming offset : Word[8]
+    incoming offset : Word[8] async
 
     //> Constant limit compared against, tied to a literal by the parent.
-    incoming threshold : Word[8]
+    incoming threshold : Word[8] async
 
     //> Data input, driven by the parent's counter.
-    incoming value : Word[8]
+    incoming value : Word[8] async
 
     //> `value` plus the constant `offset`.
-    outgoing total : Word[8] dependson offset, value {
+    outgoing total : Word[8] async dependson offset, value {
         it := value + offset
     }
 
     //> High while `total` stays below the constant `threshold`.
-    outgoing under : Bit dependson offset, threshold, value {
+    outgoing under : Bit async dependson offset, threshold, value {
         it := total < threshold
     }
 }

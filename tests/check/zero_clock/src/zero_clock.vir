@@ -1,10 +1,8 @@
 // A module with zero incoming clock ports — no `incoming ... : Clock`,
-// no inward socket channel typed `Clock` — has no clocks to provide to
-// any `on` clause, and checks with no clock bookkeeping at all.
-//
-// TODO(clock-coloring): once the clock checker lands (item 4), the
-// inputs here must be declared `async`; the `async` modifier is
-// currently behind the not-yet-implemented gate.
+// no inward socket channel typed `Clock` — has no clock any component
+// could be `Sync` on.  The full coloring is skipped, but every
+// component must then be explicitly `async` (the one exception: a
+// Clock-typed component, which is always `Async` anyway).
 
 // CHECK: Check OK
 
@@ -13,13 +11,13 @@ socket ClkBus {
 }
 
 pub mod ZeroClock {
-    incoming inp : Bit
+    incoming inp : Bit async
 
-    wire tapped : Bit {
+    wire tapped : Bit async {
         it := inp
     }
 
-    outgoing out : Bit dependson inp {
+    outgoing out : Bit async dependson inp {
         it := tapped
     }
 }

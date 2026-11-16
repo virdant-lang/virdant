@@ -2,6 +2,7 @@
 
 pub mod check;
 pub mod check_drivers;
+pub mod clockcheck;
 pub mod check_initial;
 pub mod combinational_cycles;
 pub mod dependson;

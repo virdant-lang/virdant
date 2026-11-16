@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "The clock checker: operands of a combinational expression on distinct clocks cannot be combined (DomainMismatch), across binops, when guards and results, match subjects and arms, struct construction, memory indexing, and statement when-guards."
+filecheck = "src/domain_mismatch.vir"

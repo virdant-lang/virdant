@@ -21,6 +21,9 @@ pub const KNOWN_ANNOTATIONS: &[&str] = &[
     "cell",
     // Moddefs and builtins:
     "parameter",
+    // Moddefs: disables the clock checker for the module; every
+    // component must then carry an explicit `on`/`async` clause.
+    "unsafe_clocks",
     // Memory declarations:
     "image",
     "image_hex",

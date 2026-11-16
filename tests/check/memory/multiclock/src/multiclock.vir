@@ -8,9 +8,9 @@ pub mod DualClockRam {
     incoming clk_a : Clock
     incoming clk_b : Clock
 
-    incoming addr : Word[6]
-    incoming write_data : Word[16]
-    outgoing read_data : Word[16]
+    incoming addr : Word[6] on clk_a
+    incoming write_data : Word[16] on clk_a
+    outgoing read_data : Word[16] on clk_a
 
     unused clk_b
 
@@ -28,9 +28,9 @@ pub mod BlocklessMultiClock {
     incoming clk_a : Clock
     incoming clk_b : Clock
 
-    incoming addr : Word[4]
-    incoming write_data : Word[8]
-    outgoing read_data : Word[8] dependson addr {
+    incoming addr : Word[4] on clk_b
+    incoming write_data : Word[8] on clk_b
+    outgoing read_data : Word[8] on clk_b dependson addr {
         it := mem[dyn addr]
     }
 

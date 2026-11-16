@@ -14,10 +14,10 @@ import virt
 //> Innermost module of the hierarchy.  Passes `inp` through to `out`.
 mod Leaf {
     //> Word driven in from the enclosing module.
-    incoming inp : Word[8]
+    incoming inp : Word[8] async
 
     //> Word passed through unchanged.
-    outgoing out : Word[8] dependson inp
+    outgoing out : Word[8] async dependson inp
 
     out := inp
 }

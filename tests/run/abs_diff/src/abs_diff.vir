@@ -16,14 +16,14 @@ import virt
 //> the comparison.
 mod AbsDiff {
     //> First operand.
-    incoming x : Word[8]
+    incoming x : Word[8] async
 
     //> Second operand.
-    incoming y : Word[8]
+    incoming y : Word[8] async
 
     //> `|x - y|`: `y - x` when `x < y`, otherwise `x - y`.  Equal
     //> operands give 0.
-    outgoing diff : Word[8] dependson x, y {
+    outgoing diff : Word[8] async dependson x, y {
         it := if {
             when x < y => y - x
             else => x - y

@@ -1,13 +1,13 @@
 pub mod Mux3 {
-    incoming a : Word[8]
-    incoming b : Word[8]
-    incoming c : Word[8]
+    incoming a : Word[8] async
+    incoming b : Word[8] async
+    incoming c : Word[8] async
 
-    incoming select_a : Bit
-    incoming select_b : Bit
-    incoming select_c : Bit
+    incoming select_a : Bit async
+    incoming select_b : Bit async
+    incoming select_c : Bit async
 
-    outgoing out : Word[8] dependson a, b, c, select_a, select_b, select_c {
+    outgoing out : Word[8] async dependson a, b, c, select_a, select_b, select_c {
         if {
             when select_a {
                 it := a

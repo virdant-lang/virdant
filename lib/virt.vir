@@ -188,8 +188,8 @@ pub mod Hello {
 //> the end of the message never reach here, so the `else` arm is
 //> unreachable padding.
 mod CharRom {
-    incoming index : Word[4]
-    outgoing char : Word[8] dependson index
+    incoming index : Word[4] async
+    outgoing char : Word[8] async dependson index
 
     char := match index {
         with 0  => 0x48 // 'H'

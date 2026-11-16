@@ -1,0 +1,111 @@
+// Clock coloring: modules the clock checker actually runs on.
+//
+// `Mixed` has a unique clock *and* an `async` component, so the fast
+// paths do not apply and every subexpression is colored:
+// - constants (`1w4`, `2w4 * 5w4`) stay `Constant`,
+// - clocked operands joined with constants stay clocked,
+// - async operands joined with anything become async (the lattice
+//   upcast `Sync(c) <= Async`),
+// - guards, arm bodies, mux selectors, and struct fields all join.
+
+// CHECK: Check OK
+
+struct type Pair {
+    hi : Word[2]
+    lo : Word[2]
+}
+
+pub mod Mixed {
+    incoming clock : Clock
+    incoming ext_data : Word[4] async
+
+    reg counter : Word[4] {
+        initial it <= 0
+        it <= it + 1w4
+    }
+
+    // Async signal joined with a constant: the result is Async.
+    wire ext_inc : Word[4] async {
+        it := ext_data + 1w4
+    }
+
+    // Clocked signal joined with a constant: the result stays Sync.
+    wire clocked_inc : Word[4] {
+        it := counter + 1w4
+    }
+
+    // Async joined with clocked: both upcast to Async.
+    outgoing out : Word[4] dependson ext_data {
+        it := ext_inc + clocked_inc
+    }
+
+    // `when` guards and arm results join to one domain; the constant
+    // subject upcasts to both.
+    outgoing selected : Word[4] dependson ext_data {
+        it := if {
+            when counter[3] => clocked_inc
+            else => ext_data
+        }
+    }
+
+    // `match`: the subject and all arm results join; patterns are
+    // exempt from coloring.
+    outgoing matched : Word[4] {
+        it := match 2w2 {
+            with 0w2 => 1w4
+            with 1w2 => clocked_inc
+            else => 0w4
+        }
+    }
+
+    // Struct construction: all field expressions join; the field
+    // access takes the struct's domain.
+    wire pair : Pair async {
+        it := ${ hi = ext_data[3..1], lo = ext_data[2..0] }
+    }
+
+    outgoing pair_hi : Word[2] dependson ext_data {
+        it := pair->hi
+    }
+
+    // A mux is an ordinary call: the selector joins with the data.
+    outgoing muxed : Word[4] {
+        it := mux(counter[0], clocked_inc, 0w4)
+    }
+}
+
+// A zero-clock module: everything is Async, nothing to mix, the
+// checker skips the module entirely.
+pub mod ZeroClockAsync {
+    incoming inp : Bit async
+
+    wire tapped : Bit async {
+        it := inp
+    }
+
+    outgoing out : Bit async dependson inp {
+        it := tapped
+    }
+}
+
+// `@unsafe_clocks` disables the clock checker: cross-clock mixing
+// that would otherwise be a `DomainMismatch` goes unchecked.  The
+// safety net is the annotations: every component must carry an
+// explicit `on` or `async` clause (clock ports themselves are exempt:
+// they are always `Async`).
+@unsafe_clocks
+pub mod Unsafe {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming a_data : Word[4] on clk_a
+    incoming b_data : Word[4] on clk_b
+
+    // Would be a domain mismatch; `@unsafe_clocks` disables the check.
+    wire mixed : Word[4] on clk_a {
+        it := a_data + b_data
+    }
+
+    outgoing out : Word[4] on clk_a dependson a_data, b_data {
+        it := mixed
+    }
+}

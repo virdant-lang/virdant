@@ -1,0 +1,29 @@
+// In a module with more than one incoming clock port there is no
+// unique clock, so *every* component needs an explicit `on` (or
+// `async`) clause — not just regs, which the component analysis
+// already diagnoses.
+
+pub mod TwoClocksNoClause {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming a_data : Word[4] on clk_a
+    incoming b_data : Word[4] on clk_b
+
+    // CHECK: Missing `on` or `async` clause for out: the module has multiple clocks
+    outgoing out : Word[4] dependson a_data {
+        it := a_data
+    }
+
+    // CHECK: Missing `on` or `async` clause for lazy: the module has multiple clocks
+    wire lazy : Word[4] dependson b_data {
+        it := b_data
+    }
+    unused lazy
+
+    // An explicit `on` clause fixes it.
+    outgoing fine : Word[4] on clk_b dependson b_data {
+        it := b_data
+    }
+}
+
+// CHECK: Check failed

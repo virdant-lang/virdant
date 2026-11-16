@@ -7,10 +7,10 @@
 
 // Marking an outgoing wire unused warns.
 pub mod MarkedWire {
-    outgoing wire w : Bit {
+    outgoing wire w : Bit async {
         it := true
     }
-    outgoing out : Bit
+    outgoing out : Bit async
 
     // CHECK: Marked `unused` but declared `outgoing wire`: w
     // CHECK-NOT: `unused` on outgoing
@@ -21,22 +21,22 @@ pub mod MarkedWire {
 
 // The it-block alias warns the same way.
 pub mod MarkedWireItAlias {
-    outgoing wire w : Bit {
+    outgoing wire w : Bit async {
         it := true
         // CHECK: Marked `unused` but declared `outgoing wire`: w
         unused it
     }
-    outgoing out : Bit
+    outgoing out : Bit async
 
     out := true
 }
 
 // An outgoing wire marked `unused` does not also warn UnusedSource.
 pub mod MarkedWireNoUnusedSource {
-    outgoing wire w : Bit {
+    outgoing wire w : Bit async {
         it := true
     }
-    outgoing out : Bit
+    outgoing out : Bit async
 
     // CHECK: Marked `unused` but declared `outgoing wire`: w
     // CHECK-NOT: Unused signal w
@@ -48,8 +48,8 @@ pub mod MarkedWireNoUnusedSource {
 // Marking an incoming port unused is the normal case: no warning
 // here.
 pub mod IncomingMarkOk {
-    incoming unused_val : Bit
-    outgoing out : Bit
+    incoming unused_val : Bit async
+    outgoing out : Bit async
 
     // CHECK-NOT: outgoing wire
     unused unused_val

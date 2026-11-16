@@ -8,8 +8,8 @@
 // its initial contents, and writes commit on the clock edge.
 
 pub mod HexRom {
-    incoming addr : Word[8]
-    outgoing read_data : Word[32]
+    incoming addr : Word[8] async
+    outgoing read_data : Word[32] async
 
     @image_hex("rom_image.hex")
     memory rom[256] : Word[32] {
@@ -18,8 +18,8 @@ pub mod HexRom {
 }
 
 pub mod RawRom {
-    incoming addr : Word[3]
-    outgoing read_data : Word[16]
+    incoming addr : Word[3] async
+    outgoing read_data : Word[16] async
 
     @image("rom_raw.bin")
     memory rom[8] : Word[16] {
@@ -42,8 +42,8 @@ pub mod WriteToImage {
 }
 
 pub mod Unreadable {
-    incoming addr : Word[2]
-    outgoing read_data : Word[8] dependson addr {
+    incoming addr : Word[2] async
+    outgoing read_data : Word[8] async dependson addr {
         it := rom[dyn addr]
     }
 

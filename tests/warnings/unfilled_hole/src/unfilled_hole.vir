@@ -3,7 +3,7 @@
 // None of these are errors, so the run ends with "Check OK".
 
 mod WithHole {
-    outgoing out : Word[4]
+    outgoing out : Word[4] async
     // CHECK: Unfilled hole: ? : Word[4]
     out := ?
 }

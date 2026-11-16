@@ -4,9 +4,9 @@
 
 // CHECK: Unused `dependson`: `out` declares it may depend on `unused_inp` but does not
 mod Unused {
-    incoming inp : Bit
-    incoming unused_inp : Bit
-    outgoing out : Bit dependson inp, unused_inp {
+    incoming inp : Bit async
+    incoming unused_inp : Bit async
+    outgoing out : Bit async dependson inp, unused_inp {
         it := inp
     }
     unused unused_inp
@@ -20,9 +20,9 @@ mod Unused {
 // CHECK: `ow` declares it may depend on `inp` but does not
 // CHECK-NOT: `out` declares it may depend
 mod JustifiedByOther {
-    incoming inp : Bit
-    outgoing ow : Bit dependson inp
-    outgoing out : Bit dependson inp
+    incoming inp : Bit async
+    outgoing ow : Bit async dependson inp
+    outgoing out : Bit async dependson inp
     ow := true
     out := ow
 }
@@ -38,8 +38,8 @@ pub ext mod External {
 }
 
 pub mod Top {
-    incoming inp : Bit
-    outgoing ok : Bit
+    incoming inp : Bit async
+    outgoing ok : Bit async
     ok := true
     unused inp
 }

@@ -12,10 +12,10 @@ import helper
 
 // CHECK: Check OK
 pub mod Top {
-    incoming inp : Word[8]
-    outgoing out : Word[8] dependson inp
+    incoming inp : Word[8] async
+    outgoing out : Word[8] async dependson inp
 
-    wire used : helper::UsedStruct
+    wire used : helper::UsedStruct async
     used := ${ x = inp }
 
     out := used->x

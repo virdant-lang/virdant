@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "In a multi-clock module there is no unique clock, so every non-reg component needs an explicit `on` or `async` clause too (regs are already diagnosed by the component analysis)."
+filecheck = "src/missing_domain_clause.vir"

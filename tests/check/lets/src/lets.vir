@@ -11,8 +11,8 @@
 // CHECK: Check OK
 
 pub mod StmtLet {
-    incoming a : Word[8]
-    outgoing out : Word[8] dependson a
+    incoming a : Word[8] async
+    outgoing out : Word[8] async dependson a
 
     let x = a {
     }
@@ -21,10 +21,10 @@ pub mod StmtLet {
 }
 
 pub mod StmtLetWhen {
-    incoming a : Bit
-    incoming b : Word[8]
-    outgoing out : Word[8] dependson b
-    outgoing flag : Bit dependson a
+    incoming a : Bit async
+    incoming b : Word[8] async
+    outgoing out : Word[8] async dependson b
+    outgoing flag : Bit async dependson a
 
     let x = b if {
         when a {
@@ -38,10 +38,10 @@ pub mod StmtLetWhen {
 }
 
 pub mod StmtLetMatch {
-    incoming a : Word[8]
-    incoming t : StyleE
-    outgoing out : Word[8] dependson a
-    outgoing echo : StyleE dependson t
+    incoming a : Word[8] async
+    incoming t : StyleE async
+    outgoing out : Word[8] async dependson a
+    outgoing echo : StyleE async dependson t
 
     let x = a match t {
         with #A {
@@ -55,9 +55,9 @@ pub mod StmtLetMatch {
 }
 
 pub mod StmtWhenArmLet {
-    incoming a : Bit
-    incoming b : Word[8]
-    outgoing out : Word[8] dependson b
+    incoming a : Bit async
+    incoming b : Word[8] async
+    outgoing out : Word[8] async dependson b
 
     if {
         when a let x = b {

@@ -19,18 +19,18 @@ import virt
 //> `b` is high.
 mod WhenOrder {
     //> First condition: its arm comes first in the `when`.
-    incoming a : Bit
+    incoming a : Bit async
 
     //> Second condition: its arm also matches when `a` is high.
-    incoming b : Bit
+    incoming b : Bit async
 
     //> Which arm fired: 1 for the first arm, 2 for the second, 0 for
     //> `else`.  Both-high must read 1 — the first arm's value.
-    outgoing sel : Word[2] dependson a, b
+    outgoing sel : Word[2] async dependson a, b
 
     //> Mirrors the first arm only: true if (and only if) the first arm
     //> fired, false from the second arm and from `else`.
-    outgoing tag : Bit dependson a, b
+    outgoing tag : Bit async dependson a, b
 
     if {
         when a {

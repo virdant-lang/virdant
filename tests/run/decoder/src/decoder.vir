@@ -15,10 +15,10 @@ import virt
 //> one bit set, at the position given by `code`.
 mod Decoder {
     //> Binary code to decode.
-    incoming code : Word[2]
+    incoming code : Word[2] async
 
     //> One-hot encoding of `code`: bit `code` set, all others clear.
-    outgoing onehot : Word[4] dependson code
+    outgoing onehot : Word[4] async dependson code
 
     match code {
         with 0 {

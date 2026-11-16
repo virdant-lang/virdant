@@ -15,26 +15,26 @@ import virt
 //> conditional `word()` shifts.
 mod BarrelShifter {
     //> Word to shift.
-    incoming x : Word[8]
+    incoming x : Word[8] async
 
     //> Shift amount, 0 through 7.
-    incoming s : Word[3]
+    incoming s : Word[3] async
 
     //> `x` shifted left by `s`; bits shifted out are lost.
-    outgoing shifted : Word[8] dependson x, s
+    outgoing shifted : Word[8] async dependson x, s
 
     //> Stage for the shift-amount bit weighting 4.
-    wire stage4 : Word[8] {
+    wire stage4 : Word[8] async {
         it := mux(s[2], word(x[4..0], 0w4), x)
     }
 
     //> Stage for the shift-amount bit weighting 2.
-    wire stage2 : Word[8] {
+    wire stage2 : Word[8] async {
         it := mux(s[1], word(stage4[6..0], 0w2), stage4)
     }
 
     //> Stage for the shift-amount bit weighting 1.
-    wire stage1 : Word[8] {
+    wire stage1 : Word[8] async {
         it := mux(s[0], word(stage2[7..0], 0w1), stage2)
     }
 

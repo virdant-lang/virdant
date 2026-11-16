@@ -69,6 +69,15 @@ pub enum DiagnosticPayload {
     /// unique clock. The module's implicit clock already covers it, so
     /// the `on` clause can be omitted.
     RedundantOnClause(RedundantOnClause),
+    /// Two subexpressions of one combinational expression sit on
+    /// incompatible clock domains (distinct clocks cannot be combined).
+    DomainMismatch(DomainMismatch),
+    /// A component of a multi-clock (or `@unsafe_clocks`) module lacks
+    /// an explicit `on` or `async` clause.
+    MissingDomainClause(MissingDomainClause),
+    /// A clocked component (`reg`, `outgoing reg`, `memory`) was
+    /// declared `async`.
+    AsyncRegister(AsyncRegister),
     /// A `driver` statement used the wrong driver type.
     /// Eg, a `reg` used `:=` or a `wire` used `<=`.
     WrongDriverType(WrongDriverType),
@@ -415,6 +424,34 @@ pub struct MissingOnClause {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RedundantOnClause {
+    pub component: BString,
+}
+
+/// Two subexpressions of one combinational expression sit on
+/// incompatible clock domains: distinct clocks (`Sync(c1)`,
+/// `Sync(c2)`) can never be combined.  Both domains are rendered
+/// ("clocked by `clk`", "async", "constant").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DomainMismatch {
+    pub left: BString,
+    pub right: BString,
+}
+
+/// A component of a multi-clock (or `@unsafe_clocks`) module has no
+/// `on` or `async` clause.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingDomainClause {
+    pub component: BString,
+    /// Why the module needs explicit clauses ("the module has multiple
+    /// clocks" or "the module is marked `@unsafe_clocks`").
+    pub reason: BString,
+}
+
+/// A clocked component (`reg`, `outgoing reg`, `memory`) is declared
+/// `async`, which is never legal: clocked components always live on a
+/// `Sync` domain.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsyncRegister {
     pub component: BString,
 }
 
@@ -986,6 +1023,24 @@ impl Diagnostic {
             DiagnosticPayload::UnresolvedItem(d) => format!("Unresolved item {}", d.item).into(),
             DiagnosticPayload::UnresolvedType(d) => format!("Unresolved type {}", d.typ).into(),
             DiagnosticPayload::MissingOnClause(d) => format!("Missing on clause for reg {}", d.component).into(),
+            DiagnosticPayload::DomainMismatch(d) => {
+                format!(
+                    "Domain mismatch: cannot combine {} with {}",
+                    d.left, d.right,
+                ).into()
+            }
+            DiagnosticPayload::MissingDomainClause(d) => {
+                format!(
+                    "Missing `on` or `async` clause for {}: {}",
+                    d.component, d.reason,
+                ).into()
+            }
+            DiagnosticPayload::AsyncRegister(d) => {
+                format!(
+                    "`{}` cannot be `async`: registers and memories are clocked",
+                    d.component,
+                ).into()
+            }
             DiagnosticPayload::RedundantOnClause(d) => {
                 format!(
                     "Redundant `on` clause: `{}`",
@@ -1430,6 +1485,9 @@ impl Diagnostic {
             DiagnosticPayload::UnresolvedType(_) => "UnresolvedType",
             DiagnosticPayload::MissingOnClause(_) => "MissingOnClause",
             DiagnosticPayload::RedundantOnClause(_) => "RedundantOnClause",
+            DiagnosticPayload::DomainMismatch(_) => "DomainMismatch",
+            DiagnosticPayload::MissingDomainClause(_) => "MissingDomainClause",
+            DiagnosticPayload::AsyncRegister(_) => "AsyncRegister",
             DiagnosticPayload::WrongDriverType(_) => "WrongDriverType",
             DiagnosticPayload::NoRegDrivers(_) => "NoRegDrivers",
             DiagnosticPayload::NoDrivers(_) => "NoDrivers",
@@ -1609,4 +1667,5 @@ from_diagnostic! {
     TypeArgKind, UnknownKind,
     CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
     UnusedImport,
+    DomainMismatch, MissingDomainClause, AsyncRegister,
 }

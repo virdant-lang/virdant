@@ -1,7 +1,7 @@
 pub mod Decoder4 {
-    incoming inp : Word[2]
+    incoming inp : Word[2] async
 
-    outgoing out : Word[4] dependson inp {
+    outgoing out : Word[4] async dependson inp {
         it := match inp {
             with 0 => 0b0001
             with 1 => 0b0010

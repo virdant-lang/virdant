@@ -7,10 +7,10 @@ pub enum type AluOp {
 }
 
 pub mod Alu {
-    incoming a : Word[8]
-    incoming b : Word[8]
-    incoming op : AluOp
-    outgoing r : Word[8] dependson a, b, op
+    incoming a : Word[8] async
+    incoming b : Word[8] async
+    incoming op : AluOp async
+    outgoing r : Word[8] async dependson a, b, op
 
     r := match op {
         with #and => a & b

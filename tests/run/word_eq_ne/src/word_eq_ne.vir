@@ -16,18 +16,18 @@ import virt
 //> Computes both equality and inequality of its operands.
 mod WordEqNe {
     //> First operand.
-    incoming x : Word[8]
+    incoming x : Word[8] async
 
     //> Second operand.
-    incoming y : Word[8]
+    incoming y : Word[8] async
 
     //> `x == y`.
-    outgoing eq : Bit dependson x, y {
+    outgoing eq : Bit async dependson x, y {
         it := x == y
     }
 
     //> `x != y`.
-    outgoing ne : Bit dependson x, y {
+    outgoing ne : Bit async dependson x, y {
         it := x != y
     }
 }

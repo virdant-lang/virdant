@@ -20,10 +20,10 @@ import virt
 //> register.
 mod Doubler {
     //> Value registered in the parent one cycle after the raw stimulus.
-    incoming input : Word[8]
+    incoming input : Word[8] async
 
     //> `input` doubled (wrapping modulo 256).
-    outgoing doubled : Word[8] dependson input {
+    outgoing doubled : Word[8] async dependson input {
         it := input + input
     }
 }

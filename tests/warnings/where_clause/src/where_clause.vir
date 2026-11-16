@@ -8,7 +8,7 @@
 // CHECK: Unused `dependson`: `out.req` declares it may depend on `inp` but does not
 // CHECK-NOT: Unused
 mod Warnings {
-    incoming inp : Bit
+    incoming inp : Bit async
     client socket out of Chan
         where out.req dependson inp
     {
@@ -21,7 +21,7 @@ mod Warnings {
 // An entry actually exercised does not warn.
 // CHECK-NOT: Unused
 mod Justified {
-    incoming inp : Bit
+    incoming inp : Bit async
     client socket out of Chan
         where it.req dependson inp
     {

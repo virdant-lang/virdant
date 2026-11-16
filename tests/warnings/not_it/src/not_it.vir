@@ -3,11 +3,11 @@
 // All cases here are warnings only, so the run ends with "Check OK".
 
 mod HalfAdder {
-    incoming a : Bit
-    incoming b : Bit
+    incoming a : Bit async
+    incoming b : Bit async
 
-    outgoing sum : Bit dependson a, b
-    outgoing carry_out : Bit dependson a, b
+    outgoing sum : Bit async dependson a, b
+    outgoing carry_out : Bit async dependson a, b
 
     sum := a ^^ b
     carry_out := a && b
@@ -100,7 +100,7 @@ mod CorrectSubmodule {
 
 // Correct use of 'it.' in a submodule it block produces no warning.
 mod IncorrectSimpleComponentLhs {
-    outgoing out : Bit {
+    outgoing out : Bit async {
         // CHECK: 'out' should be written as 'it'
         out := true
     }
