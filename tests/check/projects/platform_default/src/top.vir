@@ -17,7 +17,7 @@ pub enum type Color {
     Blue
 }
 
-platform Buttons {
+pub platform Buttons {
     incoming clk_in : Bit
     outgoing easy_default : Bit default true
     outgoing word_default : Word[4] default 0w4

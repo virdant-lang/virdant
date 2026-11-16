@@ -37,9 +37,8 @@ pub mod Rom {
     }
 
     // CHECK: Unknown annotation '@imagehex'
-    // CHECK: No drivers for rom
     @imagehex("rom.hex")
-    memory rom[4] : Word[8] on clock
+    memory rom[4] : Word[8]
 }
 
 // CHECK: FAILED with

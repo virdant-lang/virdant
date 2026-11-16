@@ -89,18 +89,8 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
                                 target: path.clone(),
                             }))
                         }
-                        // A memory with an image annotation is a ROM: it
-                        // legitimately has no write site. Any other
-                        // memory requires exactly one write site.
-                        Some(ComponentKind::Memory) => {
-                            let decl = parsing.ast_node(component.location().ast_node_id());
-                            if memory_has_image(&parsing, &decl) {
-                                continue;
-                            }
-                            Some(DiagnosticPayload::NoRegDrivers(diagnostics::NoRegDrivers {
-                                target: path.clone(),
-                            }))
-                        }
+                        // Memories are exempt: no write site required.
+                        Some(ComponentKind::Memory) => continue,
                         _ => Some(DiagnosticPayload::NoDrivers(diagnostics::NoDrivers {
                             target: path.clone(),
                         })),
@@ -130,27 +120,6 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
     check_overlapping_memory_writes(builder, &driver_analysis, &component_analysis, &mut diagnostics);
 
     Arc::new(diagnostics)
-}
-
-/// Whether a memory declaration carries an `@image`/`@image_hex`/
-/// `@image_inline` annotation (its contents come from the image;
-/// a missing write site is not an error).
-fn memory_has_image(parsing: &Parsing, decl: &AstNode<'_>) -> bool {
-    let children = decl.children();
-    let Some(annotations) = children.first() else { return false };
-    if !matches!(annotations.payload(), AstNodePayload::Annotations(_)) {
-        return false;
-    }
-    annotations.children().iter().any(|annotation| {
-        matches!(
-            annotation.payload(),
-            AstNodePayload::Annotation(annotation)
-                if matches!(
-                    parsing.string(annotation.name).as_bytes(),
-                    b"image" | b"image_hex" | b"image_inline"
-                ),
-        )
-    })
 }
 
 /// The syntactic conflicting-write check: in one

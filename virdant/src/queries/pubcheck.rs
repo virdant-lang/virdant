@@ -65,6 +65,9 @@ pub(crate) fn check_item_reference(
 /// packages, and cross-package use is the caller's concern, not the
 /// declaring package's.
 ///
+/// Top modules (`for`-clause mods) are exempt: they are entry
+/// points, not dead code.
+///
 /// Reference detection is deliberately conservative and name-based: a
 /// use of an item is (a) any `Ofness` node (type position, `of` clause,
 /// `for` clause, socketdef/typedef instantiation) whose name and package
@@ -87,6 +90,14 @@ pub(crate) fn check_unused_non_pub(builder: &mut Builder, diagnostics: &mut Vec<
         }
         if Some(item.location().package()) == builtin {
             continue;
+        }
+        if item.kind() == crate::analysis::symbols::SymbolKind::ModDef {
+            let location = item.location();
+            let parsing = builder.get_parsing(location.package());
+            let node = parsing.ast_node(location.ast_node_id());
+            if node.platform_for().is_some() {
+                continue;
+            }
         }
         if uses.contains(&(item.location().package(), item.name().to_owned())) {
             continue;
@@ -222,6 +233,18 @@ pub(crate) fn check_pub_surface(builder: &mut Builder, diagnostics: &mut Vec<Dia
         if let AstNodePayload::ModDef(_) = node.payload() {
             if let Some(for_node) = node.platform_for() {
                 if let Some(platform) = resolve_ofness_target(builder, &for_node, &node) {
+                    // Same-package `for` targets must also be `pub`.
+                    if platform.location().package() == location.package()
+                        && !item_is_pub(builder, &platform)
+                    {
+                        diagnostics.push(Diagnostic::new(
+                            for_node.region(),
+                            diagnostics::PlatformNotPub {
+                                platform: platform.fqn().to_owned(),
+                                moddef: owner.clone(),
+                            },
+                        ));
+                    }
                     check_item_reference(
                         builder,
                         &platform,

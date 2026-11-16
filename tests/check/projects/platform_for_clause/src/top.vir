@@ -1,7 +1,7 @@
 // Tests that the `for` clause works in a project with multiple files
 // and with module instantiations.
 
-platform PlatformA {
+pub platform PlatformA {
     @pin(0)
     incoming data : Bit
 
@@ -9,7 +9,7 @@ platform PlatformA {
     outgoing result : Bit
 }
 
-platform PlatformB {
+pub platform PlatformB {
     @pin(0)
     incoming clock : Clock
 
