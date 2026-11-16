@@ -108,4 +108,5 @@ mod OnlySubmoduleClock {
 // CHECK: FAILED with
 // CHECK: 5 ERROR
 // CHECK-NOT: WARNING
+// CHECK-NOT: Missing on clause for reg PortAndOutwardSocket
 // CHECK: Check failed
