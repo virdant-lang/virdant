@@ -8,9 +8,9 @@
 //> line high. Strong low always wins over the weak high, and if nobody
 //> drives, the resistor pulls the line back up.
 mod Participant {
-    incoming pull : Bit
+    incoming pull : Bit async
 
-    bus sda : Bit {
+    bus sda : Bit async {
         if {
             when pull {
                 it #= false

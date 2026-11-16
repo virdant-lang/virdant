@@ -15,31 +15,31 @@ import virt
 mod MuxNested {
     //> Selects between the `mux(b, x, y)` arm (true) and the
     //> `mux(c, z, w)` arm (false).
-    incoming a : Bit
+    incoming a : Bit async
 
     //> Selects `x` (true) or `y` (false); only consulted when `a` is
     //> true.
-    incoming b : Bit
+    incoming b : Bit async
 
     //> Selects `z` (true) or `w` (false); only consulted when `a` is
     //> false.
-    incoming c : Bit
+    incoming c : Bit async
 
     //> Data operand selected when `a` and `b` are both true.
-    incoming x : Word[3]
+    incoming x : Word[3] async
 
     //> Data operand selected when `a` is true and `b` is false.
-    incoming y : Word[3]
+    incoming y : Word[3] async
 
     //> Data operand selected when `a` is false and `c` is true.
-    incoming z : Word[3]
+    incoming z : Word[3] async
 
     //> Data operand selected when `a` and `c` are both false.
-    incoming w : Word[3]
+    incoming w : Word[3] async
 
     //> The 4-way selector: `x` when `a` and `b`, `y` when `a` and
     //> `!b`, `z` when `!a` and `c`, `w` when `!a` and `!c`.
-    outgoing sel : Word[3] dependson a, b, c, x, y, z, w {
+    outgoing sel : Word[3] async dependson a, b, c, x, y, z, w {
         it := mux(a, mux(b, x, y), mux(c, z, w))
     }
 }

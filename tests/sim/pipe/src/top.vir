@@ -10,7 +10,7 @@
 // A producer: pushes a `Valid` payload into its end of the pipe.
 mod Client[W : Type] {
     // The payload the client pushes into the pipe.
-    incoming d : W
+    incoming d : W async
 
     forward socket pipe of Pipe[W]
         where it.data dependson d
@@ -19,7 +19,7 @@ mod Client[W : Type] {
     }
 
     // The server's readiness, received back through the pipe.
-    outgoing ready : Bit
+    outgoing ready : Bit async
     ready := pipe.ready
 }
 
@@ -30,7 +30,7 @@ mod Server[W : Type] {
     }
 
     // The payload received from the client, forwarded verbatim.
-    outgoing data : Valid[W]
+    outgoing data : Valid[W] async
     data := pipe.data
 }
 

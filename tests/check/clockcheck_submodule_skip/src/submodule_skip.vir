@@ -1,0 +1,29 @@
+// Modules containing submodule instances are skipped by the clock
+// checker (submodule clock binding is not yet implemented), with a
+// TODO note at the module.  Standard-library modules are exempt from
+// the note: the libraries ship with the compiler and are not the
+// user's to fix.
+
+// CHECK: TODO: clockcheck is not yet implemented for modules with submodules; skipping
+// CHECK: Check OK
+pub mod Top {
+    incoming clock : Clock
+    outgoing out : Bit
+
+    mod inner of Inner {
+        it.clock := clock
+    }
+
+    out := inner.out
+}
+
+mod Inner {
+    incoming clock : Clock
+    reg counter : Word[4] {
+        initial it <= 0
+        it <= it + 1w4
+    }
+    outgoing out : Bit {
+        it := counter[0]
+    }
+}

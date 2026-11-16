@@ -1,3 +1,4 @@
+pub mod clocks;
 pub mod common;
 pub mod package;
 pub mod syntax;

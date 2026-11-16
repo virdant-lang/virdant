@@ -58,7 +58,7 @@ mod Join {
     }
 
     //> Whether stream A offers a valid payload this cycle.
-    wire a_valid : Bit {
+    wire a_valid : Bit async {
         it := match inA.data {
             with @Valid(dontcare) => true
             with @Invalid() => false
@@ -66,7 +66,7 @@ mod Join {
     }
 
     //> Whether stream B offers a valid payload this cycle.
-    wire b_valid : Bit {
+    wire b_valid : Bit async {
         it := match inB.data {
             with @Valid(dontcare) => true
             with @Invalid() => false
@@ -75,7 +75,7 @@ mod Join {
 
     //> A's offered payload, unwrapped (`0` when `@Invalid()`, which
     //> never reaches the output because `both_valid` is false then).
-    wire a_word : Word[8] {
+    wire a_word : Word[8] async {
         it := match inA.data {
             with @Valid(word) => word
             with @Invalid() => 0
@@ -83,7 +83,7 @@ mod Join {
     }
 
     //> B's offered payload, unwrapped (`0` when `@Invalid()`).
-    wire b_word : Word[8] {
+    wire b_word : Word[8] async {
         it := match inB.data {
             with @Valid(word) => word
             with @Invalid() => 0
@@ -91,12 +91,12 @@ mod Join {
     }
 
     //> Both inputs are valid on this same cycle: the join condition.
-    wire both_valid : Bit {
+    wire both_valid : Bit async {
         it := a_valid && b_valid
     }
 
     //> The joined pair, present only when both inputs are valid.
-    wire out_data : Valid[Joined] {
+    wire out_data : Valid[Joined] async {
         it := if {
             when both_valid => @Valid(@Pair(a_word, b_word))
             else => @Invalid()
@@ -105,7 +105,7 @@ mod Join {
 
     //> Inputs are accepted only when the pair can actually fire: both
     //> inputs valid and the downstream consumer ready.
-    wire in_ready : Bit {
+    wire in_ready : Bit async {
         it := both_valid && out.ready
     }
 }

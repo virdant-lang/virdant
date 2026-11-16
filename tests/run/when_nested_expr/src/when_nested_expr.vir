@@ -23,14 +23,14 @@ import virt
 //> set.
 mod NestedWhen {
     //> Select bit feeding the outer `case` conditions.
-    incoming a : Bit
+    incoming a : Bit async
 
     //> Select bit feeding the inner `case` conditions.
-    incoming b : Bit
+    incoming b : Bit async
 
     //> Value from a `when` nested in both a `case` arm and the `else`
     //> arm of an outer `when`.
-    outgoing nested : Word[8] dependson a, b {
+    outgoing nested : Word[8] async dependson a, b {
         it := if {
             when a => if {
                 when b => 0xa1
@@ -46,7 +46,7 @@ mod NestedWhen {
 
     //> Value from a `when` nested inside an arm whose outer condition
     //> (`a || b`) overlaps the inner one (`a && b`).
-    outgoing overlap : Word[8] dependson a, b {
+    outgoing overlap : Word[8] async dependson a, b {
         it := if {
             when a || b => if {
                 when a && b => 0xb1

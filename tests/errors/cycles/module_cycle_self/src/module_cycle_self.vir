@@ -1,6 +1,7 @@
 // A module that instantiates itself: A -> A.
 
-// CHECK: Module cycle: module_cycle_self::A
+// CHECK: TODO: clockcheck is not yet implemented for modules with submodules; skipping
+// CHECK-NEXT: Module cycle: module_cycle_self::A
 mod A {
     mod a of A
 }

@@ -15,28 +15,28 @@ import virt
 //> All four ordered comparisons of the operands.
 mod WordCompare {
     //> First operand.
-    incoming a : Word[8]
+    incoming a : Word[8] async
 
     //> Second operand.
-    incoming b : Word[8]
+    incoming b : Word[8] async
 
     //> `a < b`.
-    outgoing lt : Bit dependson a, b {
+    outgoing lt : Bit async dependson a, b {
         it := a < b
     }
 
     //> `a > b`.
-    outgoing gt : Bit dependson a, b {
+    outgoing gt : Bit async dependson a, b {
         it := a > b
     }
 
     //> `a <= b`.
-    outgoing le : Bit dependson a, b {
+    outgoing le : Bit async dependson a, b {
         it := a <= b
     }
 
     //> `a >= b`.
-    outgoing ge : Bit dependson a, b {
+    outgoing ge : Bit async dependson a, b {
         it := a >= b
     }
 }

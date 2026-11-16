@@ -8,8 +8,8 @@ socket Bus[T : Type] {
 }
 
 mod Master[W : Type] {
-    incoming d : W
-    forward socket busif of Bus[W]
+    incoming d : W async
+    client socket busif of Bus[W]
         where it.req dependson d
     {
         it.req := d
@@ -28,13 +28,13 @@ mod Slave[W : Type] {
 // does nothing that depends on `inp` and can be hoisted to moddef
 // level.
 pub mod IrrelevantIncoming {
-    incoming inp : Bit {
+    incoming inp : Bit async {
         // CHECK: Driver block for 'inp' is irrelevant: it makes no use of 'it'
         out := true
     }
     unused inp
 
-    outgoing out : Bit
+    outgoing out : Bit async
 }
 
 // Same for a `reg` whose it-block never drives or reads the reg.
@@ -56,7 +56,7 @@ pub mod IrrelevantReg {
 // A submodule instance whose it-block drives an unrelated component,
 // never touching the instance (or any of its channels).
 pub mod Source {
-    outgoing out : Bit
+    outgoing out : Bit async
     out := false
 }
 
@@ -97,10 +97,10 @@ pub mod RelevantSocketConnect {
 // A block that reads `it` is relevant, even if it also drives other
 // components.
 pub mod RelevantRead {
-    incoming inp : Bit {
+    incoming inp : Bit async {
         out := it
     }
-    outgoing out : Bit dependson inp
+    outgoing out : Bit async dependson inp
 }
 
 // A block that drives `it` is relevant (this is how a reg's value is
@@ -118,11 +118,11 @@ pub mod RelevantDrive {
 // For a submodule instance, driving any of its channels (`it.a`)
 // counts as using the instance.
 pub mod HalfAdder {
-    incoming a : Bit
-    incoming b : Bit
+    incoming a : Bit async
+    incoming b : Bit async
 
-    outgoing sum : Bit dependson a, b
-    outgoing carry_out : Bit dependson a, b
+    outgoing sum : Bit async dependson a, b
+    outgoing carry_out : Bit async dependson a, b
 
     sum := a ^^ b
     carry_out := a && b
@@ -147,11 +147,11 @@ pub mod RelevantSubmodule {
 // use; the NotIt warning already asks for it to be spelled `it`.
 // (No IrrelevantDriverBlock here -- only the CHECK'd NotIt line.)
 pub mod BareNameStillCounts {
-    incoming inp : Bit {
+    incoming inp : Bit async {
         // CHECK: 'inp' should be written as 'it' inside of this driver block
         out := inp
     }
-    outgoing out : Bit dependson inp
+    outgoing out : Bit async dependson inp
 }
 
 // A block whose only content is `unused it` is the idiom for

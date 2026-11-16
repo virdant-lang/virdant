@@ -12,18 +12,18 @@ import virt
 //> Sum and carry of two bits: `sum = a ^^ b`, `carry = a && b`.
 mod HalfAdder {
     //> First operand.
-    incoming a : Bit
+    incoming a : Bit async
 
     //> Second operand.
-    incoming b : Bit
+    incoming b : Bit async
 
     //> Sum bit.
-    outgoing sum : Bit dependson a, b {
+    outgoing sum : Bit async dependson a, b {
         it := a ^^ b
     }
 
     //> Carry bit.
-    outgoing carry : Bit dependson a, b {
+    outgoing carry : Bit async dependson a, b {
         it := a && b
     }
 }

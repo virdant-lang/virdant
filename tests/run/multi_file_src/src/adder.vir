@@ -11,10 +11,10 @@ import bits
 //> inside this package; the harness top never references it.
 mod Inc8 {
     //> 8-bit operand.
-    incoming a : Word[8]
+    incoming a : Word[8] async
 
     //> `a + 1`.
-    outgoing sum : Word[8] dependson a {
+    outgoing sum : Word[8] async dependson a {
         it := a + 1
     }
 }

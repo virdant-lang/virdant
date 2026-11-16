@@ -12,8 +12,8 @@ import virt
 //> Instantiated below at `Word[2]`, `Word[4]`, and `Word[8]`; the
 //> doubling arithmetic is re-elaborated at each width.
 mod Doubler[T : Type] {
-    incoming d : T
-    outgoing q : T dependson d {
+    incoming d : T async
+    outgoing q : T async dependson d {
         it := d + d
     }
 }

@@ -3,8 +3,8 @@
 // not by themselves create combinational loops.
 
 pub mod WhenOk {
-    wire a : Bit
-    wire b : Bit
+    wire a : Bit async
+    wire b : Bit async
 
     a := false
     if {
@@ -19,8 +19,8 @@ pub mod WhenOk {
 }
 
 pub mod MatchOk {
-    wire sel : Bit
-    wire out : Bit
+    wire sel : Bit async
+    wire out : Bit async
 
     sel := false
     match sel {
@@ -42,9 +42,9 @@ union type St {
 }
 
 pub mod PatternShadowOk {
-    outgoing result : Bit
+    outgoing result : Bit async
 
-    wire state : St
+    wire state : St async
     state := @Done(true)
 
     result := match state {

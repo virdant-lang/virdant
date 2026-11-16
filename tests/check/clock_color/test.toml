@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Clock coloring on modules the checker actually runs on: a unique-clock module mixing `async` and clocked signals (Constant propagation, joins across the lattice, guards/arms/mux/structs), a zero-clock async module, and an `@unsafe_clocks` module."
+filecheck = "src/clock_color.vir"

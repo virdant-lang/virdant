@@ -3,8 +3,8 @@
 // only one is, the other is checked against it.
 
 pub mod AddInferFromRhs {
-    incoming a : Word[4]
-    outgoing out : Word[4] dependson a {
+    incoming a : Word[4] async
+    outgoing out : Word[4] async dependson a {
         // Only the RHS is inferrable; the LHS literal is checked
         // against Word[4].
         it := 4w4 + a
@@ -12,8 +12,8 @@ pub mod AddInferFromRhs {
 }
 
 pub mod AddInferFromLhs {
-    incoming a : Word[4]
-    outgoing out : Word[4] dependson a {
+    incoming a : Word[4] async
+    outgoing out : Word[4] async dependson a {
         // Only the LHS is inferrable; the RHS literal is checked
         // against Word[4].
         it := a + 4w4
@@ -21,17 +21,17 @@ pub mod AddInferFromLhs {
 }
 
 pub mod AddInferBoth {
-    incoming a : Word[4]
-    incoming b : Word[4]
-    outgoing out : Word[4] dependson a, b {
+    incoming a : Word[4] async
+    incoming b : Word[4] async
+    outgoing out : Word[4] async dependson a, b {
         // Both operands are inferrable and compatible.
         it := a + b
     }
 }
 
 pub mod SubInferFromRhs {
-    incoming a : Word[4]
-    outgoing out : Word[4] dependson a {
+    incoming a : Word[4] async
+    outgoing out : Word[4] async dependson a {
         // Only the RHS is inferrable; the LHS literal is checked
         // against Word[4].
         it := 12 - a
@@ -39,8 +39,8 @@ pub mod SubInferFromRhs {
 }
 
 pub mod CmpInferFromRhs {
-    incoming a : Word[4]
-    outgoing out : Bit dependson a {
+    incoming a : Word[4] async
+    outgoing out : Bit async dependson a {
         // Only the RHS is inferrable; the LHS literal is checked
         // against Word[4].  The result is always Bit.
         it := 0 < a
@@ -48,24 +48,24 @@ pub mod CmpInferFromRhs {
 }
 
 pub mod CmpInferFromLhs {
-    incoming a : Word[4]
-    outgoing out : Bit dependson a {
+    incoming a : Word[4] async
+    outgoing out : Bit async dependson a {
         it := a > 0
     }
 }
 
 pub mod CmpInferBoth {
-    incoming a : Word[4]
-    incoming b : Word[4]
-    outgoing out : Bit dependson a, b {
+    incoming a : Word[4] async
+    incoming b : Word[4] async
+    outgoing out : Bit async dependson a, b {
         it := a == b
     }
 }
 
 // `Bit` and `Reset` are mutually compatible operands.
 pub mod BitResetOperands {
-    incoming r : Reset
-    outgoing out : Bit dependson r {
+    incoming r : Reset async
+    outgoing out : Bit async dependson r {
         it := r | true
     }
 }

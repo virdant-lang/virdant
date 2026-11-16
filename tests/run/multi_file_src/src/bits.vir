@@ -9,10 +9,10 @@
 //> other source files of the project via `import bits`.
 pub mod Widen {
     //> 4-bit operand to be zero-extended.
-    incoming x : Word[4]
+    incoming x : Word[4] async
 
     //> `x` zero-extended to 8 bits.
-    outgoing y : Word[8] dependson x {
+    outgoing y : Word[8] async dependson x {
         it := zext(x)
     }
 }

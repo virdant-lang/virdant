@@ -32,8 +32,8 @@ pub platform Buttons {
 // port: all of them are synthesized. Only `must_declare` (no default)
 // and `clk_in` are declared by hand.
 pub mod Top for Buttons {
-    incoming clk_in : Bit
-    outgoing must_declare : Bit
+    incoming clk_in : Bit async
+    outgoing must_declare : Bit async
 
     unused clk_in
     must_declare := false
@@ -42,9 +42,9 @@ pub mod Top for Buttons {
 // A module may still declare a defaulted port itself; its own driver
 // wins and no synthesis happens for it.
 pub mod Override for Buttons {
-    incoming clk_in : Bit
-    outgoing easy_default : Bit
-    outgoing must_declare : Bit
+    incoming clk_in : Bit async
+    outgoing easy_default : Bit async
+    outgoing must_declare : Bit async
 
     unused clk_in
     unused ignored_in

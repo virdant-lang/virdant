@@ -1,6 +1,6 @@
 pub mod Passthrough {
-    incoming inp : Word[8]
-    outgoing out : Word[8] dependson inp
+    incoming inp : Word[8] async
+    outgoing out : Word[8] async dependson inp
 
     out := inp
 }

@@ -13,10 +13,10 @@ import virt
 //> Encodes a one-hot `Word[4]` into the index of its hot bit.
 mod OnehotEncoder {
     //> One-hot input: exactly one bit hot.
-    incoming onehot : Word[4]
+    incoming onehot : Word[4] async
 
     //> Index of the hot bit.
-    outgoing code : Word[2] dependson onehot
+    outgoing code : Word[2] async dependson onehot
 
     match onehot {
         with 0b0001 {

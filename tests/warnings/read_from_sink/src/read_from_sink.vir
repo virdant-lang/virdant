@@ -4,8 +4,8 @@
 
 // Reading from an outgoing port — outgoing is a sink and cannot be read.
 pub mod ReadFromOutgoing {
-    outgoing a : Bit
-    outgoing b : Bit
+    outgoing a : Bit async
+    outgoing b : Bit async
     a := true
     // CHECK: Read from sink a
     b := a
@@ -13,7 +13,7 @@ pub mod ReadFromOutgoing {
 
 // Driving an outgoing without reading it back produces no ReadFromSink warning.
 pub mod NoReadFromSink {
-    outgoing out : Bit
+    outgoing out : Bit async
     // CHECK-NOT: Read from sink
     out := true
 }

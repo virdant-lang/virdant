@@ -17,17 +17,17 @@ import virt
 //> condition.
 mod MinMax {
     //> First operand.
-    incoming x : Word[8]
+    incoming x : Word[8] async
 
     //> Second operand.
-    incoming y : Word[8]
+    incoming y : Word[8] async
 
     //> Minimum of `x` and `y`: with equal operands, either order
     //> gives the same value.
-    outgoing lo : Word[8] dependson x, y
+    outgoing lo : Word[8] async dependson x, y
 
     //> Maximum of `x` and `y`.
-    outgoing hi : Word[8] dependson x, y
+    outgoing hi : Word[8] async dependson x, y
 
     if {
         when x <= y {

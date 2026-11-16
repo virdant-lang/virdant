@@ -18,28 +18,28 @@ import virt
 //> must always expose the same value.
 mod Consumers {
     //> First summand.
-    incoming a : Word[8]
+    incoming a : Word[8] async
 
     //> Second summand.
-    incoming b : Word[8]
+    incoming b : Word[8] async
 
     //> The one wire under test, consumed by both outputs below.
-    wire sum : Word[8] {
+    wire sum : Word[8] async {
         it := a + b
     }
 
     //> First consumer: reads `sum` directly.
-    outgoing out_direct : Word[8] dependson a, b {
+    outgoing out_direct : Word[8] async dependson a, b {
         it := sum
     }
 
     //> Intermediate wire whose computation also consumes `sum`.
-    wire double : Word[8] {
+    wire double : Word[8] async {
         it := sum + sum
     }
 
     //> Second consumer: reads `sum` through `double`.
-    outgoing out_recombined : Word[8] dependson a, b {
+    outgoing out_recombined : Word[8] async dependson a, b {
         it := double - sum
     }
 }

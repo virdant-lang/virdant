@@ -8,8 +8,8 @@
 // CHECK: Unused `dependson`: `out.req` declares it may depend on `inp` but does not
 // CHECK-NOT: Unused
 pub mod Warnings {
-    incoming inp : Bit
-    forward socket out of Chan
+    incoming inp : Bit async
+    client socket out of Chan
         where out.req dependson inp
     {
         it.req := true
@@ -21,8 +21,8 @@ pub mod Warnings {
 // An entry actually exercised does not warn.
 // CHECK-NOT: Unused
 pub mod Justified {
-    incoming inp : Bit
-    forward socket out of Chan
+    incoming inp : Bit async
+    client socket out of Chan
         where it.req dependson inp
     {
         it.req := inp

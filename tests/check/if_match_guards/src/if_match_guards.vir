@@ -3,7 +3,7 @@
 //
 // Test 1: submodule port reference in a when guard inside a match arm
 mod SubMod {
-    outgoing flag : Bit {
+    outgoing flag : Bit async {
         it := true
     }
 }

@@ -20,26 +20,26 @@ import virt
 //> the word has even parity.
 mod Parity {
     //> Word whose parity is computed.
-    incoming x : Word[8]
+    incoming x : Word[8] async
 
     //> Fold of the two 4-bit halves: bit `i` here is `x[8..4][i] ^
     //> x[4..0][i]`.
-    wire p4 : Word[4] {
+    wire p4 : Word[4] async {
         it := x[8..4] ^ x[4..0]
     }
 
     //> Fold of the two 2-bit halves of `p4`.
-    wire p2 : Word[2] {
+    wire p2 : Word[2] async {
         it := p4[4..2] ^ p4[2..0]
     }
 
     //> Fold of the two bits of `p2`: the XOR of all 8 bits of `x`.
-    wire p1 : Word[1] {
+    wire p1 : Word[1] async {
         it := p2[2..1] ^ p2[1..0]
     }
 
     //> `1` when `x` has an even number of set bits.
-    outgoing even : Bit dependson x {
+    outgoing even : Bit async dependson x {
         it := p1 == 0
     }
 }

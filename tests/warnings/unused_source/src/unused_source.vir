@@ -4,16 +4,16 @@
 
 // An incoming port that is never read in any expression.
 pub mod HasUnusedPort {
-    incoming unused_val : Word[8]
-    outgoing out : Bit
+    incoming unused_val : Word[8] async
+    outgoing out : Bit async
     // CHECK: Unused signal unused_val
     out := true
 }
 
 // An incoming port that IS read should produce no Unused signal warning.
 pub mod UsedPort {
-    incoming data : Word[8]
-    outgoing out  : Word[8] dependson data
+    incoming data : Word[8] async
+    outgoing out  : Word[8] async dependson data
     // CHECK-NOT: Unused signal data
     out := data
 }
@@ -21,26 +21,26 @@ pub mod UsedPort {
 // An `outgoing wire` that is driven but never read warns, just like
 // an internal `wire`.
 pub mod UnusedOutgoingWire {
-    outgoing wire w : Bit { it := true }
-    outgoing out : Bit
+    outgoing wire w : Bit async { it := true }
+    outgoing out : Bit async
     // CHECK: Unused signal w
     out := true
 }
 
 // An `outgoing wire` that IS read produces no Unused signal warning.
 pub mod UsedOutgoingWire {
-    outgoing wire w : Bit { it := true }
-    outgoing out : Bit
+    outgoing wire w : Bit async { it := true }
+    outgoing out : Bit async
     // CHECK-NOT: Unused signal w
     out := w
 }
 
 // A trivial sub-module with two outgoing ports.
 pub mod HalfAdder {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing sum : Bit dependson a, b
-    outgoing carry : Bit dependson a, b
+    incoming a : Bit async
+    incoming b : Bit async
+    outgoing sum : Bit async dependson a, b
+    outgoing carry : Bit async dependson a, b
     sum := a ^^ b
     carry := a && b
 }
@@ -107,8 +107,8 @@ pub mod ExplicitUnused {
 
 // A sub-module with an outgoing wire port.
 pub mod WireSource {
-    incoming a : Bit
-    outgoing wire s : Bit dependson a { it := a }
+    incoming a : Bit async
+    outgoing wire s : Bit async dependson a { it := a }
 }
 
 // Reading the sub-module's outgoing wire — no warning for it.

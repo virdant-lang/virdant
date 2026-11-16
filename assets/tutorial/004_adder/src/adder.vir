@@ -1,9 +1,9 @@
 mod HalfAdder {
-    incoming a : Bit
-    incoming b : Bit
+    incoming a : Bit async
+    incoming b : Bit async
 
-    outgoing carry_out : Bit dependson a, b
-    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit async dependson a, b
+    outgoing sum : Bit async dependson a, b
 
     // carry is true when a and b are both true
     carry_out := a && b

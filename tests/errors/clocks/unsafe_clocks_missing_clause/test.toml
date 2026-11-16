@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "`@unsafe_clocks` disables the clock checker for a module, but in exchange every component must carry an explicit `on` or `async` clause."
+filecheck = "src/unsafe_clocks_missing_clause.vir"

@@ -1,0 +1,20 @@
+// `@unsafe_clocks` disables the clock checker for the module, but the
+// annotations become the whole safety net: every declared component
+// must carry an explicit `on` or `async` clause.
+
+@unsafe_clocks
+pub mod UnsafeMissing {
+    incoming clock : Clock
+    incoming inp : Bit on clock
+
+    // CHECK: Missing `on` or `async` clause for lazy_wire: the module is marked `@unsafe_clocks`
+    wire lazy_wire : Bit {
+        it := inp
+    }
+
+    outgoing out : Bit on clock dependson inp {
+        it := lazy_wire
+    }
+}
+
+// CHECK: Check failed

@@ -24,16 +24,16 @@ struct type UsedStruct {
 
 // CHECK: Item `UnusedMod` is unused and not `pub`
 mod UnusedMod {
-    incoming inp : Word[8]
-    outgoing out : Word[8] dependson inp
+    incoming inp : Word[8] async
+    outgoing out : Word[8] async dependson inp
     out := inp
 }
 
 pub mod Top {
-    incoming inp : Word[8]
-    outgoing out : Word[8] dependson inp
+    incoming inp : Word[8] async
+    outgoing out : Word[8] async dependson inp
 
-    wire used : UsedStruct
+    wire used : UsedStruct async
     used := ${ x = inp }
 
     out := used->x

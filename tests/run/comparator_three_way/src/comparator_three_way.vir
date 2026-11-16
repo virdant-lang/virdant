@@ -14,15 +14,15 @@ import virt
 //> Encodes the comparison of the operands into a 2-bit code.
 mod ThreeWayComparator {
     //> First operand.
-    incoming x : Word[2]
+    incoming x : Word[2] async
 
     //> Second operand.
-    incoming y : Word[2]
+    incoming y : Word[2] async
 
     //> Comparison code: `0` for `x < y`, `1` for `x == y`, and `2`
     //> for `x > y`.  The `else` arm is unreachable for `Word[2]`
     //> operands, since exactly one of the three relations holds.
-    outgoing code : Word[2] dependson x, y {
+    outgoing code : Word[2] async dependson x, y {
         it := if {
             when x < y => 0
             when x == y => 1

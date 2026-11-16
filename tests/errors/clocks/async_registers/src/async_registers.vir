@@ -1,0 +1,52 @@
+// A clocked component (`reg`, `outgoing reg`, `memory`) can never be
+// `async`: it is clocked by definition and always lives on a `Sync`
+// domain.  Non-clocked kinds (`incoming`, `outgoing`, `wire`) may be
+// `async` freely — they then live on the `Async` domain.
+
+// CHECK: `counter` cannot be `async`: registers and memories are clocked
+mod AsyncReg {
+    incoming clock : Clock
+
+    reg counter : Bit async {
+        initial it <= false
+        it <= !it
+    }
+}
+
+// CHECK: `stage` cannot be `async`: registers and memories are clocked
+mod AsyncOutgoingReg {
+    incoming clock : Clock
+    incoming inp : Bit
+
+    outgoing reg stage : Bit async {
+        it <= inp
+    }
+}
+
+// CHECK: `scratch` cannot be `async`: registers and memories are clocked
+mod AsyncMemory {
+    memory scratch[4] : Word[8] async
+}
+
+// Non-clocked kinds are `async` legally — but in a module with no
+// clocks, `async` is not optional: with no clock to be `Sync` on, an
+// unannotated component has no domain at all.
+
+// CHECK: Missing `on` or `async` clause for out: the module has no clocks
+mod AsyncWireMissing {
+    incoming inp : Bit async
+    outgoing out : Bit dependson inp {
+        it := inp
+    }
+}
+
+// Declaring them `async` checks clean (zero clocks: the coloring
+// itself is skipped).
+mod AsyncWire {
+    incoming inp : Bit async
+    outgoing out : Bit async dependson inp {
+        it := inp
+    }
+}
+
+// CHECK: Check failed

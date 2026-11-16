@@ -10,8 +10,8 @@ socket Bus[T : Type] {
 }
 
 mod Master[W : Type] {
-    incoming d : W
-    forward socket busif of Bus[W]
+    incoming d : W async
+    client socket busif of Bus[W]
         where it.req dependson d
     {
         it.req := d

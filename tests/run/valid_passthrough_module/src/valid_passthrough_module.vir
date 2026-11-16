@@ -16,10 +16,10 @@ import virt
 //> to `outp` with no registers in between.
 mod Passthrough {
     //> Incoming `Valid[Word[8]]` channel.
-    incoming inp : Valid[Word[8]]
+    incoming inp : Valid[Word[8]] async
 
     //> Forwards `inp` combinationally.
-    outgoing outp : Valid[Word[8]] dependson inp {
+    outgoing outp : Valid[Word[8]] async dependson inp {
         it := inp
     }
 }

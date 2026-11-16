@@ -28,14 +28,14 @@ import virt
 //> `(x == 0 || y == 5) && y[2]` and row 0 would fall to `else`.
 mod WhenCondComplex {
     //> First operand.
-    incoming x : Word[4]
+    incoming x : Word[4] async
 
     //> Second operand.
-    incoming y : Word[4]
+    incoming y : Word[4] async
 
     //> Code of the first arm whose condition matched: `1`, `2`, `3`,
     //> or `0` for the `else` arm.
-    outgoing branch : Word[2] dependson x, y {
+    outgoing branch : Word[2] async dependson x, y {
         it := if {
             when x > 3 && y[0] => 1
             when x == 0 || (y == 5 && y[2]) => 2

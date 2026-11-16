@@ -60,6 +60,7 @@ queries! {
     DependsonAnalysis(symbol_id: SymbolId) -> Arc<crate::queries::dependson::DependsonAnalysis>;
     CombinationalCycleCheck() -> Arc<Vec<Diagnostic>>;
     MatchCoverage(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
+    ClockCheck(symbol_id: SymbolId) -> Arc<crate::clocks::Clocking>;
     TypeDefs() -> Arc<Vec<TypeDef>>;
     TypeDef(symbol_id: SymbolId) -> Arc<TypeDef>;
     TypeAt(location: Location) -> Result<Type, Vec<Diagnostic>>;
@@ -110,6 +111,7 @@ impl Query {
             crate::queries::check_drivers : CheckDrivers(symbol_id);
             crate::queries::check_initial : CheckInitial(symbol_id);
             crate::queries::build_match_coverage : MatchCoverage(symbol_id);
+            crate::queries::clockcheck::clockcheck : ClockCheck(symbol_id);
             crate::queries::find_exprroots : ExprRoots();
             crate::queries::build_all_exprs : AllExprs();
             crate::queries::build_expected_type : ExpectedType(location);
@@ -152,6 +154,7 @@ db_getter!(get_combinational_cycle_check : CombinationalCycleCheck() -> Arc<Vec<
 db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
 db_getter!(check_initial : CheckInitial(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
 db_getter!(get_match_coverage : MatchCoverage(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
+db_getter!(get_clockcheck : ClockCheck(symbol_id: SymbolId) -> Arc<crate::clocks::Clocking>);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
 db_getter!(get_typedefs : TypeDefs() -> Arc<Vec<TypeDef>>);
 db_getter!(get_typedef : TypeDef(symbol_id: SymbolId) -> Arc<TypeDef>);

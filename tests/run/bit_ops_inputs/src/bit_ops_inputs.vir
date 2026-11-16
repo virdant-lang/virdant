@@ -20,23 +20,23 @@ import virt
 //> Computes the three boolean operators on its input ports.
 mod BitOps {
     //> First operand.
-    incoming a : Bit
+    incoming a : Bit async
 
     //> Second operand.
-    incoming b : Bit
+    incoming b : Bit async
 
     //> Logical AND of the two operands.
-    outgoing and_out : Bit dependson a, b {
+    outgoing and_out : Bit async dependson a, b {
         it := a && b
     }
 
     //> Logical OR of the two operands.
-    outgoing or_out : Bit dependson a, b {
+    outgoing or_out : Bit async dependson a, b {
         it := a || b
     }
 
     //> Logical XOR of the two operands.
-    outgoing xor_out : Bit dependson a, b {
+    outgoing xor_out : Bit async dependson a, b {
         it := a ^^ b
     }
 }

@@ -12,16 +12,16 @@ struct type Color {
 }
 
 pub mod Top {
-    incoming opcode_bits : Word[4]
-    incoming x : Word[8]
-    incoming y : Word[8]
+    incoming opcode_bits : Word[4] async
+    incoming x : Word[8] async
+    incoming y : Word[8] async
 
-    outgoing out : Word[8] dependson opcode_bits, x, y
-    outgoing red : Word[8] dependson x
+    outgoing out : Word[8] async dependson opcode_bits, x, y
+    outgoing red : Word[8] async dependson x
 
-    wire color : Color
+    wire color : Color async
 
-    wire opcode : Opcode
+    wire opcode : Opcode async
     opcode := cast(opcode_bits)
 
     out := match opcode {
@@ -41,6 +41,6 @@ pub mod Top {
 
     // Field projections in infer-only positions (binop operands):
     // `->` must be inferable, not just checkable.
-    outgoing inferred : Word[8] dependson x
+    outgoing inferred : Word[8] async dependson x
     inferred := color->red + color->green
 }
