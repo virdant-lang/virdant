@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "A module with zero incoming clock ports checks with no clock bookkeeping at all; a Clock-typed channel the module drives outward does not give it a clock. (Once the clock checker lands, its inputs must be declared `async`.)"
+filecheck = "src/zero_clock.vir"

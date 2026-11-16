@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "With more than one incoming clock port there is no unique clock, so every reg names its clock with an explicit `on` clause; an inward socket channel typed `Clock` counts as one of the module's clocks."
+filecheck = "src/multi_clock.vir"
