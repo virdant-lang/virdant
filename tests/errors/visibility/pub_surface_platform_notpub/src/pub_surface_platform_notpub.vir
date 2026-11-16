@@ -1,0 +1,37 @@
+// A `pub` mod's `for` clause names its platform: the platform is part
+// of the mod's public interface surface, so it must be `pub` too —
+// even within the same package.  (Across packages the generic
+// non-`pub` reference check already catches it.)
+
+platform Buttons {
+    incoming clk_in : Bit
+    outgoing led : Bit default true
+}
+
+// CHECK: Platform `pub_surface_platform_notpub::Buttons` is not pub: the public interface surface area of `pub_surface_platform_notpub::Top` is not all pub
+pub mod Top for Buttons {
+    incoming clk_in : Bit
+    outgoing led : Bit
+
+    unused clk_in
+    led := false
+}
+
+// A `pub` platform under a `pub` mod stays fine.
+pub platform OkButtons {
+    incoming clk_in : Bit
+    outgoing led : Bit default true
+}
+
+pub mod Ok for OkButtons {
+    incoming clk_in : Bit
+    outgoing led : Bit
+
+    unused clk_in
+    led := false
+}
+
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

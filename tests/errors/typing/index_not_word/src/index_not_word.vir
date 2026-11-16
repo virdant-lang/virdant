@@ -9,7 +9,7 @@
 // infer_index_range instead of their check-mode twins.
 
 pub mod SingleBitOnBit {
-    outgoing out : Bit {
+    outgoing wire out : Bit {
         // CHECK: Expected a Word type: Bit
         // CHECK: Wrong driver type for out, expected :=
         // CHECK-NOT: Missing annotation
@@ -18,7 +18,7 @@ pub mod SingleBitOnBit {
 }
 
 pub mod RangeOnBit {
-    outgoing out : Bit {
+    outgoing wire out : Bit {
         // CHECK: Expected a Word type: Bit
         // CHECK: Wrong driver type for out, expected :=
         // CHECK-NOT: Missing annotation

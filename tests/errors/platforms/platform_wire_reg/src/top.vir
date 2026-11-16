@@ -9,7 +9,7 @@
 // show that mirroring them does NOT add port-match errors on top: the
 // platform's own `PlatformWireRegPort` errors are the only report.
 
-platform P {
+pub platform P {
     incoming clock : Clock
     incoming d : Bit
     outgoing wire w : Bit

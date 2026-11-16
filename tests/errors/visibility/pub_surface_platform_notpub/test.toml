@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A `pub` mod's `for` clause names its platform: the platform is part of the mod's public interface surface, so it must be `pub` too — even within the same package."
+filecheck = "src/pub_surface_platform_notpub.vir"

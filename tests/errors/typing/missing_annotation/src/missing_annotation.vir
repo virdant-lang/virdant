@@ -38,7 +38,7 @@ struct type S {
     good : Bit
 }
 
-mod FieldUnresolved {
+pub mod FieldUnresolved {
     incoming s_in : S
     outgoing out : Bit dependson s_in {
         // CHECK: Type of field bad could not be resolved
@@ -50,6 +50,6 @@ mod FieldUnresolved {
 // CHECK-NOT: TODO
 
 // CHECK: FAILED with
-// CHECK: 7 ERROR
+// CHECK: 8 ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check failed

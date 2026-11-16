@@ -41,6 +41,7 @@ pub mod BareReference {
     memory mem[16] : Word[8] {
         it[0] <= write_data
     }
+    unused mem
 }
 
 pub mod Slice {
@@ -54,6 +55,7 @@ pub mod Slice {
     memory mem[16] : Word[8] {
         it[0] <= write_data
     }
+    unused mem
 }
 
 // CHECK: index into memory mem must be exactly Word[4] (depth 2^4), found Word[12]

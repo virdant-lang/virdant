@@ -7,7 +7,7 @@
 // 3. A default expression whose type does not match the port's type
 //    is an error, reported at the platform's expression.
 
-platform Buttons {
+pub platform Buttons {
     incoming clk_in : Bit
     outgoing no_default : Bit
     outgoing mismatched : Word[4] default true

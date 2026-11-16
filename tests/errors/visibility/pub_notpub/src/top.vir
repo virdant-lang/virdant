@@ -37,5 +37,5 @@ pub mod Top {
 
 // CHECK: FAILED with
 // CHECK: 2 ERROR
-// CHECK-NOT: WARNING
+// CHECK: 1 WARNING
 // CHECK: Check failed

@@ -312,6 +312,8 @@ pub enum DiagnosticPayload {
     ExtModGenerics(ExtModGenerics),
     NotPub(NotPub),
     ReferencedWhileNotPub(ReferencedWhileNotPub),
+    /// A `pub` mod's `for`-clause platform is not `pub`.
+    PlatformNotPub(PlatformNotPub),
     UnusedNonPub(UnusedNonPub),
     TypeNotPub(TypeNotPub),
     TopNotPub(TopNotPub),
@@ -913,6 +915,15 @@ pub struct UnusedNonPub {
     pub item: BString,
 }
 
+/// A `pub` mod's platform (its `for` clause) is not `pub`.  A hard
+/// error at the `for` clause: the platform is part of the mod's public
+/// interface surface, and a public surface must be transitively `pub`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformNotPub {
+    pub platform: BString,
+    pub moddef: BString,
+}
+
 /// A non-`pub` item is referenced from another package.
 /// Reported at the item's *definition* as a warning, naming the package
 /// that references it, so the author knows where to add `pub` (or that
@@ -1420,6 +1431,13 @@ impl Diagnostic {
                     d.referencing_package,
                 ).into()
             }
+            DiagnosticPayload::PlatformNotPub(d) => {
+                format!(
+                    "Platform `{}` is not pub: the public interface surface area of `{}` is not all pub",
+                    d.platform,
+                    d.moddef,
+                ).into()
+            }
             DiagnosticPayload::UnusedNonPub(d) => {
                 format!(
                     "Item `{}` is unused and not `pub`",
@@ -1603,6 +1621,7 @@ impl Diagnostic {
             DiagnosticPayload::ExtModGenerics(_) => "ExtModGenerics",
             DiagnosticPayload::NotPub(_) => "NotPub",
             DiagnosticPayload::ReferencedWhileNotPub(_) => "ReferencedWhileNotPub",
+            DiagnosticPayload::PlatformNotPub(_) => "PlatformNotPub",
             DiagnosticPayload::UnusedNonPub(_) => "UnusedNonPub",
             DiagnosticPayload::TypeNotPub(_) => "TypeNotPub",
             DiagnosticPayload::TopNotPub(_) => "TopNotPub",
@@ -1688,7 +1707,7 @@ from_diagnostic! {
     DriveUndeclaredPlatformPort, UseUndeclaredPlatformPort,
     PlatformPortTypeMismatch, PlatformWireRegPort, DefaultOutsidePlatformPort, UnknownAnnotation, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,
-    CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
+    CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, PlatformNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
     UnusedImport,
     DomainMismatch, MissingDomainClause, AsyncRegister, DriverDomainMismatch,
 }

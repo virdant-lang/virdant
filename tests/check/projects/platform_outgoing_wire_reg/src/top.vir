@@ -2,7 +2,7 @@
 // `outgoing` ports with `outgoing wire` or `outgoing reg`: the port
 // match compares port directions only, not the internal realization.
 
-platform P {
+pub platform P {
     incoming clock : Clock
     incoming d : Bit
 

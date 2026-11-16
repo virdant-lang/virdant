@@ -3,7 +3,7 @@
 // synthesized as a never-read input, and a missing defaulted
 // `outgoing` port is synthesized and driven.
 
-platform Widgets {
+pub platform Widgets {
     incoming unused_in : Bit
     outgoing defaulted : Bit default true
     outgoing declared  : Bit
