@@ -12,7 +12,9 @@ socket Bus[T : Type] {
 
 mod Master[W : Type] {
     incoming d : W
-    client socket busif of Bus[W] {
+    client socket busif of Bus[W]
+        where it.req dependson d
+    {
         it.req := d
     }
     unused busif.rsp
@@ -56,7 +58,7 @@ pub mod Top {
         it.d := wide
     }
 
-    outgoing out8 : Word[8]
+    outgoing out8 : Word[8] dependson inp
     outgoing out16 : Word[16]
     out8 := s.busif.rsp
     out16 := r16.q

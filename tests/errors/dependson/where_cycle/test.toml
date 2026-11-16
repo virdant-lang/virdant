@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tests for combinational cycles closed by `where`-clause edges: a local cycle is reported at the closing module, a parent-child loop at the parent."
+filecheck = "src/where_cycle.vir"

@@ -37,17 +37,23 @@ union type Joined {
 //> `ready`), so a one-sided valid transfer is never consumed.
 mod Join {
     //> Upstream stream A.
-    server socket inA of Pipe[Word[8]] {
+    server socket inA of Pipe[Word[8]]
+        where it.ready dependson inB.data, out.ready
+    {
         it.ready := in_ready
     }
 
     //> Upstream stream B.
-    server socket inB of Pipe[Word[8]] {
+    server socket inB of Pipe[Word[8]]
+        where it.ready dependson inA.data, out.ready
+    {
         it.ready := in_ready
     }
 
     //> Joined output stream.
-    client socket out of Pipe[Joined] {
+    client socket out of Pipe[Joined]
+        where it.data dependson inA.data, inB.data
+    {
         it.data := out_data
     }
 

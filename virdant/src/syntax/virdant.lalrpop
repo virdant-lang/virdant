@@ -712,21 +712,81 @@ ItBlock: AstNodeId = {
 }
 
 ModDefStmtSocket: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "client" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "client" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Client, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
-            + if it.is_none() { 0u16 } else { 1u16 };
+            + if it.is_none() { 0u16 } else { 1u16 }
+            + if where_.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "server" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "server" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Server, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
-            + if it.is_none() { 0u16 } else { 1u16 };
+            + if it.is_none() { 0u16 } else { 1u16 }
+            + if where_.is_none() { 0u16 } else { 1u16 };
+
+        parser.add_node(payload, span, num_children)
+    },
+    // A `where` clause may also precede the driver block: it reads
+    // better before the `{ ... }` it annotates, and the two are
+    // unambiguous (`where` starts a clause, `{` starts a block).
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "client" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Client, doc_string: docstring });
+        let span = parser.span(ll, rr);
+        let num_children: u16 = 1u16 + 1u16
+            + if args.is_none() { 0u16 } else { 1u16 }
+            + 1u16
+            + 1u16;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "server" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Server, doc_string: docstring });
+        let span = parser.span(ll, rr);
+        let num_children: u16 = 1u16 + 1u16
+            + if args.is_none() { 0u16 } else { 1u16 }
+            + 1u16
+            + 1u16;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+/// A `where` clause on a socket instance declaration, declaring
+/// cross-socket `dependson` obligations between the socket's driven
+/// channels and incoming components of the module.  Each clause is
+/// introduced by its own `where` keyword: a comma-separated clause
+/// list would be ambiguous with the comma-separated entry list of a
+/// clause (both would continue with a `Path`, and an LR(1) parser
+/// cannot tell, at the comma, whether the next path is an entry or
+/// the next clause's carrier).  The node's children are one
+/// `WhereClauseItem` per clause, in written order.
+WhereClause: AstNodeId = {
+    <ll:@L> <items:WhereClauseList> <rr:@R> => {
+        let payload = AstNodePayload::WhereClause;
+        let span = parser.span(ll, rr);
+        let num_children: u16 = items.try_into().unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+WhereClauseList: usize = {
+    <start:("where" WhereClauseItem)*> <last:("where" WhereClauseItem)> => start.len() + 1,
+}
+
+/// One clause of a `where` clause: the carrier channel (`it.<CH>`, or
+/// `<SOCKET>.<CH>` with a warning) and its `dependson` entries.
+WhereClauseItem: AstNodeId = {
+    <ll:@L> <carrier:Path> <list:DependsonList> <rr:@R> => {
+        let payload = AstNodePayload::WhereClauseItem;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
 
         parser.add_node(payload, span, num_children)
     },
@@ -1518,6 +1578,7 @@ extern {
         "dontcare" => Token::KwDontcare,
         "dyn" => Token::KwDyn,
         "dependson" => Token::KwDependsOn,
+        "where" => Token::KwWhere,
         "platform" => Token::KwPlatform,
         "for" => Token::KwFor,
         "default" => Token::KwDefault,

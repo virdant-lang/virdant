@@ -1,0 +1,5 @@
+[project]
+name = "where_pass_through"
+
+[prog]
+top = "where_pass_through::PassThroughTest"

@@ -158,7 +158,8 @@ name, in declaration order:
 ```virdant
 mod Master {
     incoming d : Word[8]
-    client socket busif of Bus[Word[8]] {
+    client socket busif of Bus[Word[8]]
+        where it.req dependson d {
         it.req := d
     }
     unused busif.rsp
@@ -233,7 +234,8 @@ compose with the arguments of the enclosing module's instantiation:
 ```virdant
 mod Master[W : Type] {
     incoming d : W
-    client socket busif of Bus[W] {
+    client socket busif of Bus[W]
+        where it.req dependson d {
         it.req := d
     }
     unused busif.rsp
@@ -294,6 +296,29 @@ socket Wishbone {
   may stay dormant. It is still a contract: the module must not drive
   the channel with anything outside the declared set, and cycles in
   the composed `dependson` relation are errors.
+- The list covers same-socket channels only. Dependencies on other
+  sockets' channels or on plain `incoming` ports are declared with
+  **`where` clauses** on the socket instance declaration:
+
+  ```virdant
+  mod PassThrough {
+      client socket out of Pipe[Word[8]]
+          where it.data dependson inp.data {
+          it.data := inp.data
+      }
+
+      server socket inp of Pipe[Word[8]]
+          where it.ready dependson out.ready {
+          it.ready := out.ready
+      }
+  }
+  ```
+
+  A driven channel's declared set (socketdef obligations plus `where`
+  entries) must be exhaustive over every incoming component the drive
+  can combinationally reach; an undeclared one is an error. See
+  ./dependson.md ("`where` clauses on socket instances") for the full
+  rules.
 - See ./dependson.md for the module-port rules this builds on.
 
 ## Cross-references

@@ -143,6 +143,7 @@ pub enum Token {
     #[token(b"dontcare")]  KwDontcare,
     #[token(b"dyn")]       KwDyn,
     #[token(b"dependson")]  KwDependsOn,
+    #[token(b"where")]      KwWhere,
     #[token(b"platform")]  KwPlatform,
     #[token(b"for")]       KwFor,
     #[token(b"default")]   KwDefault,
@@ -165,7 +166,7 @@ pub const KEYWORDS: &[&str] = &[
     "socket", "client", "server", "cosi", "soci",
     "if", "it", "else", "when",
     "match", "let", "unused", "initial",
-    "true", "false", "dontcare", "dependson",
+    "true", "false", "dontcare", "dependson", "where",
     "platform", "for", "default",
 ];
 

@@ -30,7 +30,9 @@ mod Fifo {
         }
     }
 
-    client socket out of Pipe[Word[8]] {
+    client socket out of Pipe[Word[8]]
+        where it.data dependson inp.data
+    {
         it.data := out_data
     }
 

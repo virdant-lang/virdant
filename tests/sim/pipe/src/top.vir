@@ -12,7 +12,9 @@ mod Client[W : Type] {
     // The payload the client pushes into the pipe.
     incoming d : W
 
-    client socket pipe of Pipe[W] {
+    client socket pipe of Pipe[W]
+        where it.data dependson d
+    {
         it.data := @Valid(d)
     }
 

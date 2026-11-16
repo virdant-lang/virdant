@@ -5,8 +5,10 @@
 //! * *Local actual edges*: the module's own driver-derived
 //!   combinational edges (including socket-link edges from `:=:`).
 //! * *Local declared edges*: the module's own `dependson` lists (on
-//!   `outgoing`/`outgoing wire` components) and its socket-obligation
-//!   edges (from socketdef channel lists, in the driving role).
+//!   `outgoing`/`outgoing wire` components), its socket-obligation
+//!   edges (from socketdef channel lists, in the driving role), and
+//!   the edges declared by `where` clauses on its socket instance
+//!   declarations.
 //! * *Imported declared edges*: each immediate submodule instance's
 //!   declared edges and socket obligations, prefixed with the instance
 //!   name. The parent never looks inside a child: the child's
@@ -137,12 +139,13 @@ fn build_potentiality(
         }
     }
 
-    // 2. M's own declared edges: `dependson` lists and socket
-    //    obligations (local declared).
+    // 2. M's own declared edges: `dependson` lists, socket
+    //    obligations, and `where` clauses (local declared).
     for (source, target) in dependson_analysis
         .declared_edges()
         .iter()
         .chain(dependson_analysis.socket_edges())
+        .chain(dependson_analysis.where_edges())
     {
         add_local(
             &mut edges,

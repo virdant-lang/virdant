@@ -9,7 +9,7 @@ KEYWORDS = [
     'incoming', 'initial', 'it', 'let', 'match', 'mod', 'net', 'of',
     'on', 'outgoing', 'platform', 'pub', 'reg', 'server', 'soci',
     'socket', 'struct', 'tap', 'type', 'union', 'unused', 'when',
-    'wire', 'with',
+    'where', 'wire', 'with',
 ]
 
 # Lexical token names, which appear as quoted terminals in GRAMMAR.txt.

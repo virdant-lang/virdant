@@ -1,0 +1,4 @@
+kind = "run"
+description = "Pipe pass-through adapter using `where` clauses: data flows combinationally through, backpressure mirrors the consumer's `ready` onto the producer"
+cycle_limit = 24
+trace = false

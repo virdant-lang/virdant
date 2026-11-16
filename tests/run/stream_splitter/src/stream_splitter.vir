@@ -51,12 +51,16 @@ socket OutPipe[T : Type] {
 //> `ready`.
 mod StreamSplitter {
     //> Upstream input stream.  The header bit routes each item.
-    server socket inp of InPipe[Word[8]] {
+    server socket inp of InPipe[Word[8]]
+        where it.ready dependson out_a.ready, out_b.ready
+    {
         it.ready := inp_fires
     }
 
     //> Output stream for items whose header bit is `0`.
-    client socket out_a of OutPipe[Word[7]] {
+    client socket out_a of OutPipe[Word[7]]
+        where it.data dependson inp.data, out_b.ready
+    {
         it.data := if {
             when inp_fires && !route => @Valid(item_data)
             else => @Invalid()
@@ -64,7 +68,9 @@ mod StreamSplitter {
     }
 
     //> Output stream for items whose header bit is `1`.
-    client socket out_b of OutPipe[Word[7]] {
+    client socket out_b of OutPipe[Word[7]]
+        where it.data dependson inp.data, out_a.ready
+    {
         it.data := if {
             when inp_fires && route => @Valid(item_data)
             else => @Invalid()

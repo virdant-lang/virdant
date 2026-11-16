@@ -450,7 +450,8 @@ fn format_vir_text(input: &str) -> String {
         }
     };
 
-    for raw_line in lines {
+    for (line_idx, raw_line) in lines.iter().enumerate() {
+        let raw_line: &str = raw_line;
         let kind = classify_line(raw_line);
 
         let is_empty = matches!(kind, LineKind::Blank);
@@ -483,6 +484,27 @@ fn format_vir_text(input: &str) -> String {
         if let LineKind::Other(s) = &kind {
             if s.ends_with("=>") && !s.contains('{') {
                 tracker.push_continuation();
+            }
+        }
+        // A declaration line dangling before its clause list continues
+        // onto the next line: a socket instance declaration followed by
+        // its `where` clause(s) (`client socket out of Pipe[Bit]`
+        // then `where it.data dependson inp.data`), any line ending
+        // in `dependson` with the entry list on the next line, and
+        // consecutive `where` clauses of one socket declaration.
+        if let LineKind::Other(s) = &kind {
+            if s.ends_with("dependson")
+                || s.starts_with("where ")
+                || ((s.starts_with("client socket") || s.starts_with("server socket"))
+                    && !s.contains("where"))
+            {
+                let next_nonblank = lines[line_idx + 1..].iter().find(|l| !l.trim().is_empty());
+                if let Some(next) = next_nonblank {
+                    let nt = next.trim_start();
+                    if s.ends_with("dependson") || nt.starts_with("where ") {
+                        tracker.push_continuation();
+                    }
+                }
             }
         }
 

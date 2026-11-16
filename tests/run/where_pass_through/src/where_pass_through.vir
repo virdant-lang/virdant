@@ -1,0 +1,131 @@
+//! Self-checking `kind = "run"` test for a Pipe-to-Pipe pass-through
+//! adapter built with `where` clauses.
+//!
+//! `PassThrough` sits between a producer and a consumer: data flows
+//! combinationally from `inp.data` to `out.data`, and backpressure
+//! flows combinationally from `out.ready` to `inp.ready`.  Both
+//! directions are cross-socket combinational dependencies, declared on
+//! the socket instances with `where` clauses — the adapter's public
+//! combinational contract.
+//!
+//! The harness drives four distinct payloads in and checks that each
+//! one crosses to the consumer unchanged, then stalls the consumer
+//! (`ready` low) and checks that the producer's `ready` mirrors the
+//! stall, so nothing is consumed while the consumer is blocked.  The
+//! simulator exits with code 0 only if every check passed.
+
+import virt
+
+//> A Pipe-to-Pipe adapter: the pass-through under test.
+//>
+//> `out.data` may combinationally depend on `inp.data` (payload
+//> forwarding) and `inp.ready` may combinationally depend on
+//> `out.ready` (backpressure); both are declared with `where` clauses.
+mod PassThrough {
+    client socket out of Pipe[Word[8]]
+        where it.data dependson inp.data
+    {
+        it.data := inp.data
+    }
+
+    server socket inp of Pipe[Word[8]]
+        where it.ready dependson out.ready
+    {
+        it.ready := out.ready
+    }
+}
+
+pub mod PassThroughTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod adapter of PassThrough
+
+    //> The payload on offer: vectors 1 through 4, then nothing.  The
+    //> payload only advances on an accepted transfer, so a stalled
+    //> consumer holds the item on the wire.
+    wire payload : Valid[Word[8]] {
+        it := if {
+            when vec <= 4w8 => @Valid(vec)
+            else => @Invalid()
+        }
+    }
+
+    //> Producer-side vector register: advances from 1 to 5, one step
+    //> per accepted transfer.
+    reg vec : Word[8] on clock {
+        initial it <= 1w8
+        if {
+            when presenting && adapter.inp.ready {
+                it <= it + 1w8
+            }
+        }
+    }
+
+    adapter.inp.data := payload
+
+    //> The consumer side: accepts while `accept` is high, then stalls
+    //> for the remainder of the test.
+    reg accept : Bit on clock {
+        initial it <= true
+        if {
+            when vec == 5w8 {
+                it <= false
+            }
+        }
+    }
+
+    adapter.out.ready := accept
+
+    //> The payload the adapter forwards this cycle.
+    wire forwarded : Word[8] {
+        it := match adapter.out.data {
+            with @Valid(d) => d
+            with @Invalid() => 0w8
+        }
+    }
+
+    //> High while the adapter presents a payload.
+    wire presenting : Bit {
+        it := match adapter.out.data {
+            with @Valid(dontcare) => true
+            with @Invalid() => false
+        }
+    }
+
+    //> Running AND of every verdict so far.  Backpressure invariant:
+    //> the producer's `ready` always mirrors the consumer's `accept`
+    //> (the adapter's `where it.ready dependson out.ready` clause).
+    //> Payload invariant: while a payload is on the wire, the adapter
+    //> forwards exactly the vector being driven (the
+    //> `where it.data dependson inp.data` clause).
+    reg all_ok : Bit on clock {
+        initial it <= true
+        if {
+            when !finished {
+                it <= it && (adapter.inp.ready == accept)
+                    && (!presenting || forwarded == vec)
+            }
+        }
+    }
+
+    //> Rises once the four payloads have crossed and the stall has
+    //> been observed.
+    reg finished : Bit on clock {
+        initial it <= false
+        if {
+            when vec == 5w8 && !accept {
+                it <= true
+            }
+        }
+    }
+}

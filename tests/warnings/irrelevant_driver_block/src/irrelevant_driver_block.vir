@@ -9,7 +9,9 @@ socket Bus[T : Type] {
 
 mod Master[W : Type] {
     incoming d : W
-    client socket busif of Bus[W] {
+    client socket busif of Bus[W]
+        where it.req dependson d
+    {
         it.req := d
     }
     unused busif.rsp
@@ -72,7 +74,7 @@ pub mod IrrelevantSubmodule {
 // component and resolves to no reference.
 pub mod RelevantSocketConnect {
     incoming d : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson d
 
     wire passthru : Bit
 

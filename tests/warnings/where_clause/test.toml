@@ -1,0 +1,5 @@
+kind = "check"
+expect = "ok"
+warnings_ok = true
+description = "Tests for `where` clause warnings: an unused entry warns, spelling the carrier as `<SOCKET>.<CHANNEL>` warns in favor of `it`, and restating a socketdef obligation never warns."
+filecheck = "src/where_clause.vir"

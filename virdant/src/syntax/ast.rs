@@ -240,6 +240,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Annotation(annotation) => format!("Annotation {}", parsing.string(annotation.name.clone())),
             AstNodePayload::DependsonList => format!("DependsonList"),
             AstNodePayload::Socket(_socket) => format!("Socket"),
+            AstNodePayload::WhereClause => format!("WhereClause"),
+            AstNodePayload::WhereClauseItem => format!("WhereClauseItem"),
             AstNodePayload::Field(_field) => format!("Field"),
             AstNodePayload::Ctor(_ctor) => format!("Ctor"),
             AstNodePayload::Enumerant(_enumerant) => format!("Enumerant"),
@@ -520,6 +522,27 @@ impl<'p> AstNode<'p> {
     pub fn dependson_entries(&self) -> Vec<AstNode<'_>> {
         match self.dependson_list() {
             Some(list) => list.children(),
+            None => vec![],
+        }
+    }
+
+    /// The `where` clause of a socket instance declaration, if present.
+    pub fn where_clause(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Socket(_) => self
+                .children()
+                .into_iter()
+                .find(|child| matches!(child.payload(), AstNodePayload::WhereClause)),
+            _ => None,
+        }
+    }
+
+    /// The `it.<CH> dependson <PATH>, ...` item nodes of this socket
+    /// instance's `where` clause, in written order. Each item's children
+    /// are the carrier `Path` followed by the `DependsonList`.
+    pub fn where_items(&self) -> Vec<AstNode<'_>> {
+        match self.where_clause() {
+            Some(clause) => clause.children(),
             None => vec![],
         }
     }

@@ -2,7 +2,10 @@
 
 `dependson` is a list on an `outgoing` (or `outgoing wire`) port
 declaration: the module's declaration of which `incoming` ports the
-port *may* combinationally depend on.
+port *may* combinationally depend on.  A socket instance declaration
+may carry `where` clauses making the same kind of declaration for the
+socket's driven channels (see "`where` clauses on socket instances"
+below).
 
 - It declares **potential**, not actuality: it does not create a
   dependency, it promises what dependencies are allowed.
@@ -132,6 +135,67 @@ socket Wishbone {
 - Socket-derived obligations are exempt from the unused warning (a
   protocol such as Wishbone legitimately varies its latency).
 
+## `where` clauses on socket instances
+
+A socketdef channel list can only name same-socket channels.  To
+declare that a module's drive on a socket channel may depend on
+*anything else* — another socket's channels, or a plain `incoming`
+port — attach a `where` clause to the socket instance declaration:
+
+```virdant
+mod PassThrough {
+    client socket out of Pipe[Word[8]]
+        where it.data dependson inp.data
+    {
+        it.data := inp.data
+    }
+
+    server socket inp of Pipe[Word[8]]
+        where it.ready dependson out.ready
+    {
+        it.ready := out.ready
+    }
+}
+```
+
+Rules:
+
+- Each clause is `where <CARRIER> dependson <ENTRY>, ...`; a socket
+  may carry several clauses, one per line.  `it` refers to the socket
+  instance the clause is attached to (the same convention as socket
+  driver blocks); spelling the carrier as `<SOCKET>.<CHANNEL>` instead
+  of `it.<CHANNEL>` parses but warns (`WhereNotIt`).
+- The clause may be written before or after the socket's `{ ... }`
+  driver block.
+- The **carrier** must be a *driven* channel of the attached socket
+  instance (`client` + `cosi`, or `server` + `soci`).  Naming a
+  receiving channel is an error (`DependsonBadCarrier`), as is naming
+  another socket instance, a channel that does not exist, or the same
+  channel in two clauses.
+- Each **entry** must resolve to an incoming component of the module:
+  a plain `incoming` port, or a receiving channel of any of the
+  module's own socket instances (same-socket entries are allowed — a
+  moddef may restate or strengthen its socketdef's guarantees;
+  restating an obligation never warns unused).  A driven channel, an
+  outgoing port, a submodule path, or an unresolvable name is an error
+  (`DependsonBadEntry`).
+- The declaration is **potential, not actuality**, exactly like a
+  port's `dependson` list, and it is part of the module's public
+  interface contract: parents see it and must account for it.
+- A driven channel's declared set must be **exhaustive** over every
+  incoming component it can combinationally reach — its socketdef
+  obligations plus its `where` entries.  An undeclared dependency on a
+  plain `incoming` port or on another socket's receiving channel is an
+  error (`DependsonUndeclared`).  There is no exemption for
+  cross-socket dependencies anymore: they are declarable, so they are
+  required.
+- A `where` entry nothing justifies warns unused (`DependsonUnused`),
+  like a port list entry.  An entry justified by an actual dependency,
+  by another component's declared potential, or by the socketdef's own
+  obligation edge does not warn.  `ext mod` declarations are exempt.
+- `where` edges join the potentiality graph (see the cycle rules
+  below) and are exported to parents like every other declaration.
+
 ## Combinational cycle detection
 
 Virdant checks every module for combinational cycles over the
@@ -140,10 +204,12 @@ Virdant checks every module for combinational cycles over the
 - the module's driver-derived combinational edges (`:=` targets
   depending on the signals their right-hand sides read, including the
   per-channel edges of `:=:` socket links);
-- the module's own `dependson` lists and socket obligations;
-- the `dependson` lists and socket obligations declared by the
-  module's immediate submodule instances (declarations are the
-  boundary contract: Virdant never looks inside a child module).
+- the module's own `dependson` lists, socket obligations, and
+  `where`-clause edges;
+- the `dependson` lists, socket obligations, and `where` clauses
+  declared by the module's immediate submodule instances (declarations
+  are the boundary contract: Virdant never looks inside a child
+  module).
 
 - Sequential (`<=`) edges are never traversed: a clock edge breaks the
   combinational path.

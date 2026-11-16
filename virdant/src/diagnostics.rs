@@ -218,6 +218,10 @@ pub enum DiagnosticPayload {
     /// An `outgoing` port declares a `dependson` entry it does not (and
     /// cannot potentially) depend on. Warning: an unused `dependson`.
     DependsonUnused(DependsonUnused),
+    /// A `where` clause on a socket instance declaration named its
+    /// carrier as `<SOCKET>.<CHANNEL>` instead of `it.<CHANNEL>`.
+    /// Warning.
+    WhereNotIt(WhereNotIt),
     ImportNotAtTopError,
     /// `it` keyword used outside of an `ItBlock`.
     ItNotInItBlock,
@@ -762,6 +766,13 @@ pub struct DependsonUnused {
     pub entry: BString,
 }
 
+/// A `where` clause on a socket instance declaration named its carrier
+/// as `<SOCKET>.<CHANNEL>` instead of `it.<CHANNEL>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WhereNotIt {
+    pub carrier: BString,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpectedPlatform {
     pub item: BString,
@@ -1277,6 +1288,12 @@ impl Diagnostic {
                     d.port, d.entry,
                 ).into()
             }
+            DiagnosticPayload::WhereNotIt(d) => {
+                format!(
+                    "'{}' should be written as 'it' in a `where` clause",
+                    d.carrier,
+                ).into()
+            }
             DiagnosticPayload::ExpectedPlatform(d) => format!("Expected a platform: {} is not a platform", d.item).into(),
             DiagnosticPayload::PlatformMissingPort(d) => format!("Module is missing port {} required by platform {}", d.port, d.platform).into(),
             DiagnosticPayload::DriveUndeclaredPlatformPort(d) => format!("`{}` is declared in platform `{}`, but not declared in this module; declare it explicitly to drive it", d.port, d.platform).into(),
@@ -1476,6 +1493,7 @@ impl Diagnostic {
             DiagnosticPayload::DependsonBadEntry(_) => "DependsonBadEntry",
             DiagnosticPayload::DependsonUndeclared(_) => "DependsonUndeclared",
             DiagnosticPayload::DependsonUnused(_) => "DependsonUnused",
+            DiagnosticPayload::WhereNotIt(_) => "WhereNotIt",
             DiagnosticPayload::ImportNotAtTopError => "ImportNotAtTopError",
             DiagnosticPayload::ItNotInItBlock => "ItNotInItBlock",
             DiagnosticPayload::CantInfer => "CantInfer",
@@ -1527,6 +1545,7 @@ impl Diagnostic {
             | DiagnosticPayload::EmptyDriverBlock
             | DiagnosticPayload::RedundantDriver(_)
             | DiagnosticPayload::DependsonUnused(_)
+            | DiagnosticPayload::WhereNotIt(_)
             | DiagnosticPayload::RedundantOnClause(_)
             | DiagnosticPayload::UnusedOnOutgoingWire(_)
             | DiagnosticPayload::ReferencedWhileNotPub(_)
@@ -1582,7 +1601,7 @@ from_diagnostic! {
     InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver, UnusedButUsed,
     UnusedOnSink, UnusedOnOutgoingWire,
     CombinationalLoop, DependsonCycle, DependsonBadCarrier, DependsonBadEntry,
-    DependsonUndeclared, DependsonUnused,
+    DependsonUndeclared, DependsonUnused, WhereNotIt,
     InitialForNonReg, InitialMultiple, InitialInsideIfMatch, InitialNoinitialPlatform,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     DriveUndeclaredPlatformPort, UseUndeclaredPlatformPort,

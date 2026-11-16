@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tests for `where` clause validation on socket instance declarations: the carrier must be a driven channel of the attached socket, and each entry must resolve to an incoming component of the module."
+filecheck = "src/where_clauses.vir"

@@ -35,12 +35,16 @@ socket Handshake {
 //> between.
 mod Mid {
     //> Server side, bulk-connected to the grandparent's `top_port`.
-    server socket a of Handshake {
+    server socket a of Handshake
+        where it.rsp dependson b.rsp
+    {
         it.rsp := b.rsp
     }
 
     //> Client side, bulk-connected to the grandchild's `link`.
-    client socket b of Handshake {
+    client socket b of Handshake
+        where it.req dependson a.req
+    {
         it.req := a.req
     }
 }

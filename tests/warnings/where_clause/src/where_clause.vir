@@ -1,0 +1,54 @@
+// `where` clause warnings: like a port's `dependson` list, a `where`
+// entry nothing justifies warns; the carrier may be spelled
+// `<SOCKET>.<CHANNEL>` but that warns in favor of `it`; and restating
+// a socketdef obligation in a `where` clause never warns (the
+// obligation edge justifies the entry).
+
+// CHECK: 'out.req' should be written as 'it' in a `where` clause
+// CHECK: Unused `dependson`: `out.req` declares it may depend on `inp` but does not
+// CHECK-NOT: Unused
+mod Warnings {
+    incoming inp : Bit
+    client socket out of Chan
+        where out.req dependson inp
+    {
+        it.req := true
+    }
+    unused out.ready
+    unused inp
+}
+
+// An entry actually exercised does not warn.
+// CHECK-NOT: Unused
+mod Justified {
+    incoming inp : Bit
+    client socket out of Chan
+        where it.req dependson inp
+    {
+        it.req := inp
+    }
+    unused out.ready
+}
+
+// Restating the socketdef's `ready dependson req` obligation: the
+// obligation edge justifies the `where` entry, so it does not warn,
+// even though `it.ready`'s driver is a constant.
+// CHECK-NOT: Unused
+mod Restated {
+    server socket s of PipeChan
+        where it.ready dependson s.req
+    {
+        it.ready := true
+    }
+    unused s.req
+}
+
+socket Chan {
+    cosi req : Bit
+    soci ready : Bit
+}
+
+socket PipeChan {
+    cosi req : Bit
+    soci ready : Bit dependson req
+}

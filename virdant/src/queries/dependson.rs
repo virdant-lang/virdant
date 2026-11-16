@@ -7,6 +7,17 @@
 //! is part of the module's public interface, so parents analyze
 //! children through declarations only, never by looking inside them.
 //!
+//! A socket instance declaration in a moddef may carry `where` clauses
+//! (`where it.<CH> dependson <PATH>, ...`), declaring that the module's
+//! drive on a *driven* channel of that socket instance may
+//! combinationally depend on incoming components of the module: the
+//! receiving channels of the same socket or another socket, or plain
+//! `incoming` ports. Socketdef channel lists can name same-socket
+//! channels only, so this is the only way to declare a dependency on
+//! another socket's channels or on plain `incoming` ports — and since
+//! it is now declarable, such a dependency left undeclared is an
+//! error.
+//!
 //! Core semantics:
 //!
 //! * `dependson` does not *create* a combinational dependency; it
@@ -59,10 +70,21 @@ pub struct DependsonAnalysis {
     /// unused warning.
     socket_edges: Vec<(BString, BString)>,
 
+    /// Local edges declared by `where` clauses on the module's own
+    /// socket instance declarations:
+    /// `client socket c of Pipe[T] where it.data dependson inp.data`.
+    /// `(drive path, incoming path)`, both module-local. The entry may
+    /// be a receiving channel of the same socket or of another socket,
+    /// or a plain `incoming` port. Like port `dependson` lists, these
+    /// participate in the unused check (a `where` entry nothing
+    /// justifies warns); socketdef obligations never do.
+    where_edges: Vec<(BString, BString)>,
+
     /// Edges imported from immediate submodule instances: the child's
-    /// `declared_edges` and `socket_edges`, with every path prefixed by
-    /// the instance name. These are *not* module-local; the parent
-    /// trusts the child's declarations without looking inside it.
+    /// `declared_edges`, `socket_edges`, and `where_edges`, with every
+    /// path prefixed by the instance name. These are *not* module-local;
+    /// the parent trusts the child's declarations without looking inside
+    /// it.
     imported_edges: Vec<(BString, BString)>,
 
     diagnostics: Vec<Diagnostic>,
@@ -81,6 +103,12 @@ impl DependsonAnalysis {
     /// The module's own socket-obligation edges (validated).
     pub fn socket_edges(&self) -> &[(BString, BString)] {
         &self.socket_edges
+    }
+
+    /// The module's own edges declared by `where` clauses on socket
+    /// instance declarations (validated).
+    pub fn where_edges(&self) -> &[(BString, BString)] {
+        &self.where_edges
     }
 
     /// Edges imported from immediate submodule instances.
@@ -103,6 +131,7 @@ pub(crate) fn build_dependson_analysis(
             moddef,
             declared_edges: vec![],
             socket_edges: vec![],
+            where_edges: vec![],
             imported_edges: vec![],
             diagnostics: vec![],
         });
@@ -118,6 +147,7 @@ pub(crate) fn build_dependson_analysis(
         moddef,
         declared_edges: vec![],
         socket_edges: vec![],
+        where_edges: vec![],
         imported_edges: vec![],
         diagnostics: vec![],
     };
@@ -168,6 +198,19 @@ pub(crate) fn build_dependson_analysis(
         &mut analysis.socket_edges,
         None,
         None,
+    );
+
+    // 2b. Local edges from `where` clauses on the module's own socket
+    //     instance declarations.
+    collect_where_edges_for(
+        builder,
+        &item_ast,
+        location.package(),
+        &component_analysis,
+        &mut analysis.where_edges,
+        None,
+        None,
+        &mut analysis.diagnostics,
     );
 
     // 3. Imported declared edges from immediate submodule instances.
@@ -465,6 +508,285 @@ fn drives_channel(role: SocketRole, dir: ChannelDir) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// `where` clauses on socket instances
+// ---------------------------------------------------------------------------
+
+/// The names of the socket instances declared at the top level of
+/// `ast` (the module's own namespace).
+fn own_socket_instance_names(ast: &AstNode<'_>, parsing: &crate::syntax::parsing::Parsing) -> Vec<BString> {
+    ast.children()
+        .into_iter()
+        .filter_map(|stmt| match stmt.payload() {
+            AstNodePayload::Socket(socket) => Some(parsing.string(socket.name).to_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Why `entry` is not a legal `where`-clause entry, or `None` if it is.
+///
+/// An entry must resolve to an *incoming* component of the module: a
+/// plain `incoming` port, or a receiving channel of one of the
+/// module's own socket instances (same-socket entries are allowed: a
+/// moddef may strengthen its socketdef's combinational guarantees).
+/// A submodule instance's channels are not this module's incoming
+/// components.
+fn where_entry_is_legal(
+    component_analysis: &ComponentAnalysis,
+    own_incoming_paths: &[BString],
+    socket_instance_names: &[BString],
+    entry: &BStr,
+) -> Option<BString> {
+    let Some(component) = component_analysis.resolve(entry) else {
+        return Some("could not be resolved to a component of this module".into());
+    };
+    if component.kind() != Some(ComponentKind::Incoming) {
+        return Some(
+            "is not a receiving channel or `incoming` port of this module".into(),
+        );
+    }
+    if own_incoming_paths.iter().any(|path| path == entry) {
+        return None;
+    }
+    let is_own_socket_channel = socket_instance_names.iter().any(|name| {
+        component_analysis
+            .components_owned_by(name.as_bstr())
+            .contains(&component.id())
+    });
+    if is_own_socket_channel {
+        return None;
+    }
+    Some("is not a receiving channel or `incoming` port of this module".into())
+}
+
+/// Record the edges declared by `where` clauses on the socket instance
+/// declarations at the top level of `ast` (the module's own
+/// namespace). A `where` clause declares that the module's drive on a
+/// driven channel of that socket instance may combinationally depend
+/// on incoming components of the module — the receiving channels of
+/// the same socket or another socket, or plain `incoming` ports. The
+/// typical use is cross-socket (a backpressure pass-through), but a
+/// same-socket entry is also legal: a moddef may strengthen its
+/// socketdef's combinational guarantees:
+///
+/// ```virdant
+/// client socket out of Pipe[Bit]
+///     where it.data dependson inp.data, some_enable
+/// ```
+///
+/// The carrier (`it.<CH>`, or `<SOCKET>.<CH>`, which warns in favor of
+/// `it`) must be a *driven* channel of the attached socket instance
+/// (`client` + `cosi`, or `server` + `soci`).  Each entry must resolve
+/// to an incoming component of the module (see
+/// `where_entry_is_legal`).  Only validated edges are recorded; the
+/// same edge may legitimately duplicate a socketdef obligation (a
+/// moddef may restate its socketdef's guarantees).
+///
+/// `prefix` (for imports from a submodule instance) is prepended to
+/// every path; `verify` (the parent's component analysis) is used to
+/// check that the prefixed paths exist there. Diagnostics are pushed
+/// into `diagnostics`; when importing a child's edges the caller
+/// passes a scratch vector — the child's own analysis diagnoses the
+/// same problems in the child's own source.
+#[allow(clippy::too_many_arguments)]
+fn collect_where_edges_for(
+    builder: &mut Builder,
+    ast: &AstNode<'_>,
+    package: PackageId,
+    component_analysis: &ComponentAnalysis,
+    out: &mut Vec<(BString, BString)>,
+    prefix: Option<&BStr>,
+    verify: Option<&ComponentAnalysis>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let symboltable = builder.get_symboltable();
+    let parsing = builder.get_parsing(package);
+    let packages = builder.get_packages();
+
+    let own_incoming_paths: Vec<BString> = component_analysis
+        .components()
+        .into_iter()
+        .filter(|(path, component)| {
+            !path.contains(&b'.') && component.kind() == Some(ComponentKind::Incoming)
+        })
+        .map(|(path, _)| path)
+        .collect();
+    let socket_instance_names = own_socket_instance_names(ast, &parsing);
+
+    for stmt in ast.children() {
+        let AstNodePayload::Socket(socket) = stmt.payload() else {
+            continue;
+        };
+        let instance_name: BString = parsing.string(socket.name).to_owned();
+        let ofness_node = stmt.child(1);
+        let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
+            continue;
+        };
+        let socket_package: Option<PackageId> = match ofness.package {
+            Some(pkg) => packages.id(parsing.string(pkg)),
+            None => Some(package),
+        };
+        let socket_name = parsing.string(ofness.name);
+        let Some(socket_symbol) =
+            socket_package.and_then(|pkg| symboltable.resolve_item(socket_name, pkg))
+        else {
+            continue;
+        };
+        if socket_symbol.kind() != SymbolKind::SocketDef {
+            continue;
+        }
+        let decls = socketdef_channel_decls(builder, &socket_symbol);
+
+        let mut seen_carriers: IndexSet<BString> = IndexSet::new();
+        for item in stmt.where_items() {
+            let carrier_node = item.child(0);
+            let Some(carrier_path_node) = carrier_node.path() else {
+                continue;
+            };
+            let carrier_written: BString = parsing.string(carrier_path_node).to_owned();
+
+            // The carrier is `it.<CH>` — or `<SOCKET>.<CH>`, which is
+            // accepted with a warning in favor of `it`.
+            let segments: Vec<&[u8]> = carrier_written.split(|b| *b == b'.').collect();
+            if segments.len() != 2 {
+                diagnostics.push(Diagnostic::new(
+                    carrier_node.region(),
+                    diagnostics::DependsonBadCarrier {
+                        component: carrier_written.clone(),
+                        reason: "a `where` carrier must name a single channel: `it.<channel>`".into(),
+                    },
+                ));
+                continue;
+            }
+            if segments[0] != b"it" {
+                if segments[0] == instance_name.as_bstr() {
+                    diagnostics.push(Diagnostic::new(
+                        carrier_node.region(),
+                        diagnostics::WhereNotIt {
+                            carrier: carrier_written.clone(),
+                        },
+                    ));
+                } else {
+                    diagnostics.push(Diagnostic::new(
+                        carrier_node.region(),
+                        diagnostics::DependsonBadCarrier {
+                            component: carrier_written.clone(),
+                            reason: format!(
+                                "names socket `{}`, but this `where` clause is attached to socket instance `{}`",
+                                String::from_utf8_lossy(segments[0]),
+                                instance_name.to_str_lossy(),
+                            ).into(),
+                        },
+                    ));
+                    continue;
+                }
+            }
+            let channel: BString = BString::from(segments[1]);
+
+            // The carrier must be a driven channel of the attached
+            // socket instance.
+            let Some(decl) = decls.iter().find(|decl| decl.name == channel) else {
+                diagnostics.push(Diagnostic::new(
+                    carrier_node.region(),
+                    diagnostics::DependsonBadCarrier {
+                        component: carrier_written.clone(),
+                        reason: format!(
+                            "is not a channel of socket `{}`",
+                            parsing.string(ofness.name).to_str_lossy(),
+                        ).into(),
+                    },
+                ));
+                continue;
+            };
+            if !drives_channel(socket.role, decl.dir) {
+                let (drives, drives_word, receive_word) = match socket.role {
+                    SocketRole::Client => ("client", "cosi", "soci"),
+                    SocketRole::Server => ("server", "soci", "cosi"),
+                };
+                diagnostics.push(Diagnostic::new(
+                    carrier_node.region(),
+                    diagnostics::DependsonBadCarrier {
+                        component: carrier_written.clone(),
+                        reason: format!(
+                            "is not a driven channel of socket instance `{}`: a `{}` socket drives `{}` channels, not `{}`",
+                            instance_name.to_str_lossy(),
+                            drives,
+                            drives_word,
+                            receive_word,
+                        ).into(),
+                    },
+                ));
+                continue;
+            }
+            let carrier_path = BString::from(format!(
+                "{}.{}",
+                instance_name.to_str_lossy(),
+                channel.to_str_lossy()
+            ));
+            if component_analysis.resolve(carrier_path.as_bstr()).is_none() {
+                continue;
+            }
+            if !seen_carriers.insert(channel.clone()) {
+                diagnostics.push(Diagnostic::new(
+                    carrier_node.region(),
+                    diagnostics::DependsonBadCarrier {
+                        component: carrier_written.clone(),
+                        reason: "declares the same channel in more than one `where` clause".into(),
+                    },
+                ));
+                continue;
+            }
+
+            let entries_node = item.child(1);
+            for entry_node in entries_node.children() {
+                let Some(entry_path) = entry_node.path() else { continue };
+                let entry: BString = parsing.string(entry_path).to_owned();
+                match where_entry_is_legal(
+                    component_analysis,
+                    &own_incoming_paths,
+                    &socket_instance_names,
+                    entry.as_bstr(),
+                ) {
+                    None => {
+                        let mut source = carrier_path.clone();
+                        let mut target = entry.clone();
+                        if let Some(prefix) = prefix {
+                            source = BString::from(format!(
+                                "{}.{}",
+                                prefix.to_str_lossy(),
+                                source.to_str_lossy()
+                            ));
+                            target = BString::from(format!(
+                                "{}.{}",
+                                prefix.to_str_lossy(),
+                                target.to_str_lossy()
+                            ));
+                            if let Some(verify) = verify {
+                                if verify.resolve(source.as_bstr()).is_none()
+                                    || verify.resolve(target.as_bstr()).is_none()
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+                        out.push((source, target));
+                    }
+                    Some(reason) => {
+                        diagnostics.push(Diagnostic::new(
+                            entry_node.region(),
+                            diagnostics::DependsonBadEntry {
+                                entry: entry.clone(),
+                                reason,
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Imported edges from submodule instances
 // ---------------------------------------------------------------------------
 
@@ -586,6 +908,21 @@ fn collect_imported_edges(
             Some(instance_name.as_bstr()),
             Some(component_analysis),
         );
+
+        // The child's own `where` clauses. Diagnostics go to a scratch
+        // vector: the child's own analysis diagnoses the same problems
+        // in the child's own source.
+        let mut scratch_diagnostics = vec![];
+        collect_where_edges_for(
+            builder,
+            &child_ast,
+            child_location.package(),
+            &child_component_analysis,
+            &mut analysis.imported_edges,
+            Some(instance_name.as_bstr()),
+            Some(component_analysis),
+            &mut scratch_diagnostics,
+        );
     }
 }
 
@@ -655,12 +992,13 @@ fn check_exhaustiveness_and_unused(
         }
     }
 
-    // Local declared edges, socket obligations, and imported declared
-    // edges.
+    // Local declared edges, socket obligations, `where`-clause edges,
+    // and imported declared edges.
     for (source, target) in analysis
         .declared_edges
         .iter()
         .chain(analysis.socket_edges.iter())
+        .chain(analysis.where_edges.iter())
         .chain(analysis.imported_edges.iter())
     {
         add(&mut adj, source, target);
@@ -681,11 +1019,9 @@ fn check_exhaustiveness_and_unused(
             Some(ComponentKind::Outgoing) | Some(ComponentKind::OutgoingWire)
         ) || component.socket_channel()
         {
-            // Socket channels are exhaustiveness-checked against their
-            // socketdef obligations below, not against plain `incoming`
-            // ports: a socketdef list can only name same-socket channels,
-            // so a channel driven from a plain `incoming` port (the
-            // canonical `Pipe` producer) is legal and undeclarable here.
+            // Socket channels are exhaustiveness-checked below, against
+            // the full incoming universe via their socketdef obligations
+            // and `where` clauses.
             continue;
         }
 
@@ -750,29 +1086,94 @@ fn check_exhaustiveness_and_unused(
         }
     }
 
-    // Socket-channel obligations: a socket channel driven by this module
-    // (its socket instantiated in the channel's driving role) may
-    // combinationally depend only on the same socket's receiving channels
-    // that its socketdef `dependson` list declares.  The check universe is
-    // therefore exactly the driven socket's own receiving channels — the
-    // only channels its socketdef list can name.  Dependencies on other
-    // sockets' channels or on plain `incoming` ports are exempt: they are
-    // undeclarable at the socketdef, and legitimate (flow control routinely
-    // gates one stream's readiness on another's data).  As with ports,
-    // absence of a list is an empty declaration, and the socket-derived
-    // obligation never produces an unused warning.
+    // Socket channels driven by this module: like outgoing ports, a
+    // driven channel's declared set must be exhaustive over every
+    // incoming component of the module it can combinationally reach —
+    // a plain `incoming` port or the receiving channel of any of the
+    // module's own socket instances (including its own socket's).  The
+    // declared set is the socketdef `dependson` obligations plus the
+    // targets of the socket statement's `where` clauses.  As with
+    // ports, absence of declarations is an empty declaration, and the
+    // socketdef-derived obligation entries never produce an unused
+    // warning (the `where` entries do; see below).
     if !is_ext {
-        for (drive_path, declared, receive_channels, region) in
-            own_socket_drives(builder, item_ast, package, component_analysis)
+        let parsing = builder.get_parsing(package);
+        let socket_instance_names = own_socket_instance_names(item_ast, &parsing);
+        let incoming_universe =
+            own_incoming_universe(component_analysis, &socket_instance_names);
+        for (drive_path, declared, region) in
+            own_socket_drives(builder, item_ast, package, &analysis.where_edges)
         {
             let reachable = reachable_from(&adj, drive_path.as_bstr());
-            for recv in &receive_channels {
-                if reachable.contains(recv) && !declared.contains(recv) {
+            for incoming in &incoming_universe {
+                if reachable.contains(incoming) && !declared.contains(incoming) {
                     analysis.diagnostics.push(Diagnostic::new(
                         region.clone(),
                         diagnostics::DependsonUndeclared {
                             port: drive_path.clone(),
-                            missing: recv.clone(),
+                            missing: incoming.clone(),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+
+    // `where` entries: like port `dependson` entries, an entry nothing
+    // justifies warns.  A `where` entry is justified by reach
+    // over the potentiality graph minus the carrier's own `where`
+    // edges — the carrier's actual edges and its socketdef obligation
+    // edges still participate, so an entry restating a socketdef
+    // obligation is not unused.  (Removal is by edge, not by target
+    // value: an entry that duplicates an obligation edge must not
+    // remove the obligation edge it duplicates.)
+    if !is_ext && !analysis.where_edges.is_empty() {
+        let mut where_by_carrier: IndexMap<BString, Vec<BString>> = IndexMap::new();
+        let mut obligation_targets: IndexMap<BString, IndexSet<BString>> = IndexMap::new();
+        for (source, target) in &analysis.socket_edges {
+            obligation_targets
+                .entry(source.clone())
+                .or_default()
+                .insert(target.clone());
+        }
+        for (source, target) in &analysis.where_edges {
+            where_by_carrier
+                .entry(source.clone())
+                .or_default()
+                .push(target.clone());
+        }
+        for (carrier, entries) in &where_by_carrier {
+            let mut adj_without_where = adj.clone();
+            if let Some(targets) = adj_without_where.get_mut(carrier) {
+                let actual_targets = actual_adj.get(carrier).cloned().unwrap_or_default();
+                let carrier_obligations = obligation_targets
+                    .get(carrier)
+                    .cloned()
+                    .unwrap_or_default();
+                for target in entries {
+                    // Only *declared-only* edges are excluded: an edge
+                    // that is also an actual dependency or a socketdef
+                    // obligation justifies itself.
+                    if !actual_targets.contains(target) && !carrier_obligations.contains(target)
+                    {
+                        targets.shift_remove(target);
+                    }
+                }
+            }
+            let justified = reachable_from(&adj_without_where, carrier.as_bstr());
+            for entry in entries {
+                if !justified.contains(entry) {
+                    let region = where_entry_region(
+                        builder,
+                        analysis.moddef,
+                        carrier.as_bstr(),
+                        entry.as_bstr(),
+                    );
+                    analysis.diagnostics.push(Diagnostic::new(
+                        region,
+                        diagnostics::DependsonUnused {
+                            port: carrier.clone(),
+                            entry: entry.clone(),
                         },
                     ));
                 }
@@ -781,17 +1182,49 @@ fn check_exhaustiveness_and_unused(
     }
 }
 
+/// All incoming components of the module: plain `incoming` ports plus
+/// the receiving channels of the module's own socket instances.  This
+/// is exactly the set a `where` clause may name (see
+/// `where_entry_is_legal`), so a driven socket channel's dependency on
+/// anything in this universe is declarable — and therefore required.
+fn own_incoming_universe(
+    component_analysis: &ComponentAnalysis,
+    socket_instance_names: &[BString],
+) -> Vec<BString> {
+    let mut universe: Vec<BString> = vec![];
+    for (path, component) in component_analysis.components() {
+        if component.kind() != Some(ComponentKind::Incoming) {
+            continue;
+        }
+        if !path.contains(&b'.') {
+            universe.push(path);
+            continue;
+        }
+        if socket_instance_names.iter().any(|name| {
+            component_analysis
+                .components_owned_by(name.as_bstr())
+                .contains(&component.id())
+        }) {
+            universe.push(path);
+        }
+    }
+    universe
+}
+
 /// Every channel this module drives through its own socket instances:
-/// `(drive path, declared same-socket entry paths, the same instance's
-/// receiving channel paths, socket statement region)`.  A channel is in
-/// its driving role when the socket is instantiated as `client` and the
-/// channel is `cosi`, or as `server` and the channel is `soci`.
+/// `(drive path, declared entry paths, socket statement region)`.  The
+/// declared set is the socketdef `dependson` entries (same-socket
+/// channel names, prefixed with the instance name) plus the targets of
+/// the socket statement's `where` clauses (already module-local
+/// paths).  A channel is in its driving role when the socket is
+/// instantiated as `client` and the channel is `cosi`, or as `server`
+/// and the channel is `soci`.
 fn own_socket_drives(
     builder: &mut Builder,
     ast: &AstNode<'_>,
     package: PackageId,
-    component_analysis: &ComponentAnalysis,
-) -> Vec<(BString, IndexSet<BString>, Vec<BString>, Region)> {
+    where_edges: &[(BString, BString)],
+) -> Vec<(BString, IndexSet<BString>, Region)> {
     let symboltable = builder.get_symboltable();
     let parsing = builder.get_parsing(package);
     let packages = builder.get_packages();
@@ -818,17 +1251,6 @@ fn own_socket_drives(
         if socket_symbol.kind() != SymbolKind::SocketDef {
             continue;
         }
-        let instance_prefix = format!("{}.", instance_name.to_str_lossy());
-        let receive_channels: Vec<BString> = component_analysis
-            .components()
-            .into_iter()
-            .filter(|(path, component)| {
-                component.socket_channel()
-                    && component.kind() == Some(ComponentKind::Incoming)
-                    && path.starts_with(instance_prefix.as_bytes())
-            })
-            .map(|(path, _)| path)
-            .collect();
         for decl in socketdef_channel_decls(builder, &socket_symbol) {
             if !drives_channel(socket.role, decl.dir) {
                 continue;
@@ -838,7 +1260,7 @@ fn own_socket_drives(
                 instance_name.to_str_lossy(),
                 decl.name.to_str_lossy()
             ));
-            let declared: IndexSet<BString> = decl
+            let mut declared: IndexSet<BString> = decl
                 .entries
                 .iter()
                 .map(|entry| {
@@ -849,12 +1271,59 @@ fn own_socket_drives(
                     ))
                 })
                 .collect();
-            result.push((drive_path, declared, receive_channels.clone(), stmt.region()));
+            for (source, target) in where_edges {
+                if source == &drive_path {
+                    declared.insert(target.clone());
+                }
+            }
+            result.push((drive_path, declared, stmt.region()));
         }
     }
     result
 }
 
+/// The source region of `entry` as written in the `where` clause of the
+/// socket instance that `carrier` (`<instance>.<channel>`) belongs to,
+/// or the moddef's region as a fallback.
+fn where_entry_region(
+    builder: &mut Builder,
+    moddef: SymbolId,
+    carrier: &BStr,
+    entry: &BStr,
+) -> Region {
+    let symboltable = builder.get_symboltable();
+    let location = symboltable.symbol(moddef).location();
+    let parsing = builder.get_parsing(location.package());
+    let item_ast = parsing.ast_node(location.ast_node_id());
+    let mut segments = carrier.split(|b| *b == b'.');
+    let instance = segments.next().unwrap_or(carrier);
+    let channel = segments.next().unwrap_or(b"".as_bstr());
+    for stmt in item_ast.children() {
+        let AstNodePayload::Socket(socket) = stmt.payload() else {
+            continue;
+        };
+        if parsing.string(socket.name) != instance {
+            continue;
+        }
+        for item in stmt.where_items() {
+            let carrier_node = item.child(0);
+            let Some(carrier_path_node) = carrier_node.path() else { continue };
+            let written: Vec<&[u8]> = parsing.string(carrier_path_node).split(|b| *b == b'.').collect();
+            if written.len() != 2 || written[1] != channel {
+                continue;
+            }
+            let entries_node = item.child(1);
+            for entry_node in entries_node.children() {
+                if let Some(path) = entry_node.path() {
+                    if parsing.string(path) == entry {
+                        return entry_node.region();
+                    }
+                }
+            }
+        }
+    }
+    item_ast.region()
+}
 
 /// All paths reachable from `source` (excluding `source` itself unless
 /// it lies on a cycle).

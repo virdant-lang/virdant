@@ -1,0 +1,71 @@
+// A driven socket channel's declared set must be exhaustive over every
+// incoming component of the module it can combinationally reach: a
+// plain `incoming` port or the receiving channel of any socket
+// instance (its own or another's).  A socketdef `dependson` list can
+// name same-socket channels only, so these dependencies are declared
+// with `where` clauses on the socket instance declaration.  An
+// undeclared one is an error — the old exemption ("undeclarable at the
+// socketdef") is gone.
+
+// CHECK: `c.data` could combinationally depend on `inp` but does not declare it; add `inp` to `c.data`'s `dependson`
+mod Direct {
+    incoming inp : Bit
+    client socket c of Chan {
+        it.data := inp
+    }
+}
+
+// CHECK: `s.ready` could combinationally depend on `p.ready` but does not declare it; add `p.ready` to `s.ready`'s `dependson`
+mod CrossSocket {
+    server socket s of Chan {
+        it.ready := p.ready
+    }
+
+    client socket p of Chan {
+        it.data := true
+    }
+    unused s.req
+}
+
+// Through a child: the child declares (via a `where` clause) that its
+// driven channel may depend on its `incoming`; the parent's outgoing
+// port reads that channel, so the parent's dependency now reaches its
+// own `incoming` over declared potential edges and must be declared.
+// CHECK: `out` could combinationally depend on `inp` but does not declare it; add `inp` to `out`'s `dependson`
+mod ParentThroughChild {
+    incoming inp : Bit
+    outgoing out : Bit
+
+    mod producer of Producer
+    producer.inp := inp
+    unused producer.c.ready
+
+    out := producer.c.data
+}
+
+// The same chain, declared: no error.
+mod ParentDeclared {
+    incoming inp : Bit
+    outgoing out : Bit dependson inp
+
+    mod producer of Producer
+    producer.inp := inp
+    unused producer.c.ready
+
+    out := producer.c.data
+}
+
+socket Chan {
+    cosi data : Bit
+    soci ready : Bit
+}
+
+mod Producer {
+    incoming inp : Bit
+    client socket c of Chan
+        where it.data dependson inp
+    {
+        it.data := inp
+    }
+    unused c.ready
+}

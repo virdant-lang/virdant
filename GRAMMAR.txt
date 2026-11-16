@@ -147,8 +147,16 @@ ModDefStmtInstance := DocString? Annotations "mod" Ident "of" Ofness GenericsPar
 ItBlock := ModDefStmtBlock
 
 ModDefStmtSocket :=
-      DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
-    | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+      DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause?
+    | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause?
+    | DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock
+    | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock
+
+WhereClause := WhereClauseList
+
+WhereClauseList := ("where" WhereClauseItem)* ("where" WhereClauseItem)
+
+WhereClauseItem := Path DependsonList
 
 If := "if" "{" IfArm* "}"
 
@@ -462,6 +470,7 @@ Tokens:
   "union"
   "unused"
   "when"
+  "where"
   "wire"
   "with"
   "{"

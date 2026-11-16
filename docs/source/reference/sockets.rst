@@ -411,3 +411,28 @@ dormant.  It is still part of the contract: the containing module must
 not drive the channel with anything outside the declared set, and cycles
 in the composed `dependson` relation (for example, both sides of a link
 declaring same-cycle responses) are errors.  See :doc:`modules`.
+
+The list covers same-socket channels only.  Dependencies on other
+sockets' channels or on plain `incoming` ports are declared with
+`where` clauses attached to the socket instance declaration (see
+:doc:`modules`, "The `where` Clause on Socket Instances"):
+
+.. code-block:: virdant
+
+    mod PassThrough {
+        client socket out of Pipe[Word[8]]
+            where it.data dependson inp.data
+        {
+            it.data := inp.data
+        }
+
+        server socket inp of Pipe[Word[8]]
+            where it.ready dependson out.ready
+        {
+            it.ready := out.ready
+        }
+    }
+
+A driven channel's declared set — its socketdef obligations plus its
+`where` entries — must be exhaustive over every incoming component the
+drive can combinationally reach; an undeclared one is an error.

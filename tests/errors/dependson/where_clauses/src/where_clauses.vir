@@ -1,0 +1,70 @@
+// `where` clauses on socket instance declarations must be well-formed:
+// the carrier must name a driven channel of the attached socket
+// instance (`client` + `cosi`, or `server` + `soci`), and each entry
+// must resolve to an incoming component of the module (a plain
+// `incoming` port or a receiving channel of one of the module's own
+// socket instances).
+
+// CHECK: `dependson` is not allowed on `it.ready`: is not a driven channel of socket instance `c`: a `client` socket drives `cosi` channels, not `soci`
+// CHECK: Bad `dependson` entry `d.req`: is not a receiving channel or `incoming` port of this module
+// CHECK: Bad `dependson` entry `out_port`: is not a receiving channel or `incoming` port of this module
+// CHECK: Bad `dependson` entry `nowhere`: could not be resolved to a component of this module
+// CHECK: `dependson` is not allowed on `c.req`: names socket `c`, but this `where` clause is attached to socket instance `e`
+// CHECK: `dependson` is not allowed on `it.ready`: declares the same channel in more than one `where` clause
+socket Chan {
+    cosi req : Bit
+    soci ready : Bit
+}
+
+mod CarrierChecks {
+    incoming some_in : Bit
+    outgoing out_port : Bit dependson some_in
+    out_port := some_in
+
+    // Carrier on a receiving channel: a `client` socket drives `cosi`,
+    // not `soci`.  The second clause is well-formed, so the module
+    // still declares the dependency its driver actually has.
+    client socket c of Chan
+        where it.ready dependson some_in
+        where it.req dependson some_in
+    {
+        it.req := some_in
+    }
+    unused c.ready
+
+    // Entries: a driven channel of another socket instance, an
+    // `outgoing` port, and an unresolvable name.  `some_in` is legal
+    // (a plain `incoming` port) and declares the real dependency.
+    server socket s of Chan
+        where it.ready dependson d.req, out_port, nowhere, some_in
+    {
+        it.ready := some_in
+    }
+    unused s.req
+
+    client socket d of Chan
+        where it.req dependson some_in
+    {
+        it.req := some_in
+    }
+    unused d.ready
+
+    // Carrier naming a different socket instance than the clause is
+    // attached to.  The second clause is well-formed.
+    client socket e of Chan
+        where c.req dependson some_in
+        where it.req dependson some_in
+    {
+        it.req := some_in
+    }
+    unused e.ready
+
+    // The same channel declared in two clauses of one socket.
+    server socket f of Chan
+        where it.ready dependson some_in
+        where it.ready dependson f.req
+    {
+        it.ready := some_in
+    }
+    unused f.req
+}

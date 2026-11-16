@@ -23,7 +23,9 @@ socket Handshake {
 mod Sender {
     incoming d : Valid[Word[8]]
 
-    client socket hs of Handshake {
+    client socket hs of Handshake
+        where it.data dependson d
+    {
         it.data := d
         unused it.ready
     }

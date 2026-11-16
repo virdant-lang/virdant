@@ -26,7 +26,9 @@ socket Bus[A : Type, B : Type] {
 //> request and ignores the 4-bit response.
 mod Req8to4 {
     incoming d : Word[8]
-    client socket busif of Bus[Word[8], Word[4]] {
+    client socket busif of Bus[Word[8], Word[4]]
+        where it.req dependson d
+    {
         it.req := d
     }
     unused busif.rsp
@@ -44,7 +46,9 @@ mod Rsp8to4 {
 //> request and ignores the 8-bit response.
 mod Req4to8 {
     incoming d : Word[4]
-    client socket busif of Bus[Word[4], Word[8]] {
+    client socket busif of Bus[Word[4], Word[8]]
+        where it.req dependson d
+    {
         it.req := d
     }
     unused busif.rsp

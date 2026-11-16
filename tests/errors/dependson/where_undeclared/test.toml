@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tests for the exhaustiveness of a driven socket channel's declared set: dependencies on plain `incoming` ports and other sockets' channels must be declared with `where` clauses, and parents must account for children's declared edges."
+filecheck = "src/where_undeclared.vir"

@@ -134,7 +134,9 @@ mod Light {
 mod Client[W : Type] {
     incoming d : W
 
-    client socket pipe of Pipe[W] {
+    client socket pipe of Pipe[W]
+        where it.data dependson d
+    {
         it.data := @Valid(d)
     }
 
@@ -247,6 +249,41 @@ mod SkidBuffer {
     }
 }
 ```
+
+## Pass-through adapter: `where` clauses
+
+* A module that gates one socket's driven channel on another socket's
+  receiving channel (or on a plain `incoming` port) declares that
+  dependency with a `where` clause on the socket instance declaration.
+* The clause is part of the module's public combinational contract,
+  like a port's `dependson` list: it declares *potential*, it is
+  exhaustive (an undeclared dependency is an error), and parents see
+  it. A `where` entry nothing justifies warns.
+* The canonical shape is the backpressure pass-through: data crosses
+  combinationally one way, `ready` mirrors back the other way.
+
+```virdant
+//! Pipe-to-Pipe adapter: combinational data forward, combinational
+//! backpressure back.
+
+mod PassThrough {
+    client socket out of Pipe[Word[8]]
+        where it.data dependson inp.data
+    {
+        it.data := inp.data
+    }
+
+    server socket inp of Pipe[Word[8]]
+        where it.ready dependson out.ready
+    {
+        it.ready := out.ready
+    }
+}
+```
+
+* Entries may also name the socket's own receiving channels (a moddef
+  may strengthen its socketdef's combinational guarantees) and plain
+  `incoming` ports: `where it.data dependson inp.data, some_enable`.
 
 ## Debouncer and edge detector
 
@@ -569,4 +606,4 @@ component `width`, or a module `Socket`, is a compile error:
 | `net` | `of` | `on` | `outgoing` | `platform` | `pub` |
 | `reg` | `server` | `soci` | `socket` | `submod` | `struct` |
 | `tap` | `true` | `type` | `union` | `unused` | `when` |
-| `width` | `wire` | `with` | | | |
+| `where` | `width` | `wire` | `with` | | |

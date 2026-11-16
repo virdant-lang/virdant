@@ -1,0 +1,30 @@
+socket Chan {
+    cosi data : Bit
+    soci ready : Bit dependson data
+}
+
+socket Two {
+    cosi data : Bit
+    cosi tag : Bit
+    soci ready : Bit
+}
+
+mod Messy {
+    client socket out of Chan
+    where it.data dependson inp.data
+    {
+    it.data := inp.data
+    }
+    client socket pair of Two
+        where it.data dependson inp.data
+    where it.tag dependson inp.data
+    {
+    it.data := inp.data
+    it.tag := inp.data
+    }
+    server socket inp of Chan
+    {
+        it.ready := out.ready
+    }
+        where it.ready dependson out.ready
+}

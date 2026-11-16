@@ -756,6 +756,72 @@ warning (a protocol such as Wishbone legitimately varies its latency):
         soci ack : Bit dependson cyc, stb
     }
 
+The `where` Clause on Socket Instances
+--------------------------------------
+A socketdef channel list can only name same-socket channels.  To declare
+that a module's drive on a socket channel may depend on anything else —
+another socket's channels, or a plain `incoming` port — attach a `where`
+clause to the socket instance declaration:
+
+.. code-block:: grammar
+
+    ModDefStmtSocket :=
+          ... "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause?
+
+    WhereClause :=
+        ("where" WhereClauseItem)+
+
+    WhereClauseItem :=
+        Path DependsonList
+
+.. code-block:: virdant
+
+    mod PassThrough {
+        client socket out of Pipe[Word[8]]
+            where it.data dependson inp.data
+        {
+            it.data := inp.data
+        }
+
+        server socket inp of Pipe[Word[8]]
+            where it.ready dependson out.ready
+        {
+            it.ready := out.ready
+        }
+    }
+
+Each clause is `where <CARRIER> dependson <ENTRY>, ...`; a socket may
+carry several clauses, one per line, and a clause may be written before
+or after the socket's `{ ... }` driver block.  `it` refers to the socket
+instance the clause is attached to (the same convention as socket
+driver blocks); spelling the carrier as `<SOCKET>.<CHANNEL>` instead of
+`it.<CHANNEL>` parses but warns.
+
+* The **carrier** must be a *driven* channel of the attached socket
+  instance (`client` + `cosi`, or `server` + `soci`).  Naming a
+  receiving channel, another socket instance, a nonexistent channel, or
+  the same channel in two clauses is an error.
+* Each **entry** must resolve to an incoming component of the module: a
+  plain `incoming` port, or a receiving channel of any of the module's
+  own socket instances.  Same-socket entries are allowed — a moddef may
+  restate or strengthen its socketdef's guarantees, and restating an
+  obligation never warns unused.  A driven channel, an outgoing port, a
+  submodule path, or an unresolvable name is an error.
+* The declaration is *potential*, not actuality, exactly like a port's
+  `dependson` list, and it is part of the module's public interface:
+  parents see it and must account for it.
+* A driven channel's declared set (socketdef obligations plus `where`
+  entries) must be **exhaustive** over every incoming component the
+  drive can combinationally reach.  An undeclared dependency on a plain
+  `incoming` port or on another socket's receiving channel is an error:
+  such dependencies are now declarable, so they are required.
+* A `where` entry nothing justifies warns unused, like a port list
+  entry.  An entry justified by an actual dependency, by another
+  component's declared potential, or by the socketdef's own obligation
+  edge does not warn.  `ext mod` declarations are exempt.
+* `where` edges join the potentiality graph (see below) and are
+  exported to parents like every other declaration.
+
 
 Combinational Cycle Detection
 ------------------------------

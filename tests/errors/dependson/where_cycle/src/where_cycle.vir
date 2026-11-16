@@ -1,0 +1,67 @@
+// `where` edges join the potentiality graph, so a loop spanning a
+// parent and its children — closed through the children's declared
+// edges — is a `DependsonCycle` error even when no actual combinational
+// path exists.  The parent is the only module that sees all of the
+// edges, so the loop is reported there.
+//
+// CHECK: Cycle in the `dependson` relation: prod.inp -> cons.s.ready -> cons.gate -> prod.c.req
+mod TwoChildLoop {
+    mod prod of Producer
+    mod cons of Consumer
+
+    // The parent feeds each child's declared dependency from the other
+    // child's driven channel.
+    prod.inp := cons.s.ready
+    cons.gate := prod.c.req
+
+    // The children's sink channels, fed with constants.
+    prod.c.ready := false
+    cons.s.req := false
+}
+
+// CHECK: Cycle in the `dependson` relation: echo.inp -> echo.c.req
+mod SingleChildLoop {
+    mod echo of Echo
+
+    // The parent drives the child's input port from the child's own
+    // request channel, closing the loop through the child's declared
+    // edge: `echo.inp` -> `echo.c.req` (actual) -> `echo.inp` (the
+    // child's `where` clause).
+    echo.inp := echo.c.req
+    echo.c.ready := false
+}
+
+mod Echo {
+    incoming inp : Bit
+    client socket c of Chan
+        where it.req dependson inp
+    {
+        it.req := inp
+    }
+    unused c.ready
+}
+
+mod Producer {
+    incoming inp : Bit
+    client socket c of Chan
+        where it.req dependson inp
+    {
+        it.req := inp
+    }
+    unused c.ready
+}
+
+mod Consumer {
+    incoming gate : Bit
+    server socket s of Chan
+        where it.ready dependson gate
+    {
+        it.ready := gate
+    }
+    unused s.req
+}
+
+socket Chan {
+    cosi req : Bit
+    soci ready : Bit
+}

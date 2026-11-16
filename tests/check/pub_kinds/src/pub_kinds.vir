@@ -57,7 +57,9 @@ pub mod Top[W : Type] {
     hidden := ${ x = inp }
     unused hidden
 
-    client socket c of Chan {
+    client socket c of Chan
+        where it.req dependson inp
+    {
         it.req := h.out
     }
 

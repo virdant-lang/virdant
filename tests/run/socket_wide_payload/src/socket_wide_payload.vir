@@ -36,7 +36,9 @@ mod WideClient {
     //> 32-bit value presented on the request channel.
     incoming d : Word[32]
 
-    client socket busif of Wide {
+    client socket busif of Wide
+        where it.req dependson d
+    {
         it.req := d
     }
     unused busif.rsp

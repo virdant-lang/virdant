@@ -91,11 +91,31 @@ mod MatchLoop {
 * Socket channel lists: a `cosi` channel may only `dependson` `soci` channels
   of the same socket, and vice versa:
   ``a `cosi` channel may only `dependson` channels of the opposite direction word``
+* `where` clauses on socket instance declarations (the moddef-local way to
+  declare a driven channel's dependency on other sockets' channels or plain
+  `incoming` ports — see ./dependson.md):
+  * ``` `dependson` is not allowed on `X`: is not a driven channel of socket
+    instance `Y`: a `client` socket drives `cosi` channels, not `soci` ``` —
+    the carrier named a receiving channel (or a nonexistent channel, or
+    another socket instance: ``names socket `Z`, but this `where` clause is
+    attached to socket instance `Y```).
+  * ``` `dependson` is not allowed on `X`: declares the same channel in more
+    than one `where` clause ```
+  * ``Bad `dependson` entry `X`: is not a receiving channel or `incoming` port
+    of this module`` — a `where` entry must be a plain `incoming` port or a
+    receiving channel of one of the module's own socket instances; a driven
+    channel, an outgoing port, or a submodule path is rejected.
 * Exhaustiveness (under-declaration is an error, not just a style issue):
   `` `out` could combinationally depend on `inp` but does not declare it ``
   * The declared set must cover every `incoming` the port can combinationally
     reach — directly, through wires, through submodule port declarations, and
     through submodule socket obligations.
+  * The same rule applies to every **driven socket channel**: its declared
+    set is its socketdef obligations plus its `where` entries, and the check
+    universe is every incoming component of the module (plain `incoming`
+    ports and any socket instance's receiving channels). A drive gated on
+    another socket's channel or on a plain `incoming` port without a `where`
+    clause is this same error.
   * An absent list counts as empty; `outgoing reg` is exempt (registered
     outputs cannot change in the same cycle).
   * Declaring *too much* is only a warning (see Warnings, `` Unused `dependson` ``
@@ -299,7 +319,12 @@ Warnings do not fail `vir check`, but an agent should treat them as work
 items, not noise.
 
 * ``Unused `dependson`: `out` declares it may depend on `inp` but does not``
-  (dependson_unused) — trim the entry. `ext mod` declarations are exempt.
+  (dependson_unused) — trim the entry. `ext mod` declarations are exempt;
+  applies to port lists and to `where`-clause entries on socket instance
+  declarations alike.
+* `'X' should be written as 'it' in a `where` clause` (where_clause) — a
+  socket instance's `where` clause spelled its carrier as
+  `<SOCKET>.<CHANNEL>`; write `it.<CHANNEL>` (see ./dependson.md).
 * `Empty driver block` (empty_driver_block) — an it-block with no drivers;
   add a driver or delete the block.
 * `No drivers for X` on a `reg`/`outgoing reg` (no_reg_drivers) — a register

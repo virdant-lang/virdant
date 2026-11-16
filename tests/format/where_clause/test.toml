@@ -1,0 +1,4 @@
+kind = "format"
+description = "Socket `where` clauses: continuation under the socket declaration, one clause per line"
+input = "where_clause.vir"
+golden = "where_clause.golden.vir"

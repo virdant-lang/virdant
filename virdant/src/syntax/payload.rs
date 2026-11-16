@@ -46,6 +46,8 @@ pub enum AstNodePayload {
     ModDefStmtUnused,
     DependsonList,
     Socket(Socket),
+    WhereClause,
+    WhereClauseItem,
 
     Annotations(AnnotationsPayload),
     Annotation(AnnotationArg),
@@ -132,6 +134,8 @@ impl AstNodePayload {
             AstNodePayload::ModDefStmtUnused => "ModDefStmtUnused",
             AstNodePayload::DependsonList => "DependsonList",
             AstNodePayload::Socket(_socket) => "Socket",
+            AstNodePayload::WhereClause => "WhereClause",
+            AstNodePayload::WhereClauseItem => "WhereClauseItem",
             AstNodePayload::Annotations(_) => "Annotations",
             AstNodePayload::Annotation(_) => "Annotation",
             AstNodePayload::Field(_field) => "Field",
@@ -344,6 +348,20 @@ pub struct Field {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
+
+/// The `where` clause(s) of a socket instance declaration.  Children:
+/// one `WhereClauseItem` per clause, in written order.  See the
+/// `WhereClause` production in `virdant.lalrpop` for the grammar and
+/// why each clause carries its own `where` keyword.
+#[derive(Clone, Debug)]
+pub struct WhereClause;
+
+/// One clause of a socket instance's `where` clause:
+/// `<carrier: Path> dependson <entries: DependsonList>`.  Children:
+/// the carrier `Path` (`it.<CH>` or, with a warning, `<SOCKET>.<CH>`),
+/// then the `DependsonList` of entry `Path` nodes.
+#[derive(Clone, Debug)]
+pub struct WhereClauseItem;
 
 #[derive(Clone, Debug)]
 pub struct Ctor {
