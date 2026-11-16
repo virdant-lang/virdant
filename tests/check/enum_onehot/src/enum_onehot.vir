@@ -45,4 +45,6 @@ pub mod MatchCheck {
     isB := match t { with #B => true else => false }
 }
 
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check OK

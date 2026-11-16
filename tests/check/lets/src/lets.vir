@@ -8,7 +8,6 @@
 // pass (let bodies produce no expr roots), so every component
 // referenced inside a `let` is also referenced by a driver below, and
 // let bodies are empty to avoid missing-driver diagnostics.
-// CHECK: Check OK
 
 pub mod StmtLet {
     incoming a : Word[8] async
@@ -74,3 +73,7 @@ pub enum type StyleE {
     A
     B
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

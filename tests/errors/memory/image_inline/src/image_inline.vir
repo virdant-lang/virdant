@@ -2,7 +2,7 @@
 // are word-packed like a raw `@image` file, and an image longer than
 // the declared depth is an error.
 
-mod TooLong {
+pub mod TooLong {
     incoming addr : Word[2]
     outgoing read_data : Word[8]
 
@@ -14,4 +14,7 @@ mod TooLong {
 }
 
 // CHECK: memory image 12345678 holds more words than the declared depth 4
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

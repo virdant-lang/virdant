@@ -2,7 +2,7 @@
 // feature: ext mods parameterize through `@parameter` annotations
 // instead (plans/PARAMETERS.md).
 
-ext mod BadCell[T : Type] {
+pub ext mod BadCell[T : Type] {
     incoming clk : Clock
     outgoing data : Word[16]
 }
@@ -35,4 +35,12 @@ pub mod Top2 {
 }
 
 // CHECK: ext mod ext_mod::Cell cannot have generics
+
+// The failed instantiation leaves f's components unresolved.
+
+// CHECK: Unresolved component f.clk
+
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

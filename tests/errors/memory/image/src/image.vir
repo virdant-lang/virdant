@@ -5,7 +5,7 @@
 // check, so an unreadable file compiles here (see
 // tests/check/memory/image).
 
-mod TooLong {
+pub mod TooLong {
     incoming clock : Clock
     incoming addr : Word[2]
     outgoing read_data : Word[8] dependson addr {
@@ -18,4 +18,8 @@ mod TooLong {
 }
 
 // CHECK: memory image words_too_long.hex holds more words than the declared depth 4
+
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

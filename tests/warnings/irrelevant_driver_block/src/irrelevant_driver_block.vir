@@ -38,7 +38,8 @@ pub mod IrrelevantIncoming {
 }
 
 // Same for a `reg` whose it-block never drives or reads the reg.
-// (The reg is left undriven, which warns via NoRegDrivers.)
+// (The reg is driven from moddef level so it does not warn NoRegDrivers,
+// which is not the subject here.)
 pub mod IrrelevantReg {
     incoming clk : Clock
     incoming a : Bit
@@ -48,6 +49,7 @@ pub mod IrrelevantReg {
         // CHECK: Driver block for 'r' is irrelevant: it makes no use of 'it'
         out := a
     }
+    r <= a
     unused r
 }
 
@@ -66,6 +68,7 @@ pub mod IrrelevantSubmodule {
         // CHECK: Driver block for 'src' is irrelevant: it makes no use of 'it'
         w := true
     }
+    unused src.out
     out := w
 }
 
@@ -86,6 +89,7 @@ pub mod RelevantSocketConnect {
         m.busif :=: it.busif
         passthru := false
     }
+    unused passthru
 
     out := s.busif.rsp
 }
@@ -184,4 +188,7 @@ pub mod RelevantLet {
     out := r
 }
 
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 4 WARNING
 // CHECK: Check OK

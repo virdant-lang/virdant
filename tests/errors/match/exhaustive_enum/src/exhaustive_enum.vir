@@ -6,7 +6,7 @@ enum type Color {
     Blue  = 2
 }
 
-mod MissingEnumVariant {
+pub mod MissingEnumVariant {
     wire c : Color
     c := #Red
 
@@ -19,4 +19,7 @@ mod MissingEnumVariant {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

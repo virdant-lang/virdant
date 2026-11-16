@@ -2,10 +2,13 @@
 // fills the type but leaves the driver unimplemented.
 // None of these are errors, so the run ends with "Check OK".
 
-mod WithHole {
+pub mod WithHole {
     outgoing out : Word[4] async
     // CHECK: Unfilled hole: ? : Word[4]
     out := ?
 }
 
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 1 WARNING
 // CHECK: Check OK

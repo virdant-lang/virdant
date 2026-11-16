@@ -10,7 +10,6 @@ import ice40
 
 import helper
 
-// CHECK: Check OK
 pub mod Top {
     incoming inp : Word[8] async
     outgoing out : Word[8] async dependson inp
@@ -20,3 +19,8 @@ pub mod Top {
 
     out := used->x
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 1 WARNING
+// CHECK: Check OK

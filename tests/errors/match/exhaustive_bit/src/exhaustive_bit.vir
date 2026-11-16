@@ -1,6 +1,6 @@
 // MatchCoverage: Bit subject with only `with true`, no `false`.
 
-mod MissingBitCase {
+pub mod MissingBitCase {
     incoming b : Bit
     outgoing out : Bit dependson b
     // CHECK: Non-exhaustive match on Bit: not covered: false
@@ -9,4 +9,7 @@ mod MissingBitCase {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

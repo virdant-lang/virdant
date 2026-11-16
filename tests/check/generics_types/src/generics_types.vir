@@ -84,3 +84,7 @@ pub mod Top {
         with @Right(x) => zext(word(false, x))
     }
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

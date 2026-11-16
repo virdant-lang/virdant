@@ -40,4 +40,8 @@ pub mod Top {
 
 // CHECK: Socket src.qux is connected more than once: each socket instance may participate in only one `:=:` connection
 // CHECK: Socket sink.qux is connected more than once: each socket instance may participate in only one `:=:` connection
+
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

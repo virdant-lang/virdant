@@ -2,7 +2,7 @@
 // generics are not supported in v1, and non-power-of-two
 // depths have no exact index width
 
-mod NotPow2 {
+pub mod NotPow2 {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Word[8]
@@ -15,7 +15,7 @@ mod NotPow2 {
     }
 }
 
-mod NotALiteral {
+pub mod NotALiteral {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Word[8]
@@ -30,4 +30,7 @@ mod NotALiteral {
 
 // CHECK: memory depth must be a power of 2, found 12
 // CHECK: memory depth must be a literal constant
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

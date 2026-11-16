@@ -2,15 +2,17 @@
 // either data arm is inferrable; if both are, they must be
 // compatible, and if only one is, the other is checked against it.
 
-mod MuxArmMismatch {
+pub mod MuxArmMismatch {
     incoming c : Bit
     outgoing out : Word[4] dependson c
+
+    unused c
     // Both arms are inferrable but incompatible.
     // CHECK: Wrong type: Expected Word[4] but found Word[6]
     out := mux(c, 4w4, 6w6)
 }
 
-mod MuxCondWrongType {
+pub mod MuxCondWrongType {
     incoming x : Word[4]
     outgoing out : Word[4] dependson x
     // The condition must be a Bit.
@@ -18,16 +20,18 @@ mod MuxCondWrongType {
     out := mux(x, 4w4, 4w4)
 }
 
-mod MuxArmCheckedAgainstInferredArm {
+pub mod MuxArmCheckedAgainstInferredArm {
     incoming c : Bit
     outgoing out : Word[4] dependson c
+
+    unused c
     // The first arm is inferrable; the second arm is checked against
     // Word[4] and does not fit.
     // CHECK: Wrong type: Expected Word[4] but found Word[6]
     out := mux(c, 4w4, 0w6)
 }
 
-mod MuxCheckedAgainstExpected {
+pub mod MuxCheckedAgainstExpected {
     incoming x : Word[4]
     outgoing out : Word[4] dependson x
     // Neither arm is inferrable, so the mux falls back to being
@@ -39,3 +43,8 @@ mod MuxCheckedAgainstExpected {
     // CHECK: Unfilled hole
     out := mux(x, ?, ?)
 }
+
+// CHECK: FAILED with
+// CHECK: 4 ERROR
+// CHECK: 2 WARNING
+// CHECK: Check failed

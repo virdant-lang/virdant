@@ -3,7 +3,6 @@
 // `on <the_one_clock>`.  This covers regs with it-block drivers, bare
 // regs driven at module level, and outgoing regs.
 //
-// CHECK: Check OK
 
 pub mod ImplicitOn {
     incoming clock : Clock
@@ -29,3 +28,7 @@ pub mod ImplicitOn {
 
     out := data_buf + counter + zext(oreg) + explicit
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

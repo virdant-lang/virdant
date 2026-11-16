@@ -4,7 +4,7 @@
 //!>Bar
 // CHECK: Doccomment must be followed by a space
 
-mod Foo {
+pub mod Foo {
     //>Baz
     // CHECK: Doccomment must be followed by a space
     incoming inp : Bit
@@ -12,11 +12,19 @@ mod Foo {
     out := inp
 }
 
+// CHECK: Expected docstring line or code in same column, got comment
+
 // Even in malformed doccomment soup, where parser error recovery swallows
 // the DocComment tokens, each bad line is still flagged.
 //>Soup1
 //!>Soup2
 // CHECK: Doccomment must be followed by a space
+// CHECK: Docstring block must be followed by a token in the same column
 // CHECK: Doccomment must be followed by a space
+// CHECK: Docstring block mixes //! and //>
+// CHECK: Unexpected token: "//!>Soup2"
 
+// CHECK: FAILED with
+// CHECK: 19 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

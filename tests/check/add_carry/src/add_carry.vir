@@ -3,8 +3,6 @@
 // inferrable and compatible, or one checked against the other), and
 // the result is the operands' common type widened by one bit.
 
-// CHECK: Check OK
-
 pub mod AddCarryBoth {
     incoming a : Word[4] async
     incoming b : Word[4] async
@@ -56,3 +54,7 @@ pub mod CarryInExpression {
         it := (a +. b)[5..4]
     }
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

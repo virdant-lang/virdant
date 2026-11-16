@@ -16,7 +16,7 @@ socket Chan {
     soci ready : Bit
 }
 
-mod CarrierChecks {
+pub mod CarrierChecks {
     incoming some_in : Bit
     outgoing out_port : Bit dependson some_in
     out_port := some_in
@@ -68,3 +68,8 @@ mod CarrierChecks {
     }
     unused f.req
 }
+
+// CHECK: FAILED with
+// CHECK: 6 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

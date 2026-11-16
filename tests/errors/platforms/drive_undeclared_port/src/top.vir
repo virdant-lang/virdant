@@ -26,3 +26,6 @@ pub mod Declared for virt::Virt {
 
 // CHECK: `exit` is declared in platform `Virt`, but not declared in this module; declare it explicitly to drive it
 // CHECK: FAILED with:
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

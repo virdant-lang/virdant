@@ -13,4 +13,8 @@ pub mod Top {
     mod ok of foo::Bar
     // CHECK-NOT: Unresolved item
 }
+
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

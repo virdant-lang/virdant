@@ -3,11 +3,11 @@
 // All cases here are warnings only, so the run ends with "Check OK".
 
 // Targeting a reg by its own name inside its it block should warn.
-mod InitialRegLhs {
+pub mod InitialRegLhs {
     incoming clk : Clock
     outgoing out : Word[8]
 
-    reg foo : Word[8] on clk {
+    reg foo : Word[8] {
         // CHECK: 'foo' should be written as 'it' inside of this driver block
         initial foo <= 0
         it <= it + 1
@@ -16,10 +16,10 @@ mod InitialRegLhs {
 }
 
 // Same for an outgoing reg.
-mod InitialOutgoingRegLhs {
+pub mod InitialOutgoingRegLhs {
     incoming clk : Clock
 
-    outgoing reg foo : Word[8] on clk {
+    outgoing reg foo : Word[8] {
         // CHECK: 'foo' should be written as 'it' inside of this driver block
         initial foo <= 0
         it <= it + 1
@@ -27,11 +27,11 @@ mod InitialOutgoingRegLhs {
 }
 
 // Correct use of 'it' produces no warning.
-mod InitialCorrect {
+pub mod InitialCorrect {
     incoming clk : Clock
     outgoing out : Word[8]
 
-    reg foo : Word[8] on clk {
+    reg foo : Word[8] {
         // CHECK-NOT: 'foo' should be written as 'it'
         initial it <= 0
         it <= it + 1
@@ -40,11 +40,11 @@ mod InitialCorrect {
 }
 
 // Targeting a reg by name outside of any driver block produces no warning.
-mod InitialOutsideBlock {
+pub mod InitialOutsideBlock {
     incoming clk : Clock
     outgoing out : Word[8]
 
-    reg foo : Word[8] on clk {
+    reg foo : Word[8] {
         it <= it + 1
     }
     // CHECK-NOT: 'foo' should be written as 'it'
@@ -52,4 +52,7 @@ mod InitialOutsideBlock {
     out := foo
 }
 
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 2 WARNING
 // CHECK: Check OK

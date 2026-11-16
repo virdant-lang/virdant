@@ -3,7 +3,7 @@
 // driving the subject wire from inside its own arm is a loop.
 
 // CHECK: Combinational loop detected
-mod MatchLoop {
+pub mod MatchLoop {
     wire w : Bit
 
     match w {
@@ -16,4 +16,7 @@ mod MatchLoop {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

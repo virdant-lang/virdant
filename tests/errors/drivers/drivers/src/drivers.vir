@@ -1,7 +1,7 @@
 // Tests for MultipleDrivers and DriverForSink.
 
 // Driving the same outgoing port twice in the same module.
-mod TwoDrivers {
+pub mod TwoDrivers {
     outgoing out : Bit
     // CHECK: Multiple drivers for out
     out := true
@@ -9,7 +9,7 @@ mod TwoDrivers {
     out := false
 }
 
-mod NoDrivers {
+pub mod NoDrivers {
     // CHECK: No drivers for out
     outgoing out : Bit
 }
@@ -22,8 +22,9 @@ socket Chan {
 
 // A client drives cosi (req) — that is correct.
 // But it also drives soci (ack) — soci is a source for the client, not a sink.
-mod BadClient {
+pub mod BadClient {
     client socket ch of Chan
+    unused ch.ack
     ch.req := 0
     // CHECK: Driver for sink ch.ack
     ch.ack := true
@@ -31,15 +32,16 @@ mod BadClient {
 
 // A server drives soci (ack) — that is correct.
 // But it also drives cosi (req) — cosi is a source for the server, not a sink.
-mod BadServer {
+pub mod BadServer {
     server socket ch of Chan
+    unused ch.req
     ch.ack := true
     // CHECK: Driver for sink ch.req
     ch.req := 0
 }
 
 // A module with exactly one driver per outgoing port — no MultipleDrivers.
-mod SingleDriver {
+pub mod SingleDriver {
     outgoing a : Bit
     outgoing b : Bit
     // CHECK-NOT: Multiple drivers
@@ -47,8 +49,13 @@ mod SingleDriver {
     b := false
 }
 
-mod DriverTypes {
+pub mod DriverTypes {
     incoming clock : Clock
+
+    unused a
+    unused b
+    unused c
+    unused d
 
     wire a : Bit
     // CHECK-NOT: Wrong driver type for a
@@ -67,7 +74,10 @@ mod DriverTypes {
     d := true
 }
 
-mod DriversForInternalPorts {
+pub mod DriversForInternalPorts {
+    unused e.out
+    unused i.out
+
     // CHECK: No drivers for e.inp
     mod e of Ext
 
@@ -80,7 +90,7 @@ ext mod Ext {
     outgoing out : Bit
 }
 
-mod Int {
+pub mod Int {
     incoming inp : Bit
     outgoing out : Bit dependson inp
 
@@ -88,26 +98,36 @@ mod Int {
 }
 
 // A properly-wired client and server, used to test socket NoDrivers below.
-mod GoodClient {
+pub mod GoodClient {
     client socket ch of Chan
+    unused ch.ack
     ch.req := 0
 }
 
-mod GoodServer {
+pub mod GoodServer {
     server socket ch of Chan
+    unused ch.req
     ch.ack := true
 }
 
 // Without :=:, the sink channels of each socket are left undriven.
-mod MissingSocketConnect {
+pub mod MissingSocketConnect {
+    unused p.ch.req
+    unused q.ch.ack
+
     mod p of GoodClient
     mod q of GoodServer
     // CHECK: No drivers for p.ch.ack
     // CHECK: No drivers for q.ch.req
 }
 
-mod TwoDriversAcrossSections {
+pub mod TwoDriversAcrossSections {
     incoming clock : Clock
+
+    unused r
+    unused s
+    unused t
+    unused u
     incoming reset : Bit
     outgoing out  : Bit dependson reset
 
@@ -124,6 +144,7 @@ mod TwoDriversAcrossSections {
 
     if {
         when reset {
+            // CHECK: Multiple drivers for r
             r <= true
         }
     }
@@ -141,6 +162,7 @@ mod TwoDriversAcrossSections {
 
     if {
         when reset {
+            // CHECK: Multiple drivers for s
             s <= false
         }
     }
@@ -151,10 +173,12 @@ mod TwoDriversAcrossSections {
 
     if {
         when reset {
+            // CHECK: Multiple drivers for t
             t := false
         }
     }
 
+    // CHECK: Multiple drivers for u
     wire u : Bit
     u := false
 
@@ -162,6 +186,7 @@ mod TwoDriversAcrossSections {
         with #On {
         }
         else {
+            // CHECK: Multiple drivers for u
             u := true
         }
     }
@@ -172,4 +197,7 @@ enum type Status {
     Off = 2
 }
 
+// CHECK: FAILED with
+// CHECK: 19 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

@@ -10,4 +10,7 @@ mod B {
     mod a of A
 }
 
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

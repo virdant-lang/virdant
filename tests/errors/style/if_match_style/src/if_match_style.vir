@@ -2,14 +2,14 @@
 // `=> <expr>` arms and `{ ... }` block arms in both statement and
 // expression position; the style pass flags the mismatches.
 
-enum type StyleE {
+pub enum type StyleE {
     A
     B
 }
 
 // An `if` used as an expression (RHS of a driver) whose arm bodies are
 // bare-expression blocks: the arms must use `=>` instead.
-mod ExprWhenBlockArm {
+pub mod ExprWhenBlockArm {
     incoming a : Bit
     outgoing out : Bit dependson a
     // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }`
@@ -26,7 +26,7 @@ mod ExprWhenBlockArm {
 
 // A `match` used as an expression whose arm bodies are bare-expression
 // blocks: the arms must use `=>` instead.
-mod ExprMatchBlockArm {
+pub mod ExprMatchBlockArm {
     incoming t : StyleE
     outgoing out : Bit dependson t
     // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }
@@ -44,7 +44,7 @@ mod ExprMatchBlockArm {
 // An `if` used as a statement (a direct statement of the module body)
 // whose arm bodies are `=>` values: the arms must contain driver
 // statements in `{ ... }` instead.
-mod StmtWhenArrowArm {
+pub mod StmtWhenArrowArm {
     incoming a : Bit
     outgoing out : Bit dependson a
     // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
@@ -59,7 +59,7 @@ mod StmtWhenArrowArm {
 
 // A statement `if` whose arm body is a bare-expression block: same
 // error as `=>` arms.
-mod StmtWhenExprBlock {
+pub mod StmtWhenExprBlock {
     incoming a : Bit
     outgoing out : Bit dependson a
     // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
@@ -73,7 +73,7 @@ mod StmtWhenExprBlock {
 }
 
 // A statement `match` whose arm bodies are `=>` values.
-mod StmtMatchArrowArm {
+pub mod StmtMatchArrowArm {
     incoming t : StyleE
     outgoing out : Bit
     // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
@@ -85,3 +85,8 @@ mod StmtMatchArrowArm {
 
     out := false
 }
+
+// CHECK: FAILED with
+// CHECK: 9 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

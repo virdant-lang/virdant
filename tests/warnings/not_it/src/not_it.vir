@@ -2,7 +2,7 @@
 // 'it' inside a driver block.
 // All cases here are warnings only, so the run ends with "Check OK".
 
-mod HalfAdder {
+pub mod HalfAdder {
     incoming a : Bit async
     incoming b : Bit async
 
@@ -15,7 +15,7 @@ mod HalfAdder {
 
 // Using the submodule's own name as a driver target (LHS) inside its
 // it block should warn.
-mod SubmoduleLhs {
+pub mod SubmoduleLhs {
     incoming a : Bit
     incoming b : Bit
     outgoing sum : Bit dependson a, b
@@ -33,11 +33,11 @@ mod SubmoduleLhs {
 
 // Using a reg's own name as a driver target (LHS) inside its it block
 // should warn.
-mod RegLhs {
+pub mod RegLhs {
     incoming clk : Clock
     outgoing out : Word[8]
 
-    reg counter : Word[8] on clk {
+    reg counter : Word[8] {
         // CHECK: 'counter' should be written as 'it' inside of this driver block
         counter <= 0w8
     }
@@ -46,11 +46,11 @@ mod RegLhs {
 
 // Using a reg's own name in an expression (RHS) inside its it block
 // should warn.
-mod RegRhs {
+pub mod RegRhs {
     incoming clk : Clock
     outgoing out : Word[8]
 
-    reg counter : Word[8] on clk {
+    reg counter : Word[8] {
         // CHECK: 'counter' should be written as 'it' inside of this driver block
         it <= counter + 1
     }
@@ -58,11 +58,11 @@ mod RegRhs {
 }
 
 // Both LHS and RHS in the same statement each produce a warning.
-mod RegBothSides {
+pub mod RegBothSides {
     incoming clk : Clock
     outgoing out : Word[8]
 
-    reg counter : Word[8] on clk {
+    reg counter : Word[8] {
         // CHECK: 'counter' should be written as 'it' inside of this driver block
         // CHECK: 'counter' should be written as 'it' inside of this driver block
         counter <= counter + 1
@@ -71,11 +71,11 @@ mod RegBothSides {
 }
 
 // Correct use of 'it' in both target and expression produces no warning.
-mod CorrectReg {
+pub mod CorrectReg {
     incoming clk : Clock
     outgoing out : Word[8]
 
-    reg counter : Word[8] on clk {
+    reg counter : Word[8] {
         // CHECK-NOT: 'counter' should be written as 'it'
         it <= 0
     }
@@ -83,7 +83,7 @@ mod CorrectReg {
 }
 
 // Correct use of 'it.' in a submodule it block produces no warning.
-mod CorrectSubmodule {
+pub mod CorrectSubmodule {
     incoming a : Bit
     incoming b : Bit
     outgoing sum : Bit dependson a, b
@@ -99,7 +99,7 @@ mod CorrectSubmodule {
 }
 
 // Correct use of 'it.' in a submodule it block produces no warning.
-mod IncorrectSimpleComponentLhs {
+pub mod IncorrectSimpleComponentLhs {
     outgoing out : Bit async {
         // CHECK: 'out' should be written as 'it'
         out := true
@@ -108,7 +108,7 @@ mod IncorrectSimpleComponentLhs {
 
 // Using a submodule's own name in an 'unused' statement inside its
 // it block should warn.
-mod UnusedStmt {
+pub mod UnusedStmt {
     incoming a : Bit
     incoming b : Bit
     outgoing sum : Bit dependson a, b
@@ -123,7 +123,7 @@ mod UnusedStmt {
 }
 
 // Correct 'unused it.foo' inside an it block should produce no warning.
-mod CorrectUnused {
+pub mod CorrectUnused {
     incoming a : Bit
     incoming b : Bit
     outgoing sum : Bit dependson a, b
@@ -140,7 +140,7 @@ mod CorrectUnused {
 // Using a reg's own name in a `when` guard inside its own it block
 // should warn.  The guard is an expression context just like a driver
 // RHS.
-mod RegWhenGuard {
+pub mod RegWhenGuard {
     incoming clk : Clock
     outgoing out : Word[8]
 
@@ -162,7 +162,7 @@ mod RegWhenGuard {
 
 // Using a reg's own name as a `match` subject inside its own it block
 // should warn.
-mod RegMatchSubject {
+pub mod RegMatchSubject {
     incoming clk : Clock
     outgoing out : Word[8]
 
@@ -186,7 +186,7 @@ mod RegMatchSubject {
 // it block should warn.  The binding's RHS is evaluated in the
 // enclosing it context (and the binding name does not shadow the
 // component there).
-mod RegLetRhs {
+pub mod RegLetRhs {
     incoming clk : Clock
     outgoing out : Word[8]
 
@@ -202,7 +202,7 @@ mod RegLetRhs {
 
 // A `let` RHS that reads the component through `it` produces no
 // warning, and neither does a let inside a `when` arm.
-mod CorrectLet {
+pub mod CorrectLet {
     incoming clk : Clock
     outgoing out : Word[8]
 
@@ -223,4 +223,7 @@ mod CorrectLet {
     out := counter
 }
 
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 11 WARNING
 // CHECK: Check OK

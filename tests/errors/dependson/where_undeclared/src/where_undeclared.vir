@@ -8,15 +8,16 @@
 // socketdef") is gone.
 
 // CHECK: `c.data` could combinationally depend on `inp` but does not declare it; add `inp` to `c.data`'s `dependson`
-mod Direct {
+pub mod Direct {
     incoming inp : Bit
     client socket c of Chan {
         it.data := inp
     }
+    unused c.ready
 }
 
 // CHECK: `s.ready` could combinationally depend on `p.ready` but does not declare it; add `p.ready` to `s.ready`'s `dependson`
-mod CrossSocket {
+pub mod CrossSocket {
     server socket s of Chan {
         it.ready := p.ready
     }
@@ -25,6 +26,7 @@ mod CrossSocket {
         it.data := true
     }
     unused s.req
+    unused s.data
 }
 
 // Through a child: the child declares (via a `where` clause) that its
@@ -32,7 +34,8 @@ mod CrossSocket {
 // port reads that channel, so the parent's dependency now reaches its
 // own `incoming` over declared potential edges and must be declared.
 // CHECK: `out` could combinationally depend on `inp` but does not declare it; add `inp` to `out`'s `dependson`
-mod ParentThroughChild {
+// CHECK: No drivers for producer.c.ready
+pub mod ParentThroughChild {
     incoming inp : Bit
     outgoing out : Bit
 
@@ -44,7 +47,7 @@ mod ParentThroughChild {
 }
 
 // The same chain, declared: no error.
-mod ParentDeclared {
+pub mod ParentDeclared {
     incoming inp : Bit
     outgoing out : Bit dependson inp
 
@@ -54,6 +57,7 @@ mod ParentDeclared {
 
     out := producer.c.data
 }
+// CHECK: No drivers for producer.c.ready
 
 socket Chan {
     cosi data : Bit
@@ -69,3 +73,8 @@ mod Producer {
     }
     unused c.ready
 }
+
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

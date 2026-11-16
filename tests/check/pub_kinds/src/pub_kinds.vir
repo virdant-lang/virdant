@@ -3,7 +3,6 @@
 // `Helper` mod and non-pub `Hidden` struct are used freely inside this
 // package, and every pub item's surface is transitively pub.
 //
-// CHECK-NOT: Check failed
 
 pub struct type Pair {
     a : Word[8]
@@ -68,3 +67,7 @@ pub mod Top[W : Type] {
     }
     out := r
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

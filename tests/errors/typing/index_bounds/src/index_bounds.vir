@@ -2,16 +2,17 @@
 // diagnostics.  Single-bit indices use 0-based bit numbering.
 // `Word[4]` has bits 0, 1, 2, 3 so `a[4]` is out of bounds.
 
-mod SingleBitOutOfBounds {
+pub mod SingleBitOutOfBounds {
     wire a : Word[4] { it := 0 }
     // CHECK: Bit index 4 out of bound for Word[4]
-    wire b : Bit { b := a[4] }
+    wire b : Bit { it := a[4] }
+    unused b
 }
 
 // A single-bit index at the upper boundary is valid (`Word[4]` has bit 3).
-mod SingleBitValid {
+pub mod SingleBitValid {
     incoming clock : Clock
-    reg a : Word[4] on clock {
+    reg a : Word[4] {
         it <= 0
     }
     // CHECK-NOT: out of bound
@@ -20,7 +21,7 @@ mod SingleBitValid {
 }
 
 // A range index whose exclusive upper bound exceeds the word width.
-mod RangeOutOfBounds {
+pub mod RangeOutOfBounds {
     wire a : Word[4] { it := 0 }
     // CHECK: Bit range 5..0 out of bounds for Word[4]
     wire b : Word[5] { it := a[5..0] }
@@ -28,7 +29,7 @@ mod RangeOutOfBounds {
 }
 
 // A range index where lo > hi (invalid, not a proper slice).
-mod RangeLoGtHi {
+pub mod RangeLoGtHi {
     wire a : Word[8] { it := 0 }
     // CHECK: Invalid bit range 2..4: upper bound must be greater than or equal to lower bound
     wire b : Word[2] { it := a[2..4] }
@@ -36,11 +37,14 @@ mod RangeLoGtHi {
 }
 
 // A range index at the exact width boundary is valid (`a[4..0]` on `Word[4]`).
-mod RangeValid {
+pub mod RangeValid {
     wire a : Word[8] { it := 0 }
     // CHECK-NOT: out of bounds
     wire b : Word[4] { it := a[4..0] }
     unused b
 }
 
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

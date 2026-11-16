@@ -27,7 +27,7 @@ pub mod Top for P {
     }
     outgoing reg r : Bit {
         initial it <= false
-        it <= d
+        it <= w
     }
     outgoing plain : Bit dependson d {
         it := d
@@ -38,4 +38,7 @@ pub mod Top for P {
 // CHECK: Platform port r is declared `outgoing reg`; platform ports must be declared plain `outgoing`
 // CHECK-NOT: Module has port
 // CHECK-NOT: missing port
-// CHECK: FAILED with:
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

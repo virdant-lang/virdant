@@ -1,4 +1,4 @@
-mod CantWhenClock {
+pub mod CantWhenClock {
     incoming clock : Clock
 
     // CHECK: Expected Bit but found Clock
@@ -6,3 +6,8 @@ mod CantWhenClock {
         when clock {}
     }
 }
+
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

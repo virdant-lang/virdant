@@ -91,4 +91,6 @@ pub mod ExclusiveArms {
     }
 }
 
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check OK

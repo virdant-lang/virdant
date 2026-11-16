@@ -2,7 +2,7 @@
 // inferrable they must be compatible, and when only one is, the other
 // is checked against it.
 
-mod AddOperandMismatch {
+pub mod AddOperandMismatch {
     incoming a : Word[4]
     incoming b : Word[6]
     outgoing out : Word[4] dependson a, b
@@ -11,7 +11,7 @@ mod AddOperandMismatch {
     out := a + b
 }
 
-mod CmpOperandMismatch {
+pub mod CmpOperandMismatch {
     incoming a : Word[4]
     incoming b : Word[6]
     outgoing out : Bit dependson a, b
@@ -20,7 +20,7 @@ mod CmpOperandMismatch {
     out := a == b
 }
 
-mod AddRhsCheckedAgainstLhs {
+pub mod AddRhsCheckedAgainstLhs {
     incoming a : Word[4]
     outgoing out : Word[4] dependson a
     // Only the LHS is inferrable; the RHS hole is checked against
@@ -29,7 +29,7 @@ mod AddRhsCheckedAgainstLhs {
     out := a + ?
 }
 
-mod AddLhsCheckedAgainstRhs {
+pub mod AddLhsCheckedAgainstRhs {
     incoming a : Word[6]
     outgoing out : Word[6] dependson a
     // Only the RHS is inferrable; the LHS hole is checked against
@@ -38,9 +38,14 @@ mod AddLhsCheckedAgainstRhs {
     out := ? + a
 }
 
-mod CmpNeitherInfers {
+pub mod CmpNeitherInfers {
     outgoing out : Bit
     // Neither operand is inferrable.
     // CHECK: Can't infer
     out := 0 == 0
 }
+
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK: 2 WARNING
+// CHECK: Check failed

@@ -19,6 +19,7 @@ mod Keep[T : Type] {
     incoming d : T
     wire w : Bit
     w := true
+    unused w
     unused d
 }
 
@@ -35,5 +36,10 @@ pub mod Top2 {
 }
 
 // CHECK: Type builtin::Pipe takes 1 type argument, but 0 were given
+// CHECK: Unresolved component p.data
 // CHECK: Type arity::Keep takes 1 type argument, but 0 were given
+// CHECK: Unresolved component f.d
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

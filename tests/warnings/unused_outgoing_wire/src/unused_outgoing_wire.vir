@@ -57,4 +57,7 @@ pub mod IncomingMarkOk {
     out := true
 }
 
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 3 WARNING
 // CHECK: Check OK

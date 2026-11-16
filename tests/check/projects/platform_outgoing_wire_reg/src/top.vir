@@ -2,8 +2,6 @@
 // `outgoing` ports with `outgoing wire` or `outgoing reg`: the port
 // match compares port directions only, not the internal realization.
 
-// CHECK: Check OK
-
 platform P {
     incoming clock : Clock
     incoming d : Bit
@@ -28,3 +26,7 @@ pub mod Top for P {
         it <= d && o
     }
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

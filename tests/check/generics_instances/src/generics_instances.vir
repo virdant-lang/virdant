@@ -3,7 +3,6 @@
 // sockets, elaborated, and monomorphized into per-instantiation Verilog
 // modules.
 //
-// CHECK-NOT: Check failed
 
 socket Bus[T : Type] {
     cosi req : T
@@ -64,3 +63,7 @@ pub mod Top {
     out16 := r16.q
     unused r8.q
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

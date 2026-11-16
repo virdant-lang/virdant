@@ -3,7 +3,7 @@
 // bits would mean silent truncation — a constant index must name a
 // word in range, and a memory is only readable through an index.
 
-mod TooWide {
+pub mod TooWide {
     incoming clock : Clock
     incoming addr : Word[12]
     incoming write_data : Word[8]
@@ -17,7 +17,7 @@ mod TooWide {
     }
 }
 
-mod OutOfRange {
+pub mod OutOfRange {
     incoming clock : Clock
     incoming write_data : Word[8]
     outgoing read_data : Word[8] {
@@ -30,7 +30,7 @@ mod OutOfRange {
     }
 }
 
-mod BareReference {
+pub mod BareReference {
     incoming clock : Clock
     incoming write_data : Word[8]
     outgoing read_data : Word[8] {
@@ -43,7 +43,7 @@ mod BareReference {
     }
 }
 
-mod Slice {
+pub mod Slice {
     incoming clock : Clock
     incoming write_data : Word[8]
     outgoing read_data : Word[4] {
@@ -61,4 +61,8 @@ mod Slice {
 // CHECK: index 9 out of range for memory depth 8
 // CHECK: memory mem must be indexed
 // CHECK: memory mem must be indexed
+
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

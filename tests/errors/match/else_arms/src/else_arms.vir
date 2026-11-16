@@ -1,6 +1,6 @@
 // MatchCoverage: `else` arm followed by another `with`.
 
-mod ElseNotLast {
+pub mod ElseNotLast {
     incoming x : Word[8]
     outgoing out : Bit dependson x
     // CHECK: else arm must be the last arm of the match
@@ -14,9 +14,10 @@ mod ElseNotLast {
 
 // MatchCoverage: two `else` arms in the same match.
 
-mod MultipleElse {
+pub mod MultipleElse {
     incoming x : Word[8]
     outgoing out : Bit dependson x
+    // CHECK: else arm must be the last arm of the match
     // CHECK: Multiple else arms in match
     out := match x {
         with 0 => true
@@ -34,7 +35,7 @@ enum type Color {
     Blue  = 2
 }
 
-mod RedundantElse {
+pub mod RedundantElse {
     wire c : Color
     c := #Red
 
@@ -49,4 +50,7 @@ mod RedundantElse {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 4 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

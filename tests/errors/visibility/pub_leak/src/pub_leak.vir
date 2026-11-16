@@ -38,4 +38,7 @@ pub mod Top {
 // CHECK: `Priv` is not pub: the public surface of `pub_leak::PubShell` must be transitively pub
 // CHECK: `Priv` is not pub: the public surface of `pub_leak::Layer2` must be transitively pub
 // CHECK: `Priv` is not pub: the public surface of `pub_leak::Top` must be transitively pub
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

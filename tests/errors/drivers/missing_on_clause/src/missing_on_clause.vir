@@ -6,28 +6,33 @@
 // still required.
 
 // Exactly one Clock-typed component: the `on` clause is optional.
-mod OneClock {
+pub mod OneClock {
     incoming clock : Clock
 
     reg data_buf : Word[8]
 
+    unused data_buf
     data_buf <= 0
 }
 
 // Zero Clock-typed components: `on` is still required.
-mod NoClocks {
+pub mod NoClocks {
     reg data_buf : Word[8]
 
+    unused data_buf
     data_buf <= 0
 }
 
 // More than one Clock-typed component: ambiguous, `on` is still required.
-mod TwoClocks {
+pub mod TwoClocks {
     incoming clk_a : Clock
     incoming clk_b : Clock
 
+    unused clk_a
+    unused clk_b
     reg data_buf : Word[8]
 
+    unused data_buf
     data_buf <= 0
 }
 
@@ -100,4 +105,7 @@ mod OnlySubmoduleClock {
 // CHECK: Missing on clause for reg data_buf
 // CHECK-NOT: Missing on clause for reg OneClock
 // CHECK-NOT: Missing on clause for reg PortAndOutwardSocket
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

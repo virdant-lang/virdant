@@ -3,7 +3,7 @@
 // warning, not an error.
 
 // CHECK: Unused `dependson`: `out` declares it may depend on `unused_inp` but does not
-mod Unused {
+pub mod Unused {
     incoming inp : Bit async
     incoming unused_inp : Bit async
     outgoing out : Bit async dependson inp, unused_inp {
@@ -19,12 +19,13 @@ mod Unused {
 //
 // CHECK: `ow` declares it may depend on `inp` but does not
 // CHECK-NOT: `out` declares it may depend
-mod JustifiedByOther {
+pub mod JustifiedByOther {
     incoming inp : Bit async
-    outgoing ow : Bit async dependson inp
+    outgoing wire ow : Bit async dependson inp
     outgoing out : Bit async dependson inp
     ow := true
     out := ow
+    unused inp
 }
 
 // An `ext mod`'s declarations cannot be justified by looking inside
@@ -43,3 +44,8 @@ pub mod Top {
     ok := true
     unused inp
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 2 WARNING
+// CHECK: Check OK

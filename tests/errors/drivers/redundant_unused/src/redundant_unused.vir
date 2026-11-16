@@ -1,7 +1,7 @@
 // RedundantUnused: a component is marked `unused` two or more times.
 
 // A top-level incoming port marked unused twice.
-mod DupUnusedTop {
+pub mod DupUnusedTop {
     incoming clock : Clock
     outgoing out : Bit
 
@@ -13,7 +13,7 @@ mod DupUnusedTop {
 }
 
 // A submodule port marked unused twice inside an it block.
-mod DupUnusedIt {
+pub mod DupUnusedIt {
     outgoing sum : Bit
 
     mod ha of HalfAdder {
@@ -28,7 +28,7 @@ mod DupUnusedIt {
 }
 
 // Same path marked unused at top level then again.
-mod DupUnusedMixed {
+pub mod DupUnusedMixed {
     outgoing sum : Bit
 
     mod ha of HalfAdder {
@@ -45,7 +45,7 @@ mod DupUnusedMixed {
 
 // A reg it-block's `unused it` and a top-level `unused r` name the
 // same component: the second is redundant.
-mod DupUnusedRegItBlock {
+pub mod DupUnusedRegItBlock {
     incoming clock : Clock
     incoming inp : Bit
     outgoing out : Bit
@@ -63,7 +63,7 @@ mod DupUnusedRegItBlock {
 
 // Same aliasing, reversed order: the top-level `unused r` comes first,
 // so the it-block's `unused it` is the redundant one.
-mod DupUnusedRegItBlockReversed {
+pub mod DupUnusedRegItBlockReversed {
     incoming clock : Clock
     incoming inp : Bit
     outgoing out : Bit
@@ -80,7 +80,7 @@ mod DupUnusedRegItBlockReversed {
 }
 
 // A wire's it-block aliases the same way.
-mod DupUnusedWireItBlock {
+pub mod DupUnusedWireItBlock {
     outgoing out : Bit
 
     wire w : Bit {
@@ -96,13 +96,15 @@ mod DupUnusedWireItBlock {
 
 // A whole submodule: `unused it` inside the mod block and `unused ha`
 // at top level are the same path.
-mod DupUnusedWholeSubmod {
+pub mod DupUnusedWholeSubmod {
     outgoing out : Bit
 
     mod ha of HalfAdder {
         it.a := false
         it.b := false
         unused it
+        unused it.sum
+        unused it.carry_out
     }
 
     // CHECK: Redundant `unused`: ha
@@ -112,7 +114,7 @@ mod DupUnusedWholeSubmod {
 }
 
 // Only a single unused per path -- no redundant diagnostic.
-mod SingleUnused {
+pub mod SingleUnused {
     incoming clock : Clock
     outgoing out : Bit
 
@@ -123,7 +125,7 @@ mod SingleUnused {
 }
 
 // Unused on two *different* paths -- no redundant diagnostic.
-mod TwoDifferentPaths {
+pub mod TwoDifferentPaths {
     incoming clock : Clock
     incoming reset : Bit
     outgoing out : Bit
@@ -135,7 +137,7 @@ mod TwoDifferentPaths {
     out := true
 }
 
-mod HalfAdder {
+pub mod HalfAdder {
     incoming a : Bit
     incoming b : Bit
     outgoing sum : Bit dependson a, b
@@ -145,4 +147,7 @@ mod HalfAdder {
     carry_out := a & b
 }
 
+// CHECK: FAILED with
+// CHECK: 7 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

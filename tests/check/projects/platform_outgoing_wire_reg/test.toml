@@ -1,3 +1,4 @@
 kind = "check"
 description = "Tests that a module can satisfy a platform's plain `outgoing` ports with `outgoing wire` and `outgoing reg`."
 expect = "ok"
+filecheck = "src/top.vir"

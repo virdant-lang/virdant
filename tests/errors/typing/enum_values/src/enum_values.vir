@@ -2,7 +2,7 @@
 // The first duplicate per value is an Error, subsequent ones are Info.
 
 // Two enumerants with the same value (both 1) = Error on the second.
-enum type Color {
+pub enum type Color {
     Red   = 0w2
     // CHECK: Duplicate enum value: enumerants of Color share value 1
     Green = 1
@@ -11,7 +11,7 @@ enum type Color {
 
 // Three enumerants sharing the same value.
 // First duplicate is Error, second duplicate is Info.
-enum type Priority {
+pub enum type Priority {
     // CHECK: Duplicate enum value: enumerants of Priority share value 0
     Low    = 0w2
     Medium = 1
@@ -21,7 +21,7 @@ enum type Priority {
 
 // An enum with no duplicate values -- no DuplicateEnumValue for Direction.
 // CHECK-NOT: Duplicate enum value: enumerants of Direction
-enum type Direction {
+pub enum type Direction {
     North = 0w2
     South = 1
     East  = 2
@@ -29,34 +29,34 @@ enum type Direction {
 }
 
 // Two different representations of the same value -- hex vs dec.
-enum type Code {
+pub enum type Code {
     // CHECK: Duplicate enum value: enumerants of Code share value 15
     A = 15w4
     B = 0x0F
 }
 
 // Underscores in literals: 1_0 (decimal ten) vs 10.
-enum type Ten {
+pub enum type Ten {
     // CHECK: Duplicate enum value: enumerants of Ten share value 10
     X = 10w4
     Y = 1_0
 }
 
 // Binary literal vs decimal.
-enum type Misc {
+pub enum type Misc {
     // CHECK: Duplicate enum value: enumerants of Misc share value 5
     P = 5w4
     Q = 0b0101
 }
 
 // Different enum types may validly share values -- no diagnostic across types.
-enum type First {
+pub enum type First {
     // CHECK-NOT: Duplicate enum value: enumerants of First
     // CHECK-NOT: Duplicate enum value: enumerants of Second
     A = 0w2
     B = 1
 }
-enum type Second {
+pub enum type Second {
     X = 0w2
     Y = 1
 }
@@ -67,24 +67,31 @@ enum type Second {
 // by default. Mixing enumerants with explicit values and enumerants
 // without is ambiguous and reported as an Error.
 
-enum type Partial {
+pub enum type Partial {
     // CHECK: Enum type Partial specifies values for some but not all enumerants. Either give every enumerant a value, or none (which defaults to one-hot encoding).
+    // Cascades of the partially-specified ambiguity above:
+    // CHECK: Enum type's first enumerant does not have an inferrable width
     Red
     Green = 1
     Blue
+    // CHECK: Duplicate enum value: enumerants of Partial share value 1
+    // CHECK: Missing annotation
 }
 
 // All values specified: no EnumPartiallySpecified for Explicit.
-enum type Explicit {
+pub enum type Explicit {
     Low  = 0w2
     High = 3w2
 }
 
 // No values specified: one-hot default, no EnumPartiallySpecified for Implicit.
-enum type Implicit {
+pub enum type Implicit {
     A
     B
     C
 }
 
+// CHECK: FAILED with
+// CHECK: 9 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

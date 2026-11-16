@@ -5,7 +5,7 @@
 // edges, so the loop is reported there.
 //
 // CHECK: Cycle in the `dependson` relation: prod.inp -> cons.s.ready -> cons.gate -> prod.c.req
-mod TwoChildLoop {
+pub mod TwoChildLoop {
     mod prod of Producer
     mod cons of Consumer
 
@@ -20,7 +20,7 @@ mod TwoChildLoop {
 }
 
 // CHECK: Cycle in the `dependson` relation: echo.inp -> echo.c.req
-mod SingleChildLoop {
+pub mod SingleChildLoop {
     mod echo of Echo
 
     // The parent drives the child's input port from the child's own
@@ -65,3 +65,8 @@ socket Chan {
     cosi req : Bit
     soci ready : Bit
 }
+
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

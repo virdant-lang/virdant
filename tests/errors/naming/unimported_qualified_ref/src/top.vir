@@ -8,4 +8,7 @@ pub mod Top {
     mod helper_inst of helper::Helper
 }
 
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

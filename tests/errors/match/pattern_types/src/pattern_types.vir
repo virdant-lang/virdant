@@ -8,11 +8,11 @@ enum type State {
     Off = 2w2
 }
 
-union type MyUnion {
+pub union type MyUnion {
     Foo()
 }
 
-mod WordPatOnEnum {
+pub mod WordPatOnEnum {
     incoming clock : Clock
     reg r : Bit
     unused r
@@ -24,7 +24,7 @@ mod WordPatOnEnum {
     }
 }
 
-mod EnumPatOnWord {
+pub mod EnumPatOnWord {
     incoming clock : Clock
     incoming x    : Word[2]
     reg r : Bit
@@ -39,7 +39,7 @@ mod EnumPatOnWord {
     }
 }
 
-mod CtorPatOnWord {
+pub mod CtorPatOnWord {
     incoming clock : Clock
     incoming x    : Word[2]
     reg r : Bit
@@ -54,7 +54,7 @@ mod CtorPatOnWord {
     }
 }
 
-mod BitPatOnEnum {
+pub mod BitPatOnEnum {
     incoming clock : Clock
     reg r : Bit
     unused r
@@ -66,4 +66,7 @@ mod BitPatOnEnum {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 4 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

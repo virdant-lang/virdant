@@ -45,6 +45,7 @@ pub mod OutgoingWireMarkOk {
     }
 
     // CHECK-NOT: `unused` on outgoing
+    // CHECK: Marked `unused` but declared `outgoing wire`: w
     unused w
 }
 
@@ -85,4 +86,7 @@ pub mod HalfAdder {
     carry_out := a & b
 }
 
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK: 1 WARNING
 // CHECK: Check failed

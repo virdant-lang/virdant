@@ -1,8 +1,6 @@
 // Tests that the `for` clause works in a project with multiple files
 // and with module instantiations.
 
-// CHECK: Check OK
-
 platform PlatformA {
     @pin(0)
     incoming data : Bit
@@ -52,3 +50,7 @@ pub mod Top {
     asic_inst.clock := clock
     asic_result := asic_inst.result
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

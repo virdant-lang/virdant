@@ -29,4 +29,12 @@ pub mod Declared for virt::Virt {
 }
 
 // CHECK: `clock` is declared in platform `Virt`, but not declared in this module; declare it explicitly to use it
-// CHECK: FAILED with:
+//
+// In `Declared`, `clock` is the module's only Clock component, so the
+// explicit `on clock` clause is redundant (the implicit clock covers
+// it) -- but it is exactly the explicit use this test demonstrates.
+// CHECK: Redundant `on` clause: `foo`
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK: 1 WARNING
+// CHECK: Check failed

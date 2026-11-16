@@ -47,4 +47,6 @@ pub mod WordRom {
     }
 }
 
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check OK

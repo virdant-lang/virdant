@@ -1,7 +1,13 @@
 import packages
 
+// CHECK: Unresolved import: packages
 // CHECK: Unresolved import: does_not_exist
 import does_not_exist
 
-mod Top {
+pub mod Top {
 }
+
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

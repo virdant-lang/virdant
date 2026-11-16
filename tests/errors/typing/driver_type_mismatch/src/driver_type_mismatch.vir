@@ -1,4 +1,4 @@
-mod Foo {
+pub mod Foo {
     incoming inp0 : Word[8]
 
     outgoing out0 : Word[7] dependson inp0
@@ -25,7 +25,7 @@ mod Foo {
     out4 := 0
 }
 
-mod TruncWider {
+pub mod TruncWider {
     incoming x : Word[4]
     outgoing out : Word[8] dependson x
 
@@ -34,4 +34,7 @@ mod TruncWider {
     out := trunc(x)
 }
 
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

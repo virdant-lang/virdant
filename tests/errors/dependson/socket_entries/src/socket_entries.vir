@@ -4,7 +4,7 @@
 
 // CHECK: Bad `dependson` entry `ready2`: a `cosi` channel may only `dependson` channels of the opposite direction word
 // CHECK: Bad `dependson` entry `nowhere`: is not a channel of the same socket; a `soci` channel may only `dependson` channels of the opposite direction word
-socket Link {
+pub socket Link {
     cosi data : Bit dependson ready, ready2
     cosi ready2 : Bit
     soci ready : Bit dependson data, nowhere
@@ -16,3 +16,8 @@ pub mod Top {
     ok := true
     unused inp
 }
+
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed
