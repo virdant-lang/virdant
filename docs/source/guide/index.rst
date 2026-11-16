@@ -16,7 +16,7 @@ This guide will introduce Virdant through a series of examples.
     shiftreg/index
     gcd/index
     hello/index
-    uart/index
+    echo/index
     spiflash/index
     fifo/index
     incrementer/index

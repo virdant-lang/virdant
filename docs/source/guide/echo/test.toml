@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide echo example: a UART echo implemented as a union-typed state machine."
+expect = "ok"

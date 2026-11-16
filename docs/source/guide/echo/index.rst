@@ -1,8 +1,8 @@
-UART
+Echo
 ====
 Now that we have seen counters and FIFOs,
 let's put a few pieces together and build a real peripheral:
-a UART transmitter.
+a UART echo.
 
 A UART sends bytes one bit at a time over a single wire, `tx`.
 When the line is idle, it is held high.

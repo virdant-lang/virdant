@@ -1,5 +1,5 @@
 [project]
-name = "uart"
+name = "echo"
 
 [prog]
 top = "top::Top"

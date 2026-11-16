@@ -1,3 +1,0 @@
-kind = "check"
-description = "Guide uart example: a UART transmitter implemented as a union-typed state machine."
-expect = "ok"
