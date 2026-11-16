@@ -1,8 +1,9 @@
 // The clock checker rejects combining signals on distinct clocks:
 // every operand of a combinational expression (binop operands, `when`
 // guards and arm results, `match` subjects and arm results, struct
-// fields, memory indices) must join to one domain.  Constants join
-// with anything; two distinct `Sync` domains never do.
+// fields, memory indices) must join to one domain, and so must the
+// two operands of a `:=:` connection.  Constants join with anything;
+// two distinct `Sync` domains never do.
 
 mod CrossClock {
     incoming clk_a : Clock
@@ -77,6 +78,22 @@ mod CrossStruct {
             }
         }
     }
+}
+
+// A `:=:` connection joins its two operands to one domain: nets on
+// distinct clocks cannot be connected.
+mod CrossConnect {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    wire net_a : Word[4] on clk_a {
+        it := 0w4
+    }
+    wire net_b : Word[4] on clk_b {
+        it := 0w4
+    }
+
+    // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+    net_a :=: net_b
 }
 
 // CHECK: Check failed

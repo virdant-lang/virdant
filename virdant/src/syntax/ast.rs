@@ -409,6 +409,36 @@ impl<'p> AstNode<'p> {
         }
     }
 
+    /// The target path node of a driver statement (`counter` in
+    /// `counter <= x`), for callers that need its region/location,
+    /// not just its path.
+    pub fn driver_target_node(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Driver(_)
+            | AstNodePayload::InitialDriver
+            | AstNodePayload::IndexedDriver(_) => Some(self.child(0)),
+            _ => None,
+        }
+    }
+
+    /// The left-hand operand of a bidirectional connection
+    /// (`net_a` in `net_a :=: net_b`).
+    pub fn connection_lhs(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::BidirectionalDriver => Some(self.child(0)),
+            _ => None,
+        }
+    }
+
+    /// The right-hand operand of a bidirectional connection
+    /// (`net_b` in `net_a :=: net_b`).
+    pub fn connection_rhs(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::BidirectionalDriver => Some(self.child(1)),
+            _ => None,
+        }
+    }
+
     pub fn driver_type(&self) -> Option<DriverType> {
         match &self.payload {
             AstNodePayload::Driver(driver) => Some(driver.driver_type),

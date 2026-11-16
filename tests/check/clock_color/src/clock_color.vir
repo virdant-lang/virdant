@@ -34,14 +34,24 @@ pub mod Mixed {
         it := counter + 1w4
     }
 
-    // Async joined with clocked: both upcast to Async.
-    outgoing out : Word[4] dependson ext_data {
+    // Async joined with clocked: both upcast to Async.  The join's
+    // domain is Async, so the driven component must be declared
+    // `async` too: driving an implicitly clocked component from an
+    // async expression would be a downcast (a CDC violation).
+    outgoing out : Word[4] async dependson ext_data {
         it := ext_inc + clocked_inc
     }
 
+    // The upcast direction is fine: an async component may be driven
+    // from a clocked (or constant) expression.
+    outgoing upcast : Word[4] async {
+        it := clocked_inc
+    }
+
     // `when` guards and arm results join to one domain; the constant
-    // subject upcasts to both.
-    outgoing selected : Word[4] dependson ext_data {
+    // subject upcasts to both.  The join is Async, so the driven
+    // component is declared `async`.
+    outgoing selected : Word[4] async dependson ext_data {
         it := if {
             when counter[3] => clocked_inc
             else => ext_data
@@ -64,7 +74,7 @@ pub mod Mixed {
         it := ${ hi = ext_data[3..1], lo = ext_data[2..0] }
     }
 
-    outgoing pair_hi : Word[2] dependson ext_data {
+    outgoing pair_hi : Word[2] async dependson ext_data {
         it := pair->hi
     }
 
@@ -72,6 +82,12 @@ pub mod Mixed {
     outgoing muxed : Word[4] {
         it := mux(counter[0], clocked_inc, 0w4)
     }
+
+    // A constant driver upcasts to the register's clock domain.
+    wire const_zero : Word[4] {
+        it := 0w4
+    }
+    unused const_zero
 }
 
 // A zero-clock module: everything is Async, nothing to mix, the

@@ -161,7 +161,11 @@ impl Clocking {
                 let subject = pattern_match?.children().into_iter().next()?;
                 self.infer(&subject)
             }
-            None => None,
+            // A reference the component analysis did not register —
+            // the RHS of an `initial` statement is not walked for
+            // references — still names a component of this module:
+            // resolve it by name.
+            None => self.component_analysis().resolve(name).and_then(|component| component.domain().copied()),
         }
     }
 
