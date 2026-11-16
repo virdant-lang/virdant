@@ -33,9 +33,9 @@ pub mod RedundantOnOtherKinds {
 
     wire internal : Word[8] on clock
     // CHECK: Redundant `on` clause: `internal`
-    outgoing out : Word[8] dependson inp on clock
+    outgoing out : Word[8] on clock dependson inp
     // CHECK: Redundant `on` clause: `out`
-    outgoing wire out_wire : Word[8] dependson inp on clock
+    outgoing wire out_wire : Word[8] on clock dependson inp
     // CHECK: Redundant `on` clause: `out_wire`
 
     internal := inp

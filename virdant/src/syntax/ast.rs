@@ -15,6 +15,16 @@ use crate::syntax::parsing::{InternedString, Parsing};
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AstNodeId(pub u16);
 
+/// The `on`-clause of a component or memory declaration, as written:
+/// either `on <CLOCK>` or the bare `async` modifier.
+#[derive(Clone, Copy, Debug)]
+pub enum OnClause {
+    /// `on <EXPR>`: carries the clock expression node's id.
+    Clock(AstNodeId),
+    /// The bare `async` modifier: the component's domain is `Async`.
+    Async,
+}
+
 #[derive(Clone)]
 pub struct AstNode<'a> {
     pub parsing: &'a Parsing,

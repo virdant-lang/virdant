@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "The `on` clause of a component must name a Clock-typed component."
+filecheck = "src/on_clause.vir"
