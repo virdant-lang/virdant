@@ -112,17 +112,21 @@ LetBinding :=
       Ident ":" Type "=" Expr
     | Ident "=" Expr
 
-ModDefStmtComponent :=
-      DocString? Annotations "incoming" Ident ":" Type DependsonList? OnClause? "async"? ItBlock?
-    | DocString? Annotations "outgoing" Ident ":" Type DependsonList? DefaultClause? OnClause? "async"? ItBlock?
-    | DocString? Annotations "bus" Ident ":" Type DependsonList? ItBlock?
-    | DocString? Annotations "net" Ident ":" Type DependsonList? ItBlock?
-    | DocString? Annotations "outgoing" "wire" Ident ":" Type DependsonList? DefaultClause? OnClause? "async"? ItBlock?
-    | DocString? Annotations "outgoing" "reg" Ident ":" Type DependsonList? DefaultClause? OnClause? ItBlock?
-    | DocString? Annotations "wire" Ident ":" Type DependsonList? OnClause? "async"? ItBlock?
-    | DocString? Annotations "reg" Ident ":" Type DependsonList? OnClause? ItBlock?
+ModDefStmtComponent := DocString? Annotations ComponentKind Ident ":" Type OnClause? DependsonList? DefaultClause? ItBlock?
 
-OnClause := "on" Expr
+ComponentKind :=
+      "incoming"
+    | "outgoing"
+    | "bus"
+    | "net"
+    | "outgoing" "wire"
+    | "outgoing" "reg"
+    | "wire"
+    | "reg"
+
+OnClause :=
+      "on" Expr
+    | "async"
 
 ModDefStmtMemory := DocString? Annotations "memory" Ident "[" Expr "]" ":" Type OnClause? MemoryBlock?
 

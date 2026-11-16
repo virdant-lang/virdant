@@ -499,6 +499,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     ComponentKind::Bus | ComponentKind::Net => Flow::Duplex,
                 };
                 let component_kind = component.kind;
+                let is_async = component.is_async;
                 // Only the clock and `async` components get a
                 // declaration-fixed domain; see the post-pass below.
                 let mut domain = None;
@@ -543,14 +544,19 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 if matches!(component_kind, ComponentKind::Reg | ComponentKind::OutgoingReg)
                     || (component_kind == ComponentKind::Memory && memory_needs_clock)
                 {
-                    match stmt.clock() {
-                        None => regs_without_on.push((path.clone(), stmt.region())),
-                        Some(clock_node) => {
-                            let written_clock = clock_node
-                                .path()
-                                .map(|interned| parsing.string(interned).to_owned());
-                            if let Some(written_clock) = written_clock {
-                                written_ons.push((path.clone(), clock_node.region(), written_clock));
+                    // `async` already supplies the domain clause.
+                    if is_async {
+                        ()
+                    } else {
+                        match stmt.clock() {
+                            None => regs_without_on.push((path.clone(), stmt.region())),
+                            Some(clock_node) => {
+                                let written_clock = clock_node
+                                    .path()
+                                    .map(|interned| parsing.string(interned).to_owned());
+                                if let Some(written_clock) = written_clock {
+                                    written_ons.push((path.clone(), clock_node.region(), written_clock));
+                                }
                             }
                         }
                     }
