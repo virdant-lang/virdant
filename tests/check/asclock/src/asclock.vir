@@ -4,7 +4,7 @@ mod ClockDiv {
         it := asclock(r)
     }
 
-    reg r : Bit on clock_inp {
+    reg r : Bit {
         it <= !it
     }
 }
