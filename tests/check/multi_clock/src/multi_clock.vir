@@ -1,0 +1,51 @@
+// With more than one incoming clock port there is no unique clock:
+// no component is implicitly clocked, so every `reg` names its clock
+// with an explicit `on` clause.  An inward socket channel typed
+// `Clock` is an incoming clock port like any other — two of them are
+// just as ambiguous as two declared `incoming` clocks.
+
+// CHECK: Check OK
+
+socket ClkBus {
+    cosi clk : Clock
+}
+
+pub mod DualDomain {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+
+    incoming inp_a : Word[4] on clk_a
+    incoming inp_b : Word[4] on clk_b
+
+    reg buf_a : Word[4] on clk_a {
+        it <= inp_a
+    }
+
+    reg buf_b : Word[4] on clk_b {
+        it <= inp_b
+    }
+
+    outgoing out_a : Word[4]
+    outgoing out_b : Word[4]
+
+    out_a := buf_a
+    out_b := buf_b
+}
+
+// A declared clock plus an inward socket channel typed `Clock` are two
+// incoming clock ports: the reg cannot rely on a unique clock and must
+// name its clock explicitly.
+pub mod PortAndSocket {
+    incoming clock : Clock
+
+    server socket link of ClkBus
+    unused link.clk
+
+    reg data_buf : Word[8] on clock {
+        it <= 0
+    }
+
+    outgoing out : Word[8] {
+        it := data_buf
+    }
+}
