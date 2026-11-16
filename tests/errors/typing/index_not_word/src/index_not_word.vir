@@ -8,7 +8,7 @@
 // inferred without an expected type, which routes into infer_index /
 // infer_index_range instead of their check-mode twins.
 
-mod SingleBitOnBit {
+pub mod SingleBitOnBit {
     outgoing out : Bit {
         // CHECK: Expected a Word type: Bit
         // CHECK: Wrong driver type for out, expected :=
@@ -17,7 +17,7 @@ mod SingleBitOnBit {
     }
 }
 
-mod RangeOnBit {
+pub mod RangeOnBit {
     outgoing out : Bit {
         // CHECK: Expected a Word type: Bit
         // CHECK: Wrong driver type for out, expected :=
@@ -27,4 +27,7 @@ mod RangeOnBit {
 }
 
 // CHECK-NOT: TODO
+// CHECK: FAILED with
+// CHECK: 4 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

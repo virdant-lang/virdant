@@ -2,8 +2,6 @@
 // declaration of which `incoming` ports the port may combinationally
 // depend on. It does not *create* a dependency.
 
-// CHECK: Check OK
-
 ext mod External {
     incoming inp : Bit
     outgoing out : Bit dependson inp
@@ -52,3 +50,7 @@ pub mod Top {
     ext_out := external.out
     unused ext_out
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

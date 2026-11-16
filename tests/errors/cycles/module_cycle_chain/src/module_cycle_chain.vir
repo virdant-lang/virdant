@@ -15,4 +15,7 @@ mod C {
     mod a of A
 }
 
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

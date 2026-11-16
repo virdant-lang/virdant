@@ -17,4 +17,7 @@ pub mod Top {
         }
     }
 }
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

@@ -6,7 +6,9 @@
 // CHECK: Bad `dependson` entry `w`: is not an `incoming` port of this module
 // CHECK: Bad `dependson` entry `sub.out`: is not an `incoming` port of this module
 // CHECK: Bad `dependson` entry `nowhere`: could not be resolved to a component of this module
-mod BadEntries {
+// CHECK: Wrong type: Expected Clock but found Bit
+// CHECK: Marked `unused` but used: inp
+pub mod BadEntries {
     incoming inp : Bit
     outgoing out_a : Bit dependson inp, out_b, w, sub.out, nowhere
     out_a := inp
@@ -30,3 +32,8 @@ mod Sub {
     outgoing out : Bit dependson inp
     out := inp
 }
+
+// CHECK: FAILED with
+// CHECK: 6 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

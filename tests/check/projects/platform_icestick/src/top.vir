@@ -1,8 +1,6 @@
 // Tests that vir check loads the shipped ice40 lib package
 // and resolves `import ice40` + `for ice40::IceStick`.
 
-// CHECK: Check OK
-
 //! Blink an iCEstick LED.
 
 import ice40
@@ -38,3 +36,7 @@ pub mod Top for ice40::IceStick {
     unused uart_rx
     unused flash_miso
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

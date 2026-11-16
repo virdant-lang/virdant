@@ -1,3 +1,4 @@
 kind = "check"
 description = "Tests that vir check loads the shipped xilinx lib package and resolves `import xilinx` +..."
 expect = "ok"
+filecheck = "src/top.vir"

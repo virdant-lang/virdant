@@ -8,7 +8,7 @@
 
 // A unary operator whose subject can't be inferred flags the subject
 // instead of emitting an Info-level TODO.
-mod UnopCantInfer {
+pub mod UnopCantInfer {
     outgoing out : Bit {
         // CHECK: Wrong driver type for out, expected :=
         // CHECK: Can't infer
@@ -19,8 +19,9 @@ mod UnopCantInfer {
 
 // An ascription whose type failed to resolve reports it here too; the
 // type index already diagnosed the type itself.
-mod AscriptionUnresolved {
+pub mod AscriptionUnresolved {
     wire a : Word[4] { it := 0 }
+    unused a
     outgoing out : Bit {
         // CHECK: Wrong driver type for out, expected :=
         // CHECK: The type in `as` could not be resolved
@@ -47,4 +48,8 @@ mod FieldUnresolved {
 }
 
 // CHECK-NOT: TODO
+
+// CHECK: FAILED with
+// CHECK: 7 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

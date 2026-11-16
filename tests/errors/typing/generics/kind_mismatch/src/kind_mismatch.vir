@@ -24,7 +24,7 @@ pub mod Top2 {
 // A generic parameter declared with an unknown kind
 // (neither `Type` nor `Nat`).
 
-struct type S[X : Foo] {
+pub struct type S[X : Foo] {
     value : X
 }
 
@@ -35,4 +35,8 @@ pub mod Top3 {
 }
 
 // CHECK: Unknown kind Foo
+
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

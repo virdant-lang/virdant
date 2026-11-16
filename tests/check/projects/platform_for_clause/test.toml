@@ -1,3 +1,4 @@
 kind = "check"
 description = "Tests that the `for` clause works in a project with multiple files and with module..."
 expect = "ok"
+filecheck = "src/top.vir"

@@ -4,34 +4,37 @@
 // collides with a builtin item.  This holds for every item kind.
 
 // CHECK: Item `Sync` has the same name as a `builtin` item in the `builtin` package; rename it
-mod Sync {
+pub mod Sync {
 }
 
 // CHECK: Item `Pipe` has the same name as a `builtin` item in the `builtin` package; rename it
-socket Pipe {
+pub socket Pipe {
 }
 
 // CHECK: Item `Bit` has the same name as a `builtin` item in the `builtin` package; rename it
-struct type Bit {
+pub struct type Bit {
 }
 
 // CHECK: Item `Valid` has the same name as a `builtin` item in the `builtin` package; rename it
-union type Valid {
+pub union type Valid {
     Some
 }
 
 // CHECK: Item `Word` has the same name as a `builtin` item in the `builtin` package; rename it
-enum type Word {
+pub enum type Word {
     Zero = 0w2
 }
 
 // CHECK: Item `Clock` has the same name as a `builtin` item in the `builtin` package; rename it
-platform Clock {
+pub platform Clock {
 }
 
 // A name that no builtin item uses is fine.
 // CHECK-NOT: Item `NotBuiltin` has the same name
-mod NotBuiltin {
+pub mod NotBuiltin {
 }
 
+// CHECK: FAILED with
+// CHECK: 6 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

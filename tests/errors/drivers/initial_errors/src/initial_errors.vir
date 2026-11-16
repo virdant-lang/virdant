@@ -1,6 +1,6 @@
 // Tests for errors involving `initial` statements.
 
-mod InitialErrors {
+pub mod InitialErrors {
     incoming clock : Clock
     incoming cond : Bit
     outgoing out : Word[8]
@@ -31,6 +31,12 @@ mod InitialErrors {
     // Unresolved target.
     // CHECK: Unresolved component nope
     initial nope <= 0
+    // CHECK: Missing annotation
 
     out := w + r + s
 }
+
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

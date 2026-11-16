@@ -11,7 +11,7 @@
 // parent's glue drivers.
 //
 // CHECK: Cycle in the `dependson` relation
-mod Loop2 {
+pub mod Loop2 {
     mod loop_a of LoopA
     mod loop_b of LoopB
 
@@ -40,7 +40,7 @@ mod LoopB {
 // and close on the parent's glue driver.
 //
 // CHECK: Cycle in the `dependson` relation
-mod Loop3 {
+pub mod Loop3 {
     mod a of LoopA
     mod b of LoopB
     mod c of LoopC
@@ -63,21 +63,28 @@ mod LoopC {
 // module containing both instances.
 //
 // CHECK: Cycle in the `dependson` relation
+//
+// Because the link alone drives every channel, the socketdef's
+// same-cycle obligations are also flagged against the link's implied
+// drives; these follow unavoidably from the scenario being tested.
+//
+// CHECK: `c.req` could combinationally depend on `s.req` but does not declare it
+// CHECK: `s.ack` could combinationally depend on `c.ack` but does not declare it
 socket PingPong {
     cosi req : Bit dependson ack
     soci ack : Bit dependson req
 }
 
-mod SocketLoop {
+pub mod SocketLoop {
     client socket c of PingPong
     server socket s of PingPong
 
     // The link alone drives every channel; the cycle comes purely
     // from the two `dependson` lists in `PingPong`.
     c :=: s
-
-    unused c.ack
-    unused s.req
 }
 
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

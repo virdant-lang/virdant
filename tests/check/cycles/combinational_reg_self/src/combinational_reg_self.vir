@@ -1,4 +1,3 @@
-// CHECK: Check OK
 // Registers can safely be assigned to themselves: a reg's drivers are
 // sequential (latched on a clock), so a reg depending on itself is a
 // next-state dependency, not a combinational loop. This covers self-
@@ -98,3 +97,7 @@ pub mod RegSelfAssign {
 
     out := identity + counter + guarded + matched + zext(a) + zext(b) + plain + pipelined
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

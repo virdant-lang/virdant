@@ -6,7 +6,6 @@
 // recursing forever.  The ctor's expected type is now derived from
 // syntax alone.
 //
-// CHECK: Check OK
 
 pub union type St {
     Idle()
@@ -89,3 +88,6 @@ pub mod LetInWhenArm {
         it := flag
     }
 }
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

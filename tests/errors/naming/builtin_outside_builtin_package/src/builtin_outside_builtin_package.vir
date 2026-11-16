@@ -3,41 +3,44 @@
 // Using it in any other package is a hard error, for every item kind.
 
 // CHECK: The `builtin` modifier may only be used in the `builtin` package: item `Foo`
-builtin mod Foo {
+pub builtin mod Foo {
 }
 
 // CHECK: The `builtin` modifier may only be used in the `builtin` package: item `Bar`
-builtin socket Bar {
+pub builtin socket Bar {
 }
 
 // CHECK: The `builtin` modifier may only be used in the `builtin` package: item `Plat`
-builtin platform Plat {
+pub builtin platform Plat {
 }
 
 // CHECK: The `builtin` modifier may only be used in the `builtin` package: item `S`
-builtin struct type S {
+pub builtin struct type S {
     x : Bit
 }
 
 // CHECK: The `builtin` modifier may only be used in the `builtin` package: item `U`
-builtin union type U {
+pub builtin union type U {
     A
 }
 
 // CHECK: The `builtin` modifier may only be used in the `builtin` package: item `E`
-builtin enum type E {
+pub builtin enum type E {
     B = 0w2
 }
 
 // Plain (unmarked) declarations are fine.
 // CHECK-NOT: The `builtin` modifier
-mod Plain {
+pub mod Plain {
 }
 
 // A `builtin type` declaration is its own item kind, not a
 // `builtin`-modified item, so it stays legal here too.
 // CHECK-NOT: The `builtin` modifier
-builtin type T {
+pub builtin type T {
 }
 
+// CHECK: FAILED with
+// CHECK: 6 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

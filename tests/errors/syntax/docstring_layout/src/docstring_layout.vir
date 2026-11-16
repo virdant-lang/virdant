@@ -24,7 +24,15 @@
 // CHECK: Unexpected token
 // CHECK: Formatting Error: Docstring block must be followed by a token in the same column
 // CHECK: Unexpected end of file
-// CHECK: Check failed
+// The dangling block above stays open at EOF, so the checker keeps
+// scanning and also flags the blank line, each CHECK trailer comment
+// line below, and the final blank line. These are cascades; assert them.
+// CHECK: Blank line inside docstring block
+// CHECK: got comment
+// CHECK: got comment
+// CHECK: got comment
+// CHECK: got comment
+// CHECK: Blank line inside docstring block
 
 //! Package doc
 
@@ -56,3 +64,8 @@ pub mod Bar {
 }
 
 //> dangling at end of file
+
+// CHECK: FAILED with
+// CHECK: 15 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

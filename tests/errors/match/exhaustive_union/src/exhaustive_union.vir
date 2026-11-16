@@ -5,7 +5,7 @@ union type MyUnion {
     Bar(x : Bit)
 }
 
-mod MissingUnionCtor {
+pub mod MissingUnionCtor {
     wire u : MyUnion
     u := @Foo()
 
@@ -17,4 +17,7 @@ mod MissingUnionCtor {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

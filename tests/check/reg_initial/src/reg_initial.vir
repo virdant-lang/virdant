@@ -1,6 +1,5 @@
 // Tests the `initial` statement for declaring register initial values.
 
-// CHECK: Check OK
 pub mod Initial {
     incoming clock : Clock
     incoming inp : Word[8]
@@ -39,3 +38,7 @@ pub mod Initial {
 
     out := plain + zext(counter) + zext(down) + oreg
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

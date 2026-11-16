@@ -4,7 +4,7 @@
 // and a write outside a clocked context is an error when the memory's
 // clock is unresolved.
 
-mod Overlapping {
+pub mod Overlapping {
     incoming clock : Clock
     incoming write_enable : Bit
     incoming flush : Bit
@@ -24,9 +24,14 @@ mod Overlapping {
             }
         }
     }
+
+    // mem is written but never read; the unused mark silences the
+    // incidental UnusedSource warning so the filecheck stays focused
+    // on the write-site rules.
+    unused mem
 }
 
-mod TwoSites {
+pub mod TwoSites {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Word[8]
@@ -35,9 +40,12 @@ mod TwoSites {
 
     mem[dyn addr] <= write_data
     mem[dyn addr] <= write_data
+
+    // mem is written but never read; see Overlapping.
+    unused mem
 }
 
-mod NotAMemory {
+pub mod NotAMemory {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Word[8]
@@ -48,9 +56,15 @@ mod NotAMemory {
     wire some_wire : Word[8] {
         it := write_data
     }
+
+    // clock and some_wire are never read; the unused marks silence
+    // the incidental UnusedSource warnings so the filecheck stays
+    // focused on the IndexedDriverNotMemory rule.
+    unused clock
+    unused some_wire
 }
 
-mod OutsideClockedContext {
+pub mod OutsideClockedContext {
     incoming clk_a : Clock
     incoming clk_b : Clock
     incoming addr : Word[4]
@@ -61,10 +75,26 @@ mod OutsideClockedContext {
     memory mem[16] : Word[8]
 
     mem[dyn addr] <= write_data
+
+    // Two clocks means no implicit clock, so clk_a and clk_b are
+    // never read, and the rejected write site leaves mem without a
+    // driver. The unused marks silence the incidental UnusedSource
+    // warnings so the filecheck stays focused on the
+    // MemoryWriteOutsideOnRegion rule.
+    unused clk_a
+    unused clk_b
+    unused mem
 }
 
 // CHECK: overlapping writes to memory mem
+// CHECK: overlapping writes to memory mem
+// CHECK: Multiple drivers for mem
 // CHECK: Multiple drivers for mem
 // CHECK: indexed driver target some_wire is not a memory
+// CHECK: Missing on clause for reg mem
 // CHECK: write to memory mem outside a clocked write context
+
+// CHECK: FAILED with
+// CHECK: 7 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

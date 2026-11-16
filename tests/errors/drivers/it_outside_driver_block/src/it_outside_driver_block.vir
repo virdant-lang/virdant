@@ -24,3 +24,8 @@ pub mod UnusedItPath {
 
     out := a
 }
+
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

@@ -1,4 +1,3 @@
-// CHECK: Check OK
 mod ClockDiv {
     incoming clock_inp : Clock
     outgoing clock_out : Clock {
@@ -21,3 +20,7 @@ pub mod ClockDivTest {
         it <= !it
     }
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

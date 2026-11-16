@@ -29,4 +29,7 @@ pub mod Top {
     bar.sock :=: foo.sock
 }
 
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

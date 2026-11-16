@@ -2,8 +2,6 @@
 // instances with `:=:` must not report "Unknown component" — there are
 // simply no channels to route (and none can go missing, since the
 // socketdefs agree).
-//
-// CHECK-NOT: Check failed
 
 socket Empty {
 }
@@ -22,3 +20,7 @@ pub mod Top {
 
     left.peer :=: right.peer
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

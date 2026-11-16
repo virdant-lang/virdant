@@ -8,6 +8,7 @@ enum type Opt[T : Type] {
 
 pub mod Top {
     incoming a : Word[4]
+    unused a
     wire opt : Opt[Word[4]]
     opt := #Some
     outgoing out : Bit
@@ -18,5 +19,9 @@ pub mod Top {
 }
 
 // CHECK: Ctor Some requires arguments: use @Some(...)
+// CHECK: Non-exhaustive match on Usual(
 // CHECK: Ctor Some requires arguments: use @Some(...)
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

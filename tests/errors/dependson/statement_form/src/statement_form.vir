@@ -3,9 +3,15 @@
 // syntax error.
 
 // CHECK: Syntax Error: Unexpected token: "dependson"
-ext mod Foo {
+// CHECK: Syntax Error: Unexpected token: "}"
+pub ext mod Foo {
     incoming clk_in : Clock
     outgoing clk_out : Clock
 
     clk_out dependson clk_in
 }
+
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

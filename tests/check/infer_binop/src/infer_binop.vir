@@ -2,8 +2,6 @@
 // if both operands are inferrable they must be compatible, and if
 // only one is, the other is checked against it.
 
-// CHECK: Check OK
-
 pub mod AddInferFromRhs {
     incoming a : Word[4]
     outgoing out : Word[4] dependson a {
@@ -71,3 +69,7 @@ pub mod BitResetOperands {
         it := r | true
     }
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

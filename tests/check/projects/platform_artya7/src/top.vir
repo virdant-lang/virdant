@@ -1,8 +1,6 @@
 // Tests that vir check loads the shipped xilinx lib package
 // and resolves `import xilinx` + `for xilinx::ArtyA7`.
 
-// CHECK: Check OK
-
 //! Arty A7 blink demo.
 //!
 //! Blinks the Arty A7's four user LEDs: `led0` toggles at about 0.7
@@ -61,3 +59,7 @@ pub mod Top for xilinx::ArtyA7 {
     unused uart_rx
     unused flash_miso
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

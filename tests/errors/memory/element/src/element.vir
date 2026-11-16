@@ -1,7 +1,7 @@
 // The element type must be `Word[n]` with `n` a power of two
 // (MEMORY_PLAN §4.2).
 
-mod NotPow2Width {
+pub mod NotPow2Width {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Word[12]
@@ -14,7 +14,7 @@ mod NotPow2Width {
     }
 }
 
-mod NotAWord {
+pub mod NotAWord {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Bit
@@ -30,9 +30,11 @@ mod NotAWord {
 // An unresolved element type must not cascade into "Missing
 // annotation" noise on the reads: the real error is the unresolved
 // type at the declaration.
-mod ElemUnresolved {
+pub mod ElemUnresolved {
     incoming clock : Clock
     incoming addr : Word[3]
+
+    unused addr
 
     memory mem[8] : Nonsense
 
@@ -48,4 +50,7 @@ mod ElemUnresolved {
 // CHECK: memory element type must be `Word[n]` with n a power of 2, found Bit
 // CHECK: Unresolved type Nonsense
 // CHECK-NOT: Missing annotation
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

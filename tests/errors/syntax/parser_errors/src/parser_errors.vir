@@ -5,32 +5,46 @@
 mod BadTypeToken {
     // CHECK: Syntax Error
     incoming inp : @
+    // The parser recovers past the `@` and then chokes on `outgoing`.
+    // CHECK: Unexpected token: "outgoing"
     outgoing out : Bit
     out := true
 }
 
 // A bare integer cannot begin a type name.
-mod BadTypeName {
+pub mod BadTypeName {
     outgoing out : Bit
     // CHECK: Syntax Error
     incoming inp : 123bad
+    // Cascades of the `123bad` error above.
+    // CHECK: Unexpected token: "out"
+    // CHECK: Unresolved component out
     out := true
 }
 
 // A perfectly valid module sitting next to broken ones — it must not
 // contribute any additional syntax errors of its own.
-mod ValidNeighbor {
+pub mod ValidNeighbor {
     incoming data : Word[8]
     outgoing out  : Word[8] dependson data
     // CHECK-NOT: Unresolved type
     out := data
 }
 
-mod RegMissingOn {
+pub mod RegMissingOn {
     incoming clock : Clock
 
-    reg not_missing : Bit on clock
+    unused not_missing
+    unused missing
+
+    reg not_missing : Bit
     reg missing : Bit
+
+    not_missing <= true
+    missing <= true
 }
 
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

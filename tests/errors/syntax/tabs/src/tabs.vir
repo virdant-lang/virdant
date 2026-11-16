@@ -6,7 +6,7 @@
 // CHECK: Formatting Error: Tabs are not allowed in Virdant. Use 4 spaces instead.
 // CHECK-NOT: Unexpected token
 
-mod HalfAdder {
+pub mod HalfAdder {
 	incoming a : Bit
 	incoming b : Bit
 
@@ -19,3 +19,7 @@ mod HalfAdder {
 	// carry is true when a and b are both true
 	carry := a && b
 }
+// CHECK: FAILED with
+// CHECK: 8 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

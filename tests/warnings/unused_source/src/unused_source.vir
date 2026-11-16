@@ -3,7 +3,7 @@
 // None of these are errors, so the run ends with "Check OK".
 
 // An incoming port that is never read in any expression.
-mod HasUnusedPort {
+pub mod HasUnusedPort {
     incoming unused_val : Word[8]
     outgoing out : Bit
     // CHECK: Unused signal unused_val
@@ -11,7 +11,7 @@ mod HasUnusedPort {
 }
 
 // An incoming port that IS read should produce no Unused signal warning.
-mod UsedPort {
+pub mod UsedPort {
     incoming data : Word[8]
     outgoing out  : Word[8] dependson data
     // CHECK-NOT: Unused signal data
@@ -20,7 +20,7 @@ mod UsedPort {
 
 // An `outgoing wire` that is driven but never read warns, just like
 // an internal `wire`.
-mod UnusedOutgoingWire {
+pub mod UnusedOutgoingWire {
     outgoing wire w : Bit { it := true }
     outgoing out : Bit
     // CHECK: Unused signal w
@@ -28,7 +28,7 @@ mod UnusedOutgoingWire {
 }
 
 // An `outgoing wire` that IS read produces no Unused signal warning.
-mod UsedOutgoingWire {
+pub mod UsedOutgoingWire {
     outgoing wire w : Bit { it := true }
     outgoing out : Bit
     // CHECK-NOT: Unused signal w
@@ -36,7 +36,7 @@ mod UsedOutgoingWire {
 }
 
 // A trivial sub-module with two outgoing ports.
-mod HalfAdder {
+pub mod HalfAdder {
     incoming a : Bit
     incoming b : Bit
     outgoing sum : Bit dependson a, b
@@ -46,7 +46,7 @@ mod HalfAdder {
 }
 
 // Reading both outgoing ports — no warning.
-mod AllUsed {
+pub mod AllUsed {
     incoming a : Bit
     incoming b : Bit
     outgoing out : Word[2] dependson a, b
@@ -61,7 +61,7 @@ mod AllUsed {
 }
 
 // Reading only one outgoing port — the other should warn.
-mod OneUnused {
+pub mod OneUnused {
     incoming a : Bit
     incoming b : Bit
     outgoing out : Bit dependson a, b
@@ -75,7 +75,7 @@ mod OneUnused {
 }
 
 // Reading neither outgoing port — both should warn.
-mod BothUnused {
+pub mod BothUnused {
     incoming a : Bit
     incoming b : Bit
     outgoing out : Bit
@@ -91,7 +91,7 @@ mod BothUnused {
 
 // An unused outgoing port that is explicitly marked `unused` inside
 // the mod block — should NOT warn for that port.
-mod ExplicitUnused {
+pub mod ExplicitUnused {
     incoming a : Bit
     incoming b : Bit
     outgoing out : Bit dependson a, b
@@ -106,13 +106,13 @@ mod ExplicitUnused {
 }
 
 // A sub-module with an outgoing wire port.
-mod WireSource {
+pub mod WireSource {
     incoming a : Bit
     outgoing wire s : Bit dependson a { it := a }
 }
 
 // Reading the sub-module's outgoing wire — no warning for it.
-mod SubWireUsed {
+pub mod SubWireUsed {
     incoming a : Bit
     outgoing out : Bit dependson a
 
@@ -124,7 +124,7 @@ mod SubWireUsed {
 }
 
 // Ignoring the sub-module's outgoing wire — it should warn.
-mod SubWireUnused {
+pub mod SubWireUnused {
     incoming a : Bit
     outgoing out : Bit
 
@@ -132,12 +132,13 @@ mod SubWireUnused {
         it.a := a
     }
     out := false
+    // CHECK: Unused signal s
     // CHECK: Unused signal ws.s
 }
 
 // A unique clock with no regs at all is an unreferenced signal like
 // any other: it warns unused.
-mod UnusedClockNoRegs {
+pub mod UnusedClockNoRegs {
     incoming clock : Clock
     outgoing out : Bit
     // CHECK: Unused signal clock
@@ -146,7 +147,7 @@ mod UnusedClockNoRegs {
 
 // A unique clock implicitly clocking a reg is not unused, even though
 // no expression references it.
-mod ImplicitlyClockedReg {
+pub mod ImplicitlyClockedReg {
     incoming clock : Clock
     incoming inp : Bit
     outgoing out : Bit
@@ -162,7 +163,7 @@ mod ImplicitlyClockedReg {
 // itself is a use of the clock, so it does not warn unused. (The `on`
 // clause triggers the RedundantOnClause warning instead; see
 // redundant_on_clause.vir.)
-mod ExplicitlyClockedReg {
+pub mod ExplicitlyClockedReg {
     incoming clock : Clock
     incoming inp : Bit
     outgoing out : Bit
@@ -172,6 +173,10 @@ mod ExplicitlyClockedReg {
 
     out := r
     // CHECK-NOT: Unused signal clock
+    // CHECK: Redundant `on` clause: `r`
 }
 
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 9 WARNING
 // CHECK: Check OK

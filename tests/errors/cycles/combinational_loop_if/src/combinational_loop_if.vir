@@ -4,7 +4,7 @@
 // reports the equivalent `assign w = w ? 1'b1 : ...` as a LOOP).
 
 // CHECK: Combinational loop detected
-mod WhenLoop {
+pub mod WhenLoop {
     wire w : Bit
 
     if {
@@ -18,7 +18,7 @@ mod WhenLoop {
 // y, and y is driven from x.
 
 // CHECK: Combinational loop detected
-mod WhenLoopMulti {
+pub mod WhenLoopMulti {
     wire x : Bit
     wire y : Bit
 
@@ -30,4 +30,7 @@ mod WhenLoopMulti {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

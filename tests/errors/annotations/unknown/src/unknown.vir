@@ -10,7 +10,7 @@
 
 // CHECK: Unknown annotation '@foreign'
 @foreign
-platform Dev {
+pub platform Dev {
     // CHECK: Unknown annotation '@periodns'
     @pin(1)
     @periodns("83.33")
@@ -23,12 +23,13 @@ platform Dev {
 @multiarg(1, 2, 3,)
 pub mod Top {
     incoming clock : Clock
+    unused clock
     incoming data : Bit
     outgoing result : Bit dependson data
     result := data
 }
 
-mod Rom {
+pub mod Rom {
     incoming clock : Clock
     incoming addr : Word[2]
     outgoing read_data : Word[8] dependson addr {
@@ -36,8 +37,12 @@ mod Rom {
     }
 
     // CHECK: Unknown annotation '@imagehex'
+    // CHECK: No drivers for rom
     @imagehex("rom.hex")
     memory rom[4] : Word[8] on clock
 }
 
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

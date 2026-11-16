@@ -1,4 +1,3 @@
-// CHECK: Check OK
 // Ensure that references in if/match guard expressions are
 // properly tracked as "used", so no false "Unused signal" warnings.
 //
@@ -57,3 +56,7 @@ pub mod TestMatchWhen {
         unused it
     }
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

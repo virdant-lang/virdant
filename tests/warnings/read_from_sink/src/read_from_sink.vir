@@ -3,7 +3,7 @@
 // None of these are errors, so the run ends with "Check OK".
 
 // Reading from an outgoing port — outgoing is a sink and cannot be read.
-mod ReadFromOutgoing {
+pub mod ReadFromOutgoing {
     outgoing a : Bit
     outgoing b : Bit
     a := true
@@ -12,10 +12,13 @@ mod ReadFromOutgoing {
 }
 
 // Driving an outgoing without reading it back produces no ReadFromSink warning.
-mod NoReadFromSink {
+pub mod NoReadFromSink {
     outgoing out : Bit
     // CHECK-NOT: Read from sink
     out := true
 }
 
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 1 WARNING
 // CHECK: Check OK

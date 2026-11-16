@@ -4,9 +4,8 @@
 // CHECK: Formatting Error: Line should not end with trailing space
 // CHECK: Formatting Error: Line should not end with trailing space
 // CHECK: Formatting Error: Line should not end with trailing space
-// CHECK: Check failed
 
-mod HalfAdder {
+pub mod HalfAdder {
     incoming a : Bit   
     incoming b : Bit
 
@@ -16,3 +15,8 @@ mod HalfAdder {
     sum := a ^^ b
     carry := a && b   
 }
+
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

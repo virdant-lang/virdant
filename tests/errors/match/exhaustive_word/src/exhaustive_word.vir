@@ -1,6 +1,6 @@
 // MatchCoverage: Word[8] subject with only a few literals and no `else`.
 
-mod WordNeedsElse {
+pub mod WordNeedsElse {
     incoming x : Word[8]
     outgoing out : Bit dependson x
     // CHECK: Non-exhaustive match
@@ -11,4 +11,7 @@ mod WordNeedsElse {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

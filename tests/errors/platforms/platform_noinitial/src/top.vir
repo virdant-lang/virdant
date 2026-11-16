@@ -68,3 +68,6 @@ pub mod Unrelated {
 
 // CHECK-NOT: with @noinitial: top::Unrelated
 // CHECK: FAILED with:
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

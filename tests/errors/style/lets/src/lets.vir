@@ -10,7 +10,7 @@
 
 // A statement `let` whose body is a `=> <expr>` value: the binding's
 // scope performs, so it must terminate in a block.
-mod StmtLetArrow {
+pub mod StmtLetArrow {
     incoming a : Word[8]
     outgoing out : Word[8] dependson a
 
@@ -22,7 +22,7 @@ mod StmtLetArrow {
 
 // A `let` inside a statement `if` arm whose body is a `=> <expr>`
 // value: the arm's let is still in statement position.
-mod StmtWhenArmLetArrow {
+pub mod StmtWhenArmLetArrow {
     incoming a : Bit
     incoming b : Word[8]
     outgoing out : Word[8] dependson b
@@ -40,7 +40,7 @@ mod StmtWhenArmLetArrow {
 // A statement `let` whose block body is a single bare expression: the
 // scope produces a value it discards, so it must use `=>` (or contain
 // statements).
-mod StmtLetExprBlock {
+pub mod StmtLetExprBlock {
     incoming a : Word[8]
     outgoing out : Word[8] dependson a
 
@@ -54,7 +54,7 @@ mod StmtLetExprBlock {
 
 // A statement `let` chained into a bare `if` body: the chained form
 // is legal in both contexts, so the style pass flags nothing.
-mod StmtLetWhen {
+pub mod StmtLetWhen {
     incoming a : Bit
     incoming b : Word[8]
     outgoing out : Word[8] dependson b
@@ -71,7 +71,7 @@ mod StmtLetWhen {
 }
 
 // A statement `let` chained into a bare `match` body: same as above.
-mod StmtLetMatch {
+pub mod StmtLetMatch {
     incoming a : Word[8]
     incoming t : StyleE
     outgoing out : Word[8] dependson a
@@ -87,7 +87,12 @@ mod StmtLetMatch {
     out := a
 }
 
-enum type StyleE {
+pub enum type StyleE {
     A
     B
 }
+
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

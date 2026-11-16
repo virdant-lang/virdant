@@ -2,7 +2,7 @@
 // component, an explicit `on` clause naming that clock is redundant
 // (it is equivalent to omitting it) and warns.
 
-mod RedundantOn {
+pub mod RedundantOn {
     incoming clock : Clock
     incoming inp : Word[8]
     outgoing out : Word[8]
@@ -26,7 +26,7 @@ mod RedundantOn {
 // but only `reg`/`outgoing reg` are clocked by it: on any other kind
 // the clause is inert, so naming the module's unique clock there is
 // redundant too.
-mod RedundantOnOtherKinds {
+pub mod RedundantOnOtherKinds {
     incoming clock : Clock
     incoming inp : Word[8] on clock
     // CHECK: Redundant `on` clause: `inp`
@@ -52,7 +52,7 @@ mod ClockDiv {
     }
 }
 
-mod OtherClock {
+pub mod OtherClock {
     incoming clock : Clock
 
     mod divider of ClockDiv {
@@ -67,7 +67,7 @@ mod OtherClock {
 
 // Two Clock-typed components: no implicit clock, so explicit `on`
 // clauses are required and never warn.
-mod TwoClocks {
+pub mod TwoClocks {
     incoming clock_a : Clock
     incoming clock_b : Clock
 
@@ -80,4 +80,7 @@ mod TwoClocks {
     }
 }
 
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 6 WARNING
 // CHECK: Check OK

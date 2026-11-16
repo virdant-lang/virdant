@@ -2,29 +2,32 @@
 // reg and outgoing reg with no drivers produce a warning (NoRegDrivers),
 // not an error.
 
-mod RegModule {
+pub mod RegModule {
     incoming clock : Clock
 
     // CHECK: No drivers for a
-    reg a : Bit on clock {
+    reg a : Bit {
         unused it
     }
 
     // CHECK: No drivers for b
-    outgoing reg b : Bit on clock {
+    outgoing reg b : Bit {
         unused it
     }
 }
 
 // Same warning, but with a bare reg declaration (no it-block).
-mod RegNoDrivers {
+pub mod RegNoDrivers {
     incoming clock : Clock
 
     // CHECK: No drivers for a
-    reg a : Bit on clock
+    reg a : Bit
 
     // CHECK: No drivers for b
-    outgoing reg b : Bit on clock
+    outgoing reg b : Bit
+
+    outgoing out : Bit
+    out := a
 }
 
 // A wire with no drivers still produces an error (NoDrivers),
@@ -32,6 +35,7 @@ mod RegNoDrivers {
 // module — it would fail the pass test.  Only reg variants are
 // tested here.
 
-// CHECK-NOT: Check failed
-
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 4 WARNING
 // CHECK: Check OK

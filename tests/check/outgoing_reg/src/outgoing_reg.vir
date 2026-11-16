@@ -2,7 +2,6 @@
 // when it is never read inside the module (only driven).
 // It is an output port, so it is used externally.
 
-// CHECK: Check OK
 pub mod OutgoingRegUnused {
     incoming clock : Clock
     incoming reset : Reset
@@ -22,3 +21,7 @@ pub mod OutgoingRegUnused {
         }
     }
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

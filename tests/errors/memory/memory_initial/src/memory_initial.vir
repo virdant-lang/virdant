@@ -1,8 +1,10 @@
 // `initial` statements are not supported on memories in v1
 // (MEMORY_PLAN §6): contents come from `@image`/`@image_hex`.
 
-mod InitialOnMemory {
+pub mod InitialOnMemory {
     incoming clock : Clock
+
+    unused mem
 
     memory mem[16] : Word[8] {
         initial it <= 0w8
@@ -10,4 +12,7 @@ mod InitialOnMemory {
 }
 
 // CHECK: `initial` is not supported on memory mem
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

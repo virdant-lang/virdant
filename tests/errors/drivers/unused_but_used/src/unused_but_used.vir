@@ -4,7 +4,7 @@
 // clause.
 
 // An incoming port marked `unused` but read in an expression.
-mod UnusedPortRead {
+pub mod UnusedPortRead {
     incoming a : Word[4]
     incoming b : Word[4]
     outgoing out : Word[4] dependson a, b
@@ -16,7 +16,7 @@ mod UnusedPortRead {
 }
 
 // A submodule outgoing port marked `unused` but read at module level.
-mod SubOutRead {
+pub mod SubOutRead {
     outgoing out : Bit
 
     mod ha of HalfAdder {
@@ -31,7 +31,7 @@ mod SubOutRead {
 
 // A unique clock marked `unused` while a reg relies on the implicit
 // `on` clause: the implicit clocking is a use of the clock.
-mod ImplicitClockUsed {
+pub mod ImplicitClockUsed {
     incoming clock : Clock
     incoming inp : Bit
     outgoing out : Bit
@@ -47,7 +47,7 @@ mod ImplicitClockUsed {
 
 // A unique clock marked `unused` in a module with no regs at all is
 // fine: nothing implicitly uses the clock.
-mod UnusedClockNoRegs {
+pub mod UnusedClockNoRegs {
     incoming clock : Clock
     outgoing out : Bit
 
@@ -59,7 +59,7 @@ mod UnusedClockNoRegs {
 
 // A genuinely-unused port marked `unused` is fine: that is the whole
 // point of the statement, and it still suppresses UnusedSource.
-mod GenuinelyUnused {
+pub mod GenuinelyUnused {
     incoming unused_val : Word[8]
     outgoing out : Bit
 
@@ -79,4 +79,7 @@ mod HalfAdder {
     carry_out := a & b
 }
 
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

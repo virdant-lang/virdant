@@ -30,4 +30,7 @@ pub mod Top {
 }
 
 // CHECK: Cannot connect socket_connect_mismatch::Link[Word[9]] to socket_connect_mismatch::Link[Word[8]]: mismatched socket instantiations
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

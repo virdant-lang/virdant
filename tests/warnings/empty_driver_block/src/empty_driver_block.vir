@@ -3,7 +3,7 @@
 // Each empty driver block should produce a warning.
 // (Submodule and socket cases are planned new tests; see TESTING_REPORT.)
 
-mod ComponentModule {
+pub mod ComponentModule {
     incoming a : Bit {
         b := it
     }
@@ -13,4 +13,7 @@ mod ComponentModule {
     }
 }
 
-// CHECK-NOT: Check failed
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 1 WARNING
+// CHECK: Check OK

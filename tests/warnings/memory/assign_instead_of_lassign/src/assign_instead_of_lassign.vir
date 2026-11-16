@@ -17,4 +17,8 @@ pub mod Ram {
 }
 
 // CHECK: use `<=` to write memory mem
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 1 WARNING
 // CHECK: Check OK

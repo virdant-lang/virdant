@@ -3,8 +3,6 @@
 // `dependson` declares the combinational dependencies a port *may*
 // have on the module's `incoming` ports.
 
-// CHECK: Check OK
-
 // External PLL: the internal verilog routes clk_in to clk_out.
 // The `dependson` list declares that clk_out may depend on clk_in.
 ext mod PLL {
@@ -55,3 +53,7 @@ pub mod Top {
 
     final_out := internal.out_val
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

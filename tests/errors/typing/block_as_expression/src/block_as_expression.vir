@@ -10,7 +10,7 @@
 // A match arm whose `{ ... }` body wraps a chained `let` whose block
 // body produces no value for the `let`.
 
-mod MatchArmBlock {
+pub mod MatchArmBlock {
     incoming sel : Bit
     outgoing out : Word[4] dependson sel {
         it := match sel {
@@ -31,7 +31,7 @@ mod MatchArmBlock {
 // An `if` arm whose `{ ... }` body wraps a chained `let` whose block
 // body produces no value for the `let`.
 
-mod IfArmBlock {
+pub mod IfArmBlock {
     incoming sel : Bit
     outgoing out : Word[4] dependson sel {
         it := if {
@@ -54,7 +54,7 @@ mod IfArmBlock {
 // `let` body is a bare expression: the inner `let` is reported by the
 // terminator-style pass, the outer one by the typechecker.
 
-mod LetInLet {
+pub mod LetInLet {
     incoming a : Word[4]
     outgoing out : Word[4] dependson a {
         it := match a[0] {
@@ -72,4 +72,7 @@ mod LetInLet {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 4 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

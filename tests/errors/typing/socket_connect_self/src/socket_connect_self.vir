@@ -34,4 +34,7 @@ pub mod Top {
 
 // CHECK: Cannot connect slave.pipe to itself (socket_connect_self::Link[Word[8]]): `:=:` must join two distinct socket instances
 // CHECK: Cannot connect master.pipe to itself (socket_connect_self::Link[Word[8]]): `:=:` must join two distinct socket instances
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

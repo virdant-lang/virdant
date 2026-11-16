@@ -50,4 +50,7 @@ mod NotAWord {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 4 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

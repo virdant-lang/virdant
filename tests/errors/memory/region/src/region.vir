@@ -2,7 +2,7 @@
 // it must name the memory's own clock, and only writes to the memory
 // are allowed inside.
 
-mod ClockMismatch {
+pub mod ClockMismatch {
     incoming clk_a : Clock
     incoming clk_b : Clock
     incoming addr : Word[4]
@@ -10,13 +10,14 @@ mod ClockMismatch {
 
     // The memory is clocked by clk_a; the region names clk_b.
     memory mem[16] : Word[8] on clk_a {
+        unused it
         on clk_b {
             it[dyn addr] <= write_data
         }
     }
 }
 
-mod NonWriteInsideRegion {
+pub mod NonWriteInsideRegion {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Word[8]
@@ -36,4 +37,7 @@ mod NonWriteInsideRegion {
 
 // CHECK: `on` region in memory mem must name the memory's clock clk_a
 // CHECK: only writes to the memory are allowed inside an `on` region
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

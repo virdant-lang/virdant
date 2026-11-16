@@ -2,11 +2,11 @@
 // refer to the same component path.
 
 // Same explicit path.
-mod SameExplicitPath {
+pub mod SameExplicitPath {
     incoming clock : Clock
     outgoing out : Word[8]
 
-    reg r : Word[8] on clock
+    reg r : Word[8]
     // CHECK: Redundant driver: r
     r <= r
 
@@ -14,11 +14,11 @@ mod SameExplicitPath {
 }
 
 // Both sides use `it` inside an it block.
-mod BothUseIt {
+pub mod BothUseIt {
     incoming clock : Clock
     outgoing out : Word[8]
 
-    reg r : Word[8] on clock {
+    reg r : Word[8] {
         // CHECK: Redundant driver: r
         it <= it
     }
@@ -26,18 +26,28 @@ mod BothUseIt {
     out := r
 }
 
-// One side uses `it`, the other uses the explicit path, inside an it
-// block on a submodule. Both resolve to the same component.
-mod MixedItExplicit {
+// One side uses `it`, the other uses the explicit path, inside their
+// it blocks. Both resolve to the same component.  (The NotIt warnings
+// are a known consequence of spelling the reg by name inside its own
+// block; the subject here is that both spellings still resolve to a
+// RedundantDriver.)
+pub mod MixedItExplicit {
     incoming clock : Clock
 
-    reg r : Word[8] on clock {
+    reg r : Word[8] {
         // CHECK: Redundant driver: r
+        // CHECK: 'r' should be written as 'it' inside of this driver block
         it <= r
     }
 
-    reg s : Word[8] on clock {
+    reg s : Word[8] {
+        // CHECK: 's' should be written as 'it' inside of this driver block
         // CHECK: Redundant driver: s
         s <= it
     }
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 6 WARNING
+// CHECK: Check OK

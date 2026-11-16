@@ -1,6 +1,6 @@
 // A generic parameter referenced outside its declaring def.
 
-struct type Box[T : Type] {
+pub struct type Box[T : Type] {
     value : T
 }
 
@@ -11,4 +11,7 @@ pub mod Top {
 }
 
 // CHECK: Unresolved type T
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

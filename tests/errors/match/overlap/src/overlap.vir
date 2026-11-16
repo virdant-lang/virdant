@@ -1,4 +1,4 @@
-mod OverlapIdent {
+pub mod OverlapIdent {
     incoming b : Bit
     outgoing out : Bit dependson b
     // CHECK: Overlapping match arm: x
@@ -8,7 +8,7 @@ mod OverlapIdent {
     }
 }
 
-mod OverlapDontcare {
+pub mod OverlapDontcare {
     incoming b : Bit
     outgoing out : Bit dependson b
     // CHECK: Overlapping match arm
@@ -21,7 +21,7 @@ mod OverlapDontcare {
 
 // MatchCoverage: duplicated `with true` arm on a Bit subject.
 
-mod OverlapBit {
+pub mod OverlapBit {
     incoming b : Bit
     outgoing out : Bit dependson b
     // CHECK: Overlapping match arm: true
@@ -40,7 +40,7 @@ union type MyUnion {
     Bar(x : Bit)
 }
 
-mod OverlapUnion {
+pub mod OverlapUnion {
     wire u : MyUnion
     u := @Foo()
 
@@ -57,7 +57,7 @@ mod OverlapUnion {
 
 // MatchCoverage: duplicated word-literal arm.
 
-mod OverlapWord {
+pub mod OverlapWord {
     incoming x : Word[2]
     outgoing out : Bit dependson x
     // CHECK: Overlapping match arm: 0
@@ -70,4 +70,7 @@ mod OverlapWord {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

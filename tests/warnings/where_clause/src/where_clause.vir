@@ -7,7 +7,7 @@
 // CHECK: 'out.req' should be written as 'it' in a `where` clause
 // CHECK: Unused `dependson`: `out.req` declares it may depend on `inp` but does not
 // CHECK-NOT: Unused
-mod Warnings {
+pub mod Warnings {
     incoming inp : Bit
     client socket out of Chan
         where out.req dependson inp
@@ -20,7 +20,7 @@ mod Warnings {
 
 // An entry actually exercised does not warn.
 // CHECK-NOT: Unused
-mod Justified {
+pub mod Justified {
     incoming inp : Bit
     client socket out of Chan
         where it.req dependson inp
@@ -34,7 +34,7 @@ mod Justified {
 // obligation edge justifies the `where` entry, so it does not warn,
 // even though `it.ready`'s driver is a constant.
 // CHECK-NOT: Unused
-mod Restated {
+pub mod Restated {
     server socket s of PipeChan
         where it.ready dependson s.req
     {
@@ -52,3 +52,8 @@ socket PipeChan {
     cosi req : Bit
     soci ready : Bit dependson req
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 2 WARNING
+// CHECK: Check OK

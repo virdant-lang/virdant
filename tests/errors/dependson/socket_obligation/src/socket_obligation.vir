@@ -11,10 +11,13 @@ socket Chan {
     soci ack : Word[8]
 }
 
-mod Server {
+pub mod Server {
     server socket s of Chan {
         it.ack := it.req + 1w8
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

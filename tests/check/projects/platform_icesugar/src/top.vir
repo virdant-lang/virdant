@@ -1,8 +1,6 @@
 // Tests that vir check loads the shipped ice40 lib package
 // and resolves `import ice40` + `for ice40::IceSugar`.
 
-// CHECK: Check OK
-
 //! Blink the iCESugar RGB LEDs.
 
 import ice40
@@ -36,3 +34,7 @@ pub mod Top for ice40::IceSugar {
     unused uart_rx
     unused flash_miso
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

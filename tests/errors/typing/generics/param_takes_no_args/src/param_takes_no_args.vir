@@ -1,7 +1,7 @@
 // A generic parameter applied to type arguments: parameters take no
 // type arguments.
 
-struct type Box[T : Type] {
+pub struct type Box[T : Type] {
     value : T[Bit]
 }
 
@@ -12,4 +12,9 @@ pub mod Top {
 }
 
 // CHECK: Parameter T takes no type arguments
+// CHECK: Type of field value could not be resolved
+
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

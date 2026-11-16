@@ -54,4 +54,7 @@ pub mod Top {
     out := inp
 }
 
+// CHECK: FAILED with
+// CHECK: 9 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

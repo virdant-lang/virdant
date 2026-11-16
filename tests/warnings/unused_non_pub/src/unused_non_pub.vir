@@ -29,7 +29,6 @@ mod UnusedMod {
     out := inp
 }
 
-// CHECK: Check OK
 pub mod Top {
     incoming inp : Word[8]
     outgoing out : Word[8] dependson inp
@@ -39,3 +38,8 @@ pub mod Top {
 
     out := used->x
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 2 WARNING
+// CHECK: Check OK

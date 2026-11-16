@@ -5,8 +5,6 @@
 // declared on the resulting port.  In the receiving role the list is
 // inert.
 
-// CHECK: Check OK
-
 // The server's acknowledgement may combinationally depend on its
 // reads of the request channel.
 socket Respond {
@@ -65,3 +63,7 @@ pub mod Top {
     inrt.w.req := x
     unused inrt.w.ack
 }
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK
