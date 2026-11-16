@@ -21,7 +21,7 @@ pub mod Unused {
 // CHECK-NOT: `out` declares it may depend
 pub mod JustifiedByOther {
     incoming inp : Bit async
-    outgoing ow : Bit async dependson inp
+    outgoing wire ow : Bit async dependson inp
     outgoing out : Bit async dependson inp
     ow := true
     out := ow
