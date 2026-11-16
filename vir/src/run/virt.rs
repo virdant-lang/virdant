@@ -608,6 +608,9 @@ impl SpiFlash {
                 }
                 Err(e) => {
                     eprintln!("virt: cannot open flash image {}: {e}", path.display());
+                    // The terminal is already in raw mode (setup_terminal
+                    // ran earlier), so restore it before bailing out.
+                    restore_term();
                     std::process::exit(1);
                 }
             }
