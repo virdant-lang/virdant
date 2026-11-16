@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "An inward socket channel typed `Clock` is an incoming clock port of the module: a module whose only clock arrives through a socket has a unique clock, so `on` clauses are optional on its regs."
+filecheck = "src/socket_clock.vir"

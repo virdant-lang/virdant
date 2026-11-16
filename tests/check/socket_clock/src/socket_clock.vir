@@ -1,0 +1,25 @@
+// An inward socket channel typed `Clock` is an incoming clock port of
+// the module, exactly like a declared `incoming ... : Clock`.  A module
+// whose only clock arrives through a socket has a unique clock, so
+// `on` clauses are optional on its regs.
+
+// CHECK: Check OK
+
+// A `server` instantiation receives on the `cosi` channel, so
+// `link.clk` is an inward clock channel of `Receiver`.
+socket ClkBus {
+    cosi clk : Clock
+}
+
+pub mod Receiver {
+    server socket link of ClkBus
+
+    // No `on` clause: the inward socket channel is the unique clock.
+    reg counter : Word[4] {
+        it <= it + 1w4
+    }
+
+    outgoing slow : Word[1] {
+        it := counter[1..0]
+    }
+}
