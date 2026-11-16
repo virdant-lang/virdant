@@ -1,0 +1,514 @@
+////////////////////////////////////////////////////////////////////////////////
+// Package
+////////////////////////////////////////////////////////////////////////////////
+
+    Package := "DocBang"* Import* Item*
+
+    Import := "import" Path
+
+    Item :=
+        ModDef
+    |   PlatformDef
+    |   StructDef
+    |   UnionDef
+    |   EnumDef
+    |   BuiltinDef
+    |   SocketDef
+
+    ModDef :=
+        "DocComment"*
+        Annotation*
+        Vis? "ext"? "builtin"? "mod" "ident" ForClause? Generics? "{"
+            ModStmt*
+        "}"
+
+    PlatformDef :=
+        "DocComment"*
+        Annotation*
+        Vis? "platform" "ident" "{"
+            PlatformStmt*
+        "}"
+
+    StructDef :=
+        "DocComment"*
+        Annotation*
+        Vis? "builtin"? "struct" "type" "ident" Generics? "{"
+            StructStmt*
+        "}"
+
+    UnionDef :=
+        "DocComment"*
+        Annotation*
+        Vis? "builtin"? "union" "type" "ident" Generics? "{"
+            UnionStmt*
+        "}"
+
+    EnumDef :=
+        "DocComment"*
+        Annotation*
+        Vis? "builtin"? "enum" "type" "ident" Generics? "{"
+            EnumStmt*
+        "}"
+
+    BuiltinDef :=
+        "DocComment"*
+        Annotation*
+        Vis? "builtin" "type" "ident" Generics? "{" "}"
+
+    SocketDef :=
+        "DocComment"*
+        Annotation*
+        Vis? "builtin"? "socket" "ident" Generics? "{"
+            ChannelStmt*
+        "}"
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Misc
+////////////////////////////////////////////////////////////////////////////////
+
+    Annotation := "@" "ident" ArgList?
+
+    Vis := "pub"
+
+    ParamList := "(" CommaList<Param>? ")"
+
+    Param := "DocComment"* Annotation* "ident" ":" Type
+
+    Generics := "[" CommaList<KindParam> "]"
+
+    KindParam := "ident" ":" "ident"
+
+    GenericsParams := "[" CommaList<GenericsArg> "]"
+
+    GenericsArg :=
+        "nat"
+    |   "type"
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Module-like Items
+////////////////////////////////////////////////////////////////////////////////
+
+    ForClause := "for" Ofness
+
+    ModStmt :=
+        DeclStmt
+    |   Driver
+    |   UnusedStmt
+    |   If
+    |   Match
+    |   Let
+
+    PlatformStmt :=
+        DeclStmt
+
+    DeclStmt :=
+        ComponentStmt
+    |   SubmoduleStmt
+    |   SocketStmt
+
+    SubmoduleStmt :=
+        "DocComment"*
+        Annotation*
+        "mod" "ident" "of" Ofness GenericsParams? Block?
+
+    SocketStmt :=
+        "DocComment"*
+        Annotation*
+        SocketRole "socket" "ident" "of" Ofness GenericsParams? Block?
+
+    SocketRole :=
+        "client"
+    |   "server"
+
+    UnusedStmt := "unused" Path
+
+    DependsonList := "dependson" CommaList<Path>
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Components
+////////////////////////////////////////////////////////////////////////////////
+
+    ComponentStmt :=
+        "DocComment"*
+        Annotation*
+        ComponentKind "ident" MemSize? ":" Type OnClause? DependsonList? DefaultClause? Block?
+
+    ComponentKind :=
+        "incoming"
+    |   "outgoing"
+    |   "bus"
+    |   "net"
+    |   "wire"
+    |   "reg"
+    |   "outgoing" "wire"
+    |   "outgoing" "reg"
+    |   "memory"
+
+    OnClause :=
+        "on" Expr
+    |   "async"
+
+    DefaultClause := "default" Expr
+
+    MemSize := "[" Expr "]"
+
+    Block := "{" ModStmt* "}"
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Drivers
+////////////////////////////////////////////////////////////////////////////////
+
+    Driver :=
+        "initial"? DriverTarget DriverType Expr
+    |   Path BiDriverType Path
+
+    DriverTarget :=
+        Path
+    |   Path "[" "nat" "]"
+    |   Path "[" "dyn" Expr "]"
+
+    DriverType :=
+        ":="
+    |   "<="
+    |   "#="
+    |   "#-"
+
+    BiDriverType :=
+        "#=#"
+    |   ":=:"
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Type Definitions
+////////////////////////////////////////////////////////////////////////////////
+
+    StructStmt := "DocComment"* Annotation* "ident" ":" Type
+
+    UnionStmt := "DocComment"* Annotation* "ident" ParamList?
+
+    EnumStmt := "DocComment"* Annotation* "ident" ParamList? EnumValue?
+
+    EnumValue := "=" Expr
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Socket Definitions
+////////////////////////////////////////////////////////////////////////////////
+
+    ChannelStmt := "DocComment"* Annotation* ChannelDir "ident" ":" Type DependsonList?
+
+    ChannelDir :=
+        "cosi"
+    |   "soci"
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Conditionals
+////////////////////////////////////////////////////////////////////////////////
+
+    If := "if" "{" IfArm* "}"
+
+    Match := "match" Expr "{" MatchArm* "}"
+
+    IfArm :=
+        "when" Expr ArmBody
+    |   "else" ArmBody
+
+    MatchArm :=
+        "with" Pat ArmBody
+    |   "else" ArmBody
+
+    ArmBody :=
+        "=>" Expr
+    |   Block
+    |   If
+    |   Match
+    |   Let
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Let
+////////////////////////////////////////////////////////////////////////////////
+
+    Let := "let" CommaList<LetBinding> ArmBody
+
+    LetBinding := "ident" LetBindingType? "=" Expr
+
+    LetBindingType := ":" Type
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Patterns
+////////////////////////////////////////////////////////////////////////////////
+
+    Pat :=
+        PatValue
+    |   "dontcare"
+
+    PatValue :=
+        Path
+    |   PatCtor
+    |   PatEnumerant
+    |   PatStruct
+    |   WordLit
+    |   BitLit
+    |   StrLit
+
+    PatCtor := "@" "ident" PatArgs?
+
+    PatArgs := "(" CommaListTrail<Pat>? ")"
+
+    PatEnumerant := "#" "ident"
+
+    PatStruct := "$" "{" PatAssignList? "}"
+
+    PatAssignList := CommaListTrail<PatAssign>
+
+    PatAssign := "ident" "=" Pat
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Type
+////////////////////////////////////////////////////////////////////////////////
+
+    Type := Path TypeGenerics?
+
+    TypeGenerics := "[" CommaList<Type> "]"
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Expr
+////////////////////////////////////////////////////////////////////////////////
+
+    Expr :=
+        If
+    |   Match
+    |   Let
+    |   ExprBinOpLogical
+
+    ExprBinOpLogical :=
+        ExprBinOpLogical BinOpLogical ExprBinOpCompare
+    |   ExprBinOpCompare
+
+    BinOpLogical :=
+        "&&"
+    |   "||"
+    |   "^^"
+
+    ExprBinOpCompare :=
+        ExprBinOpCompare BinOpCompare ExprBinOpAdditive
+    |   ExprBinOpAdditive
+
+    BinOpCompare :=
+        "<"
+    |   "<="
+    |   ">"
+    |   ">="
+    |   "=="
+    |   "!="
+
+    ExprBinOpAdditive :=
+        ExprBinOpAdditive BinOpAdditive ExprUnOp
+    |   ExprUnOp
+
+    BinOpAdditive :=
+        "+"
+    |   "+."
+    |   "-"
+    |   "-."
+    |   "&"
+    |   "|"
+    |   "^"
+
+    ExprUnOp :=
+        UnOp ExprUnOp
+
+    |   "tap" Path
+    |   ExprAscription
+
+    UnOp :=
+        "-"
+    |   "~"
+    |   "!"
+
+    ExprAscription :=
+        ExprPrimary ":" Type
+    |   ExprPrimary
+
+    ExprPrimary :=
+        ExprPrimary "->" "ident"
+    |   ExprPrimary "[" "dyn" Expr "]"
+    |   ExprPrimary "[" Index "]"
+    |   ExprPrimary "[" Index ".." Index "]"
+    |   Atom
+
+    Atom :=
+        Value
+    |   Ofness ArgList
+    |   "?"
+    |   "dontcare"
+    |   "(" Expr ")"
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Value
+////////////////////////////////////////////////////////////////////////////////
+
+    Value :=
+        Path
+    |   ValueCtor
+    |   ValueEnumerant
+    |   ValueStruct
+    |   WordLit
+    |   BitLit
+    |   StrLit
+
+    ValueCtor := "@" "ident" ArgList?
+
+    ValueEnumerant := "#" "ident"
+
+    ValueStruct := "$" "{" AssignList? "}"
+
+    AssignList := CommaListTrail<Assign>
+
+    Assign := "ident" "=" Expr
+
+    ArgList := "(" CommaListTrail<Expr>? ")"
+
+    Index := "nat"
+
+    WordLit :=
+        "nat"
+    |   "Word"
+
+    BitLit :=
+        "true"
+    |   "false"
+
+    StrLit :=
+        "Str"
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Path
+////////////////////////////////////////////////////////////////////////////////
+
+    Ofness :=
+        Path
+
+    Path :=
+        PathStart ("." "ident")*
+    |   "ident" "::" Path
+
+    PathStart :=
+        "ident"
+    |   "it"
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Macros
+////////////////////////////////////////////////////////////////////////////////
+
+    CommaList<T> := (T ",")* T
+
+    CommaListTrail<T> := (T ",")* T ","?
+
+////////////////////////////////////////////////////////////////////////////////
+// Tokens
+////////////////////////////////////////////////////////////////////////////////
+
+Tokens:
+
+    "!"
+    "!="
+    "#"
+    "#-"
+    "#="
+    "#=#"
+    "$"
+    "&"
+    "&&"
+    "("
+    ")"
+    "+"
+    "+."
+    ","
+    "-"
+    "-."
+    "->"
+    "."
+    ".."
+    ":"
+    "::"
+    ":="
+    ":=:"
+    "<"
+    "<="
+    "="
+    "=="
+    "=>"
+    ">"
+    ">="
+    "?"
+    "@"
+    "DocBang"
+    "DocComment"
+    "ident"
+    "Nat"
+    "Str"
+    "Word"
+    "["
+    "]"
+    "^"
+    "^^"
+    "async"
+    "builtin"
+    "bus"
+    "client"
+    "cosi"
+    "default"
+    "dependson"
+    "dontcare"
+    "dyn"
+    "else"
+    "enum"
+    "ext"
+    "false"
+    "for"
+    "if"
+    "import"
+    "incoming"
+    "initial"
+    "it"
+    "let"
+    "match"
+    "memory"
+    "mod"
+    "net"
+    "of"
+    "on"
+    "outgoing"
+    "platform"
+    "pub"
+    "reg"
+    "server"
+    "soci"
+    "socket"
+    "struct"
+    "tap"
+    "true"
+    "type"
+    "union"
+    "unused"
+    "when"
+    "wire"
+    "with"
+    "{"
+    "|"
+    "||"
+    "}"
+    "~"
