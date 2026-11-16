@@ -3,6 +3,7 @@
 
 pub mod annotations;
 pub mod component;
+pub mod domain;
 pub mod location;
 pub mod package;
 pub mod symbols;
