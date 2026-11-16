@@ -18,16 +18,16 @@ mod Majority3 {
     incoming clock : Clock
 
     //> First operand.
-    incoming a : Bit
+    incoming a : Bit async
 
     //> Second operand.
-    incoming b : Bit
+    incoming b : Bit async
 
     //> Third operand.
-    incoming c : Bit
+    incoming c : Bit async
 
     //> Majority: `a && b`, `a && c`, or `b && c` makes it `1`.
-    outgoing out : Bit dependson a, b, c {
+    outgoing out : Bit async dependson a, b, c {
         it := (a && b) || (a && c) || (b && c)
     }
 
