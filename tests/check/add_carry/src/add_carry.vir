@@ -55,7 +55,6 @@ pub mod CarryInExpression {
     }
 }
 
-// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

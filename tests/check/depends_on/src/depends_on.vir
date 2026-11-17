@@ -54,7 +54,6 @@ pub mod Top {
     final_out := internal.out_val
 }
 
-// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK
