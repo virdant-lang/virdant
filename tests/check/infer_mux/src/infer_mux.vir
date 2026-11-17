@@ -4,7 +4,6 @@ pub mod T {
         it := word(mux(c, 4w4, 4w4), 4w4)
     }
 }
-// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

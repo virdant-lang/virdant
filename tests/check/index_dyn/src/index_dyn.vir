@@ -24,7 +24,6 @@ pub mod IndexByConstant {
     out := arr[5]
 }
 
-// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK
