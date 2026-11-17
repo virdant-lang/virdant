@@ -1,0 +1,5 @@
+[project]
+name = "channel_on_clock"
+
+[prog]
+top = "channel_on_clock::UsesOwnClockChannel"

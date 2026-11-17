@@ -83,8 +83,8 @@ SociKw :=
     | "incoming"
 
 SocketDefStmt :=
-      DocString? Annotations CosiKw Ident ":" Type DependsonList?
-    | DocString? Annotations SociKw Ident ":" Type DependsonList?
+      DocString? Annotations CosiKw Ident ":" Type OnClause? DependsonList?
+    | DocString? Annotations SociKw Ident ":" Type OnClause? DependsonList?
 
 DependsonList := "dependson" DependsonPathList
 

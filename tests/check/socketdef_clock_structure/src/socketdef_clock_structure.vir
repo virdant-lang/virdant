@@ -1,0 +1,147 @@
+// A socketdef's clock structure decides its channels' domains, mirroring
+// a moddef's clock rules:
+//
+// - No Clock channels: clause-less channels are flexible — resolved per
+//   instantiating module (here: to the module's clock, under clocked
+//   usage).
+// - Exactly one Clock channel: every other channel is implicitly `on`
+//   it, and the module binds that channel (`it.clk := ...`) — so all
+//   channels live on the one clock.
+// - `async` overrides the implicit rule: such a channel accepts drivers
+//   from any domain.
+
+//> A clockless socket: `req`/`rsp` are flexible.
+socket Flex {
+    cosi req : Word[8]
+    soci rsp : Word[8]
+}
+
+//> Client end of the flexible socket: drives `req` from a clocked reg
+//> and reads `rsp` back into one — the flexible instance resolves to
+//> this module's clock.
+pub mod FlexClient {
+    incoming clock : Clock
+
+    reg count : Word[8] {
+        initial it <= 0
+        it <= it + 1w8
+    }
+
+    client socket link of Flex {
+        it.req := count
+    }
+
+    reg seen : Word[8] {
+        initial it <= 0
+        it <= link.rsp
+    }
+
+    unused seen
+}
+
+//> Server end of the flexible socket: same resolution from the other
+//> side of the link.
+pub mod FlexServer {
+    incoming clock : Clock
+
+    reg count : Word[8] {
+        initial it <= 0
+        it <= it + 1w8
+    }
+
+    server socket link of Flex {
+        unused it.req
+        it.rsp := count
+    }
+}
+
+//> One Clock channel: `data` is implicitly `on` it.  The client binds
+//> the channel to its own clock (`it.clk := clock`), so the client's
+//> clocked logic and the socket share one domain; the server's only
+//> clock is the received `link.clk`, so its logic does too.
+socket Clocked {
+    cosi clk : Clock
+    soci data : Word[8]
+}
+
+pub mod SyncClient {
+    incoming clock : Clock
+
+    reg count : Word[8] {
+        initial it <= 0
+        it <= it + 1w8
+    }
+
+    client socket link of Clocked
+        where it.clk dependson clock
+    {
+        it.clk := clock
+    }
+
+    reg seen : Word[8] {
+        initial it <= 0
+        it <= link.data
+    }
+
+    unused seen
+}
+
+pub mod ClockedServer {
+    server socket link of Clocked {
+        it.data := count
+    }
+
+    reg count : Word[8] {
+        initial it <= 0
+        it <= it + 1w8
+    }
+}
+
+//> `async` overrides the implicit `on clk`: `evt` accepts a driver from
+//> a different clock's domain.
+socket Mixed {
+    cosi clk : Clock
+    cosi evt : Bit async
+}
+
+pub mod MixedUser {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+
+    client socket link of Mixed
+        where it.clk dependson clk_a
+    {
+        it.clk := clk_a
+        // A clk_b-domain driver into the `async` channel: legal only
+        // because `evt` overrides the implicit `on clk`.
+        it.evt := flag
+    }
+
+    wire flag : Bit on clk_b {
+        it := true
+    }
+}
+
+pub mod Top {
+    incoming clock : Clock
+
+    mod fc of FlexClient {
+        it.clock := clock
+    }
+
+    mod fs of FlexServer {
+        it.clock := clock
+    }
+
+    fc.link :=: fs.link
+
+    mod sc of SyncClient {
+        it.clock := clock
+    }
+
+    mod ss of ClockedServer
+
+    sc.link :=: ss.link
+}
+
+// CHECK: Check OK

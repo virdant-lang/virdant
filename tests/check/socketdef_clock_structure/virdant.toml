@@ -1,0 +1,5 @@
+[project]
+name = "socketdef_clock_structure"
+
+[prog]
+top = "socketdef_clock_structure::FlexLoop"

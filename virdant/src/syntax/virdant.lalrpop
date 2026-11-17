@@ -335,17 +335,27 @@ SociKw: () = {
 }
 
 SocketDefStmt: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> CosiKw <name:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <rr:@R> => {
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Cosi, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> CosiKw <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <rr:@R> => {
+        let (on, is_async) = match on {
+            Some(OnClause::Clock(expr)) => (Some(expr), false),
+            Some(OnClause::Async) => (None, true),
+            None => (None, false),
+        };
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Cosi, doc_string: docstring, is_async });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if dependson_list.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> SociKw <name:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <rr:@R> => {
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Soci, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> SociKw <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <rr:@R> => {
+        let (on, is_async) = match on {
+            Some(OnClause::Clock(expr)) => (Some(expr), false),
+            Some(OnClause::Async) => (None, true),
+            None => (None, false),
+        };
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Soci, doc_string: docstring, is_async });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if dependson_list.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A socketdef channel's `on <CLOCK>` clause resolves within the socketdef's own scope: a sibling Clock channel; at instantiation it resolves through the socket instance's namespace.  A module-scope name is a hard error (a socketdef is not a macro expanded into the module)."
+filecheck = "src/channel_on_clock.vir"

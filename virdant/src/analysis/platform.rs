@@ -27,6 +27,10 @@ pub struct PlatformPortInfo {
     pub name: BString,
     pub dir: PortDir,
     pub typ: Option<Type>,
+    /// Whether the port was declared `async`.
+    pub is_async: bool,
+    /// The path written in the port's `on <CLOCK>` clause, if any.
+    pub on_path: Option<BString>,
     /// Location of the port's declaration statement in the platform.
     pub location: Location,
     /// Location of the `default <EXPR>` expression, for `outgoing`
@@ -70,10 +74,16 @@ pub fn platform_ports_detailed(
         };
         let typ = builder.get_type_at(typ_node.location()).ok();
         let default_expr = child.default_expr().map(|expr| expr.location());
+        let on_path = child
+            .on_clause()
+            .and_then(|on| on.path())
+            .map(|interned| parsing.string(interned).to_owned());
         result.push(PlatformPortInfo {
             name: parsing.string(component.name).to_owned(),
             dir,
             typ,
+            is_async: component.is_async,
+            on_path,
             location: child.location(),
             default_expr,
         });

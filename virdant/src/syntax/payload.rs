@@ -380,6 +380,8 @@ pub struct Channel {
     pub name: InternedString,
     pub dir: ChannelDir,
     pub doc_string: Option<InternedString>,
+    /// Whether the channel was declared with the `async` modifier.
+    pub is_async: bool,
 }
 
 /// The argument list of a type reference or instantiation

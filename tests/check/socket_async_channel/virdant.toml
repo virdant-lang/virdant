@@ -1,0 +1,5 @@
+[project]
+name = "socket_async_channel"
+
+[prog]
+top = "socket_async_channel::Top"

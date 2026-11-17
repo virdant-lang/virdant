@@ -1,0 +1,52 @@
+// A socketdef with more than one Clock channel requires every non-Clock
+// channel to carry an explicit `on` or `async` clause (checked at the
+// socketdef, the analog of a multi-clock moddef).  And a clockless
+// socket's channels resolve to ONE domain per instantiation: an
+// instance touched by two clocks is a conflict.
+
+pub socket TwoClocks {
+    cosi clk_a : Clock
+    cosi clk_b : Clock
+    // CHECK: Missing `on` or `async` clause for data: the socket has multiple Clock channels
+    soci data : Word[8]
+}
+
+//> Explicit clauses satisfy the rule.
+pub socket TwoClocksOk {
+    cosi clk_a : Clock
+    cosi clk_b : Clock
+    soci data : Word[8] on clk_a
+    soci evt : Bit async
+}
+
+//> A clockless socket: its channels are flexible, so this instance is
+//> touched by `clk_a` (driving `req`) and by `clk_b` (reading `rsp`)
+//> — one instantiation cannot serve both.
+socket Flex {
+    cosi req : Word[4]
+    soci rsp : Word[4]
+}
+
+pub mod ConflictUser {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming a_in : Word[4] on clk_a
+
+    client socket link of Flex
+        where it.req dependson a_in
+    {
+        it.req := a_in
+    }
+
+    // CHECK: Instance `link` of a clockless module is used on both clocked by `clk_a` and clocked by `clk_b`; a clockless module resolves to a single domain per instantiation
+    wire heard : Word[4] on clk_b {
+        it := link.rsp
+    }
+
+    unused heard
+}
+
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

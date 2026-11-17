@@ -549,6 +549,15 @@ impl<'p> AstNode<'p> {
                 }
                 None
             }
+            AstNodePayload::Channel(_) => {
+                for child in self.children().into_iter().skip(2) {
+                    if matches!(child.payload(), AstNodePayload::DependsonList) {
+                        continue;
+                    }
+                    return Some(child);
+                }
+                None
+            }
             _ => None
         }
     }
