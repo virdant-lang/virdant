@@ -12,7 +12,7 @@ use std::sync::Arc;
 use bstr::BString;
 use indexmap::{IndexMap, IndexSet};
 
-use crate::analysis::component::{ComponentAnalysis, ComponentId};
+use crate::analysis::component::{Component, ComponentAnalysis, ComponentId};
 use crate::analysis::domain::Domain;
 use crate::analysis::symbols::Symbol;
 use crate::analysis::Location;
@@ -40,8 +40,13 @@ pub struct Clocking {
     /// guard named by its canonical [`Location`].
     guard_checks: IndexSet<(Location, ComponentId)>,
     diagnostics: Vec<Diagnostic>,
-    /// Whether checking was skipped for this module (submodules,
-    /// `@unsafe_clocks`, or one of the single-domain fast paths).
+    /// The parent-view domains of the module's submodule-owned
+    /// components, assigned by the submodule clock binding (see
+    /// `check::bind_submodule_clocks`).  Components absent from this
+    /// map have no parent-view domain and are not checked.
+    submodule_domains: IndexMap<ComponentId, Domain>,
+    /// Whether checking was skipped for this module (`@unsafe_clocks`,
+    /// or one of the single-domain fast paths).
     skipped: bool,
 }
 
@@ -53,6 +58,7 @@ impl Clocking {
             domains: IndexMap::new(),
             in_progress: IndexSet::new(),
             guard_checks: IndexSet::new(),
+            submodule_domains: IndexMap::new(),
             diagnostics: vec![],
             skipped: true,
         }
@@ -118,5 +124,15 @@ impl Clocking {
 
     pub(crate) fn component_analysis(&self) -> &ComponentAnalysis {
         &self.component_analysis
+    }
+
+    /// The clock domain of a component in this module's view: the
+    /// submodule-bound domain for a submodule-owned component (see
+    /// `submodule_domains`), else the component's declared domain.
+    pub(crate) fn component_domain(&self, component: &Component) -> Option<Domain> {
+        self.submodule_domains
+            .get(&component.id())
+            .copied()
+            .or_else(|| component.domain().copied())
     }
 }

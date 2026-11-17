@@ -138,6 +138,7 @@ pub mod Hello {
     // Serializes each message byte onto the `tx` line.
     mod sender of UartSender
 
+    char_rom.clock := clock
     char_rom.index := char_index
     sender.clock := clock
     sender.data := char_rom.char
@@ -187,9 +188,17 @@ pub mod Hello {
 //> `index` selects one character of the message; `index` values past
 //> the end of the message never reach here, so the `else` arm is
 //> unreachable padding.
+//>
+//> The ROM is purely combinational, but its output feeds clocked
+//> modules (`UartSender` samples `char`), so it declares a vestigial
+//> clock: the module lives in whatever clock domain its parent binds,
+//> and `index`/`char` are clocked signals of that domain.
 mod CharRom {
-    incoming index : Word[4] async
-    outgoing char : Word[8] async dependson index
+    incoming clock : Clock
+    incoming index : Word[4]
+    outgoing char : Word[8] dependson index
+
+    unused clock
 
     char := match index {
         with 0  => 0x48 // 'H'
