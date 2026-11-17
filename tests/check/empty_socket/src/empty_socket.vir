@@ -21,6 +21,7 @@ pub mod Top {
     left.peer :=: right.peer
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

@@ -58,6 +58,7 @@ pub mod Unreadable {
 // A check-suite file only asserts compilation, not values: the
 // readback lives in tests/run/memory/rom_image.
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

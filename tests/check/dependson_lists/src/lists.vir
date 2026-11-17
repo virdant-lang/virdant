@@ -51,6 +51,7 @@ pub mod Top {
     unused ext_out
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

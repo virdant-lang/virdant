@@ -31,7 +31,7 @@ pub mod Top for Buttons {
 // CHECK: Wrong type: Expected Word[4] but found Bit
 // CHECK: `default` on outgoing port oops is only allowed in a platform definition
 // CHECK: Module is missing port no_default required by platform Buttons
-// CHECK: FAILED with:
+// CHECK: FAILED with
 // CHECK: 3 ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check failed

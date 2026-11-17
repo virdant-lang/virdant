@@ -41,6 +41,7 @@ pub mod BlocklessMultiClock {
     mem[dyn addr] <= write_data
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

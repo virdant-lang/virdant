@@ -4,8 +4,6 @@
 // component must then be explicitly `async` (the one exception: a
 // Clock-typed component, which is always `Async` anyway).
 
-// CHECK: Check OK
-
 socket ClkBus {
     cosi clk : Clock
 }
@@ -30,3 +28,8 @@ pub mod ClockOut {
         it.clk := asclock(true)
     }
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

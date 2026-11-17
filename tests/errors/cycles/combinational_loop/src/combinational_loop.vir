@@ -2,10 +2,6 @@
 // All edges are combinational, so this is an error.
 
 // CHECK: Combinational loop detected
-// CHECK: FAILED with
-// CHECK: 1 ERROR
-// CHECK-NOT: WARNING
-// CHECK: Check failed
 
 pub mod Loop {
     wire x : Word[8]
@@ -15,3 +11,8 @@ pub mod Loop {
     y := z
     z := x
 }
+
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

@@ -114,4 +114,7 @@ mod TwoClocks {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 7 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

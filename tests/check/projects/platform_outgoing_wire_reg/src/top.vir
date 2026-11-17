@@ -27,6 +27,7 @@ pub mod Top for P {
     }
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

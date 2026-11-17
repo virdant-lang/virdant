@@ -29,6 +29,7 @@ pub mod ImplicitOn {
     out := data_buf + counter + zext(oreg) + explicit
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

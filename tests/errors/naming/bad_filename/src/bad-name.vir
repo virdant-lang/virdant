@@ -6,3 +6,7 @@
 // The error message names the file and suggests the usual fix.
 
 // CHECK: bad-name.vir: file name is not a valid package identifier
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

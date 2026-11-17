@@ -3,8 +3,6 @@
 // whose only clock arrives through a socket has a unique clock, so
 // `on` clauses are optional on its regs.
 
-// CHECK: Check OK
-
 // A `server` instantiation receives on the `cosi` channel, so
 // `link.clk` is an inward clock channel of `Receiver`.
 socket ClkBus {
@@ -23,3 +21,8 @@ pub mod Receiver {
         it := counter[1..0]
     }
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

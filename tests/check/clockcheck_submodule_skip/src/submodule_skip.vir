@@ -5,7 +5,6 @@
 // user's to fix.
 
 // CHECK: TODO: clockcheck is not yet implemented for modules with submodules; skipping
-// CHECK: Check OK
 pub mod Top {
     incoming clock : Clock
     outgoing out : Bit
@@ -27,3 +26,8 @@ mod Inner {
         it := counter[0]
     }
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

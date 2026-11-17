@@ -8,8 +8,6 @@
 //   upcast `Sync(c) <= Async`),
 // - guards, arm bodies, mux selectors, and struct fields all join.
 
-// CHECK: Check OK
-
 struct type Pair {
     hi : Word[2]
     lo : Word[2]
@@ -125,3 +123,8 @@ pub mod Unsafe {
         it := mixed
     }
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

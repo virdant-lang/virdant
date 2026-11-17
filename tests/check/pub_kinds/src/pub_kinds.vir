@@ -68,6 +68,7 @@ pub mod Top[W : Type] {
     out := r
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

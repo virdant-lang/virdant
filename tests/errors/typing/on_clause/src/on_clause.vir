@@ -38,4 +38,7 @@ mod UnresolvedClock {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 3 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

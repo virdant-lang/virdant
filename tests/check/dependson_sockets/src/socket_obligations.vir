@@ -64,6 +64,7 @@ pub mod Top {
     unused inrt.w.ack
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

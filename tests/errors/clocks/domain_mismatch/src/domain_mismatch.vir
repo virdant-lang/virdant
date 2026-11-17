@@ -96,4 +96,7 @@ mod CrossConnect {
     net_a :=: net_b
 }
 
+// CHECK: FAILED with
+// CHECK: 7 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

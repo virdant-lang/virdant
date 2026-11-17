@@ -51,6 +51,7 @@ pub mod Top {
     asic_result := asic_inst.result
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

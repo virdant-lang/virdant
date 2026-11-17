@@ -194,6 +194,7 @@ pub enum type AluOpcode {
     //> Shift right arithmetic (SRA, SRAI).
     Sra   = 16
 }
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

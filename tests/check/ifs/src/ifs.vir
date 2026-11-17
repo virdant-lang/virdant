@@ -47,6 +47,7 @@ pub mod Fine {
     out := start
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK
