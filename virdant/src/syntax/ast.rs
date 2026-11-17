@@ -383,6 +383,16 @@ impl<'p> AstNode<'p> {
             matches!(c.payload(), AstNodePayload::Ofness(_)))
     }
 
+    /// The `of`-clause node (`Ofness`) of a `Submodule` or `Socket`
+    /// instantiation, if present.
+    pub fn ofness(&self) -> Option<AstNode<'_>> {
+        if !matches!(self.payload(), AstNodePayload::Submodule(_) | AstNodePayload::Socket(_)) {
+            return None;
+        }
+        self.children().into_iter().find(|c|
+            matches!(c.payload(), AstNodePayload::Ofness(_)))
+    }
+
     pub fn path(&self) -> Option<InternedString> {
         match &self.payload {
             AstNodePayload::ExprReference => self.child(0).path(),

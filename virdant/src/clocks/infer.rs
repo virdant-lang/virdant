@@ -150,7 +150,7 @@ impl Clocking {
     /// rule between pattern bindings and `let`s.
     fn infer_reference(&mut self, node: &AstNode<'_>) -> Option<Domain> {
         if let Some(component) = self.component_analysis().component_at(node.location()) {
-            return component.domain().copied();
+            return self.component_domain(&component);
         }
         let path = node.path()?;
         let name = node.parsing().string(path);
@@ -165,7 +165,10 @@ impl Clocking {
             // the RHS of an `initial` statement is not walked for
             // references — still names a component of this module:
             // resolve it by name.
-            None => self.component_analysis().resolve(name).and_then(|component| component.domain().copied()),
+            None => self
+                .component_analysis()
+                .resolve(name)
+                .and_then(|component| self.component_domain(&component)),
         }
     }
 
@@ -175,7 +178,7 @@ impl Clocking {
         let component = self
             .component_analysis()
             .component_at(path_node.location())?;
-        component.domain().copied()
+        self.component_domain(&component)
     }
 
     fn infer_fn(&mut self, node: &AstNode<'_>) -> Option<Domain> {

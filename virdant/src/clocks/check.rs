@@ -1,17 +1,18 @@
 //! Implements the module-level clock-checking pass of the `Clocking`
-//! engine: the skip rules (submodules, `@unsafe_clocks`, single-domain
-//! fast paths), the declaration-level domain checks (`async` registers,
-//! missing `on`/`async` clauses), and the walk that establishes the
-//! expression roots handed to the `infer` pass.
+//! engine: the submodule clock binding, the skip rules
+//! (`@unsafe_clocks`, single-domain fast paths), the declaration-level
+//! domain checks (`async` registers, missing `on`/`async` clauses), and
+//! the walk that establishes the expression roots handed to the
+//! `infer` pass.
 
 use super::*;
 use bstr::{BString, ByteSlice};
-use crate::analysis::component::{Component, ComponentId, incoming_clock_ports};
-use crate::analysis::dependency::resolve_it_path_to_owned;
+use crate::analysis::component::{Component, ComponentAnalysis, ComponentId, incoming_clock_ports};
+use crate::analysis::dependency::{find_it_context, resolve_it_path_to_owned};
 use crate::common::source::Region;
 use crate::common::ComponentKind;
 use crate::db::Builder;
-use crate::diagnostics::{self, DiagnosticPayload};
+use crate::diagnostics;
 use crate::syntax::ast::{AstNode, if_arm_children, match_arm_children};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::Parsing;
@@ -36,51 +37,38 @@ impl Clocking {
 
     /// The module-level checks of one mod def.
     fn check_moddef(&mut self, builder: &mut Builder, node: &AstNode<'_>) {
-        // Modules with submodule instances: submodule clock binding is
-        // not yet implemented, so the checker cannot color these
-        // modules.  Skip entirely, with a TODO note.  The note is
-        // suppressed for the standard library (the `.vir` files shipped
-        // with the compiler): flagging library modules would put the
-        // note into every project's diagnostics.
-        if contains_submodule(node) {
-            let packages = builder.get_packages();
-            if !is_stdlib_package(packages.name(self.item.package())) {
-                self.diagnostics.push(Diagnostic::new(
-                    node.region(),
-                    DiagnosticPayload::Todo(diagnostics::Todo {
-                        message: "clockcheck is not yet implemented for modules with submodules; skipping"
-                            .into(),
-                    }),
-                ));
-            }
+        let unsafe_clocks = has_annotation(node, b"unsafe_clocks".as_bstr());
+        let clock_count = incoming_clock_ports(self.component_analysis()).len();
+        let has_submodules = contains_submodule(node);
+
+        // Submodule clock binding must run before everything else: the
+        // checks below (and the walk) see submodule-owned components
+        // through the mapped domains it produces.
+        if has_submodules {
+            self.bind_submodule_clocks(builder, node);
+        }
+
+        // A register (or memory) can never be `async`: clocked components
+        // always live on a `Sync` domain, whatever the module's clocks.
+        self.check_async_registers(node);
+
+        if unsafe_clocks {
+            // Clockchecking is disabled, but the safety net is the
+            // annotations themselves: every declared component must carry
+            // an explicit `on` or `async` clause.
+            self.flag_unclad_components(
+                node,
+                "the module is marked `@unsafe_clocks`",
+            );
         } else {
-            let unsafe_clocks = has_annotation(node, b"unsafe_clocks".as_bstr());
-            let clock_count = incoming_clock_ports(self.component_analysis()).len();
-
-            // A register (or memory) can never be `async`: clocked components
-            // always live on a `Sync` domain, whatever the module's clocks.
-            self.check_async_registers(node);
-
-            if unsafe_clocks {
-                // Clockchecking is disabled, but the safety net is the
-                // annotations themselves: every declared component must carry
-                // an explicit `on` or `async` clause.
-                self.flag_unclad_components(
-                    node,
-                    "the module is marked `@unsafe_clocks`",
-                );
-            } else if clock_count == 0 {
+            if clock_count == 0 {
                 // Zero clocks: there is no clock any component could be `Sync`
                 // on, so the full coloring has nothing to do — but that only
                 // works if every component is explicitly `async` (or
                 // Clock-typed: clocks are always `Async`).  A component left
                 // unset has no domain at all.
                 self.flag_unclad_components(node, "the module has no clocks");
-            } else if clock_count == 1 && !has_async_components(node) {
-                // Unique clock, no `async` components: the component analysis
-                // has already fixed every component's domain to
-                // `Sync(<unique clock>)`; there is nothing to mix.
-            } else {
+            } else if clock_count >= 2 {
                 // Multi-clock module: no unique clock, so nothing can be
                 // inferred and every component needs an explicit `on` (or
                 // `async`) clause.  (In a unique-clock module the unannotated
@@ -89,14 +77,134 @@ impl Clocking {
                 // clock-needing memories) without a clause were already
                 // reported as `MissingOnClause` by the component analysis; the
                 // remaining kinds are diagnosed here.
-                if clock_count >= 2 {
-                    self.flag_unclad_components(node, "the module has multiple clocks");
-                }
+                self.flag_unclad_components(node, "the module has multiple clocks");
+            }
 
+            // The single-domain fast path skips the walk: every own
+            // component is `Sync(<unique clock>)`, so no own join or
+            // driver can fail.  A module with submodule instances never
+            // takes it: the drivers crossing the module boundary must be
+            // checked against the bound parent domains.
+            let fast_path =
+                clock_count == 1 && !has_async_components(node) && !has_submodules;
+            if !fast_path {
                 // Color every subexpression of the module and check
                 // the module's drivers and connections.
                 self.skipped = false;
                 self.walk(builder, node, None, &[]);
+            }
+        }
+    }
+
+    /// Binds each submodule instance's incoming clocks, filling
+    /// `submodule_domains` with the parent-view domain of every
+    /// submodule-owned component of the module.
+    ///
+    /// Each incoming clock of a submodule — a port, or an inward channel
+    /// of one of its sockets — is a free variable in the submodule's
+    /// definition: the submodule's own clock analysis phrases its
+    /// internal `Sync` domains in those clocks.  Driving the instance's
+    /// clock port instantiates the variable: the driving expression, a
+    /// plain reference to a Clock-typed component of this module, *is*
+    /// the concrete clock, and every child component clocked by the
+    /// bound variable takes its domain.  Child components that are
+    /// `async` or `Constant` keep their domains; a child clock the
+    /// parent never drove leaves the child components clocked by it
+    /// unmapped, and so unchecked here.
+    fn bind_submodule_clocks(&mut self, builder: &mut Builder, node: &AstNode<'_>) {
+        let parsing = node.parsing();
+        let mut drivers: Vec<(AstNode<'_>, Option<BString>)> = vec![];
+        collect_driver_statements(node, &mut drivers);
+
+        for stmt in node.children() {
+            let AstNodePayload::Submodule(module) = stmt.payload() else {
+                continue;
+            };
+            let instance_name = parsing.string(module.name).to_owned();
+            let Some(ofness_node) = stmt.ofness() else {
+                continue;
+            };
+            let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
+                continue;
+            };
+            // An unresolved submodule name was already reported by the
+            // component analysis when it registered the instance's ports.
+            let packages = builder.get_packages();
+            let submodule_name = parsing.string(ofness.name);
+            let qualifier =
+                ofness.package.and_then(|pkg| packages.id(parsing.string(pkg)));
+            let Some(submodule_symbol) = crate::analysis::package::resolve_item_reference(
+                builder,
+                submodule_name,
+                self.item.package(),
+                qualifier,
+            ) else {
+                continue;
+            };
+            let child_analysis = builder.get_component_analysis(submodule_symbol.id());
+
+            // The instance's clock-binding sites: drivers whose target is
+            // one of the instance's incoming Clock ports.
+            let mut bindings: IndexMap<ComponentId, Domain> = IndexMap::new();
+            for (driver, context) in &drivers {
+                let Some(target) = driver.target() else { continue };
+                let target = resolve_it_path_to_owned(
+                    parsing.string(target),
+                    context.as_ref().map(|ctx| ctx.as_bstr()),
+                );
+                let Some(target_component) =
+                    self.component_analysis().resolve(target.as_bstr())
+                else {
+                    continue;
+                };
+                if !is_instance_clock_port(&target_component) {
+                    continue;
+                }
+                let Some(rhs) = driver.driver() else { continue };
+                if let Some(domain) = clock_identity(
+                    &rhs,
+                    parsing,
+                    context.as_ref().map(|ctx| ctx.as_bstr()),
+                    self.component_analysis(),
+                ) {
+                    // A port driven more than once keeps its first
+                    // binding; conflicting re-drives are driver
+                    // analysis's business, not the clock checker's.
+                    bindings.entry(target_component.id()).or_insert(domain);
+                }
+            }
+
+            // Map each child component with a declared domain onto its
+            // parent-side instance path; components with no parent-side
+            // counterpart (a submodule instance's own internals) drop out
+            // when the resolution fails.
+            let mut instance_prefix = bstr::BString::from(instance_name);
+            instance_prefix.push(b'.');
+            for (child_path, child_component) in child_analysis.components() {
+                let Some(child_domain) = child_component.domain() else { continue };
+                let mut parent_path = instance_prefix.clone();
+                parent_path.extend_from_slice(&child_path);
+                let Some(parent_component) =
+                    self.component_analysis().resolve(parent_path.as_bstr())
+                else {
+                    continue;
+                };
+                let mapped = match child_domain {
+                    Domain::Async | Domain::Constant => Some(*child_domain),
+                    Domain::Sync(child_clock) => child_analysis
+                        .component(*child_clock)
+                        .map(|clock| clock.path())
+                        .and_then(|clock_path| {
+                            let mut port_path = instance_prefix.clone();
+                            port_path.extend_from_slice(&clock_path);
+                            self.component_analysis()
+                                .resolve(port_path.as_bstr())
+                                .and_then(|port| bindings.get(&port.id()).copied())
+                        }),
+                };
+                if let Some(domain) = mapped {
+                    self.submodule_domains.insert(parent_component.id(), domain);
+                }
             }
         }
     }
@@ -286,14 +394,10 @@ impl Clocking {
         let Some(target) = self.driver_target(node, context) else {
             return;
         };
-        // Submodule-owned components are bound inside their owning
-        // submodule, not by this module's coloring.
-        if target.submodule_owned() {
-            return;
-        }
-        // An undetermined declared domain was already diagnosed
-        // (`MissingOnClause` / `MissingDomainClause`); do not cascade.
-        let Some(target_domain) = target.domain().copied() else {
+        // A submodule-owned target takes its bound parent domain; an
+        // undetermined domain (unbound instance clock, missing clause)
+        // was already diagnosed — do not cascade.
+        let Some(target_domain) = self.component_domain(&target) else {
             return;
         };
         let target_name = target.path();
@@ -388,11 +492,11 @@ impl Clocking {
         let lhs_domain = self
             .component_analysis()
             .component_at(lhs.location())
-            .and_then(|component| component.domain().copied());
+            .and_then(|component| self.component_domain(component));
         let rhs_domain = self
             .component_analysis()
             .component_at(rhs.location())
-            .and_then(|component| component.domain().copied());
+            .and_then(|component| self.component_domain(component));
         if let (Some(Domain::Sync(lhs_clock)), Some(Domain::Sync(rhs_clock))) =
             (lhs_domain, rhs_domain)
             && lhs_clock != rhs_clock
@@ -406,16 +510,6 @@ impl Clocking {
             ));
         }
     }
-}
-
-/// The `.vir` packages shipped with the compiler (everything in
-/// `lib/`).  Compiler-owned code is not the user's to fix, so
-/// user-facing notes (the submodule skip TODO) are suppressed there.
-const STDLIB_PACKAGES: &[&[u8]] =
-    &[b"builtin", b"ice40", b"virt", b"xilinx"];
-
-fn is_stdlib_package(name: &bstr::BStr) -> bool {
-    STDLIB_PACKAGES.contains(&name.as_bytes())
 }
 
 /// The `Component` statements at the top level of a mod def.
@@ -501,4 +595,57 @@ fn has_annotation(node: &AstNode<'_>, name: &bstr::BStr) -> bool {
             .map(|annotation_name| parsing.string(annotation_name) == name)
             .unwrap_or(false)
     })
+}
+
+/// Collects every driver statement of the module (it-blocks, socket
+/// it-blocks, and component forwarding blocks alike), each with its
+/// `it` context as `find_it_context` resolves it.
+fn collect_driver_statements<'p>(
+    node: &AstNode<'p>,
+    out: &mut Vec<(AstNode<'p>, Option<BString>)>,
+) {
+    if matches!(
+        node.payload(),
+        AstNodePayload::Driver(_) | AstNodePayload::InitialDriver | AstNodePayload::IndexedDriver(_)
+    ) {
+        out.push((node.clone(), find_it_context(node)));
+        return;
+    }
+    for child in node.children() {
+        collect_driver_statements(&child, out);
+    }
+}
+
+/// Whether `component` is one of a submodule instance's incoming clock
+/// ports: a submodule-owned incoming component typed `Clock` — an
+/// instance's clock port, or the inward Clock channel of one of the
+/// instance's sockets.
+fn is_instance_clock_port(component: &Component) -> bool {
+    component.submodule_owned()
+        && component.kind() == Some(ComponentKind::Incoming)
+        && component.typ().as_ref() == Some(&Type::Clock)
+}
+
+/// The domain the driving expression `rhs` binds an instance's clock
+/// port to: a plain reference to a Clock-typed component of this
+/// module *is* the concrete clock, keyed by that component.  Anything
+/// else leaves the clock unbound (`None`), and the child components
+/// clocked by it are not checked in this module.  (A non-clock at a
+/// clock port is a type error, reported by the typechecker.)
+fn clock_identity(
+    rhs: &AstNode<'_>,
+    parsing: &Parsing,
+    context: Option<&bstr::BStr>,
+    component_analysis: &ComponentAnalysis,
+) -> Option<Domain> {
+    if !matches!(rhs.payload(), AstNodePayload::ExprReference) {
+        return None;
+    }
+    let path = rhs.path()?;
+    let name = resolve_it_path_to_owned(parsing.string(path), context);
+    let component = component_analysis.resolve(name.as_bstr())?;
+    if component.typ().as_ref() != Some(&Type::Clock) {
+        return None;
+    }
+    Some(Domain::sync(component.id()))
 }

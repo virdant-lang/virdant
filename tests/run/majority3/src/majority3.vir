@@ -12,19 +12,26 @@ import virt
 
 //> Majority of three bits: `1` when at least two inputs are `1`.
 mod Majority3 {
+    //> Vestigial clock: the module is purely combinational, but its
+    //> output is sampled by the harness's clocked logic, so it lives in
+    //> the parent's clock domain.
+    incoming clock : Clock
+
     //> First operand.
-    incoming a : Bit async
+    incoming a : Bit
 
     //> Second operand.
-    incoming b : Bit async
+    incoming b : Bit
 
     //> Third operand.
-    incoming c : Bit async
+    incoming c : Bit
 
     //> Majority: `a && b`, `a && c`, or `b && c` makes it `1`.
-    outgoing out : Bit async dependson a, b, c {
+    outgoing out : Bit dependson a, b, c {
         it := (a && b) || (a && c) || (b && c)
     }
+
+    unused clock
 }
 
 pub mod Majority3Test for virt::Virt {
@@ -41,6 +48,7 @@ pub mod Majority3Test for virt::Virt {
     }
 
     mod maj of Majority3 {
+        it.clock := clock
         it.a := vec_a
         it.b := vec_b
         it.c := vec_c
