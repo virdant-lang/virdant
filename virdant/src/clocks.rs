@@ -33,6 +33,12 @@ pub struct Clocking {
     /// expr root) is inferred — and diagnosed — exactly once.
     domains: IndexMap<AstNodeId, Option<Domain>>,
     in_progress: IndexSet<AstNodeId>,
+    /// The next fresh abstract clock variable for generator call
+    /// sites: `asclock(e)` produces a clock value on its own fresh
+    /// clock class; `0` is reserved for the
+    /// module-level clock variables (a flexible module's `α`, an
+    /// unbound instance clock).
+    next_var: u32,
     /// Guard domains already checked against a driven component: a
     /// statement-position guard gates every driver in its arms, so
     /// without this memo one bad guard would be reported once per
@@ -57,6 +63,7 @@ impl Clocking {
             component_analysis,
             domains: IndexMap::new(),
             in_progress: IndexSet::new(),
+            next_var: 1,
             guard_checks: IndexSet::new(),
             submodule_domains: IndexMap::new(),
             diagnostics: vec![],
@@ -105,21 +112,21 @@ impl Clocking {
         self.domains.insert(node_id, None);
     }
 
-    /// Renders a domain for a diagnostic, resolving the clock of a
-    /// `Sync` domain to its component path.
+    /// Renders a domain for a diagnostic, resolving a concrete clock
+    /// class to its canonical source's path.  An abstract clock
+    /// variable cannot be resolved: it renders as `<?clock?>`.
     pub(crate) fn render_domain(&self, domain: &Domain) -> BString {
         match domain {
             Domain::Sync(clock) => {
-                let path = self
-                    .component_analysis
-                    .component(*clock)
+                let path = clock
+                    .class()
+                    .and_then(|clock| self.component_analysis.component(clock))
                     .map(|component| component.path())
                     .unwrap_or_else(|| BString::from("<?clock?>"));
                 format!("clocked by `{}`", path).into()
             }
             Domain::Async => BString::from("async"),
             Domain::Constant => BString::from("constant"),
-            Domain::Flexible => BString::from("flexible (clockless)"),
         }
     }
 

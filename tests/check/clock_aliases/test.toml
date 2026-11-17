@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Clock identity survives aliasing: two spellings of one clock are one class, so clocked data moves freely across the alias, a `dependson`-declared clock buffer aliases cleanly, and a clockless submodule's outputs unify with the reader's clock."
+filecheck = "src/clock_aliases.vir"

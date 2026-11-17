@@ -85,6 +85,16 @@ pub enum DiagnosticPayload {
     /// component cannot accept: the driving domain must upcast to the
     /// target's declared domain (`Constant <= Sync(c) <= Async`).
     DriverDomainMismatch(DriverDomainMismatch),
+    /// A Clock-typed target was driven by anything other than an
+    /// unconditional plain reference to a clock: a guarded driver, or a
+    /// driving expression that is not a plain clock reference.  Clocks
+    /// are defined, not assigned.
+    ConditionalClockDriver(ConditionalClockDriver),
+    /// An outgoing Clock-typed port is driven from an incoming clock
+    /// port without declaring the provenance: it must carry
+    /// `dependson <clock>` so the parent's checker can identify the
+    /// exported clock.
+    MissingClockDependson(MissingClockDependson),
     /// A `driver` statement used the wrong driver type.
     /// Eg, a `reg` used `:=` or a `wire` used `<=`.
     WrongDriverType(WrongDriverType),
@@ -483,6 +493,21 @@ pub struct DriverDomainMismatch {
     pub target: BString,
     pub target_domain: BString,
     pub expr_domain: BString,
+}
+
+/// A Clock-typed target was driven by anything other than an
+/// unconditional plain reference to a clock.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConditionalClockDriver {
+    pub target: BString,
+}
+
+/// An outgoing Clock-typed port aliases an incoming clock port without
+/// declaring `dependson <clock>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingClockDependson {
+    pub component: BString,
+    pub clock: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1098,6 +1123,18 @@ impl Diagnostic {
                     d.component,
                 ).into()
             }
+            DiagnosticPayload::ConditionalClockDriver(d) => {
+                format!(
+                    "`{}` is a clock and may only be defined by an unconditional reference to a clock: clocks are defined, not assigned",
+                    d.target,
+                ).into()
+            }
+            DiagnosticPayload::MissingClockDependson(d) => {
+                format!(
+                    "outgoing clock `{}` is driven from `{}`; declare `dependson {}`",
+                    d.component, d.clock, d.clock,
+                ).into()
+            }
             DiagnosticPayload::WrongDriverType(d) => {
                 let driver_type_str = match d.expected_driver_type {
                     DriverType::Continuous => ":=",
@@ -1548,6 +1585,8 @@ impl Diagnostic {
             DiagnosticPayload::AsyncRegister(_) => "AsyncRegister",
             DiagnosticPayload::FlexibleInstanceClockConflict(_) => "FlexibleInstanceClockConflict",
             DiagnosticPayload::DriverDomainMismatch(_) => "DriverDomainMismatch",
+            DiagnosticPayload::ConditionalClockDriver(_) => "ConditionalClockDriver",
+            DiagnosticPayload::MissingClockDependson(_) => "MissingClockDependson",
             DiagnosticPayload::WrongDriverType(_) => "WrongDriverType",
             DiagnosticPayload::NoRegDrivers(_) => "NoRegDrivers",
             DiagnosticPayload::NoDrivers(_) => "NoDrivers",
@@ -1706,6 +1745,7 @@ from_diagnostic! {
     DuplicateSlot, UnresolvedPackage, InvalidPackageName, UnresolvedItem, UnresolvedType, MissingOnClause,
     PackageNotImported,
     RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
+    ConditionalClockDriver, MissingClockDependson,
     MemoryElementNotPowerOf2Word, MemoryDepthNotLiteral, MemoryDepthNotPowerOf2, MemoryIndexWidth,
     MemoryIndexOutOfRange, MemoryWriteOutsideOnRegion, OverlappingMemoryWrites,
     MemoryAssignInsteadOfLassign, MemoryUsedWithoutIndex, IndexedDriverNotMemory,

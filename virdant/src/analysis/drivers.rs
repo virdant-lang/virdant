@@ -897,17 +897,26 @@ fn collect_block_drivers(
 
                 // The region's clock must name the memory's clock
                 // slot.  An unresolved slot (no clause, zero or ≥2
-                // clocks) is already reported at the declaration.
+                // clocks) is already reported at the declaration.  The
+                // slot is a clock class stored as its canonical
+                // source's path: the region's clock names the slot's
+                // class — directly, or through any alias of it.
                 if let Some(mem_clock) = mem_component.clock() {
-                    let region_clock = clock_node
+                    let region_clock_class = clock_node
                         .path()
-                        .map(|interned| stmt.parsing.string(interned).to_owned());
-                    if region_clock != Some(mem_clock.clone()) {
+                        .map(|interned| stmt.parsing.string(interned).to_owned())
+                        .and_then(|written| {
+                            component_analysis.clock_canonical_by_path(written.as_bstr())
+                        });
+                    let mem_clock_class = component_analysis
+                        .resolve(mem_clock.as_bstr())
+                        .and_then(|clock| component_analysis.clock_canonical(clock.id()));
+                    if region_clock_class != mem_clock_class {
                         diagnostics.push(Diagnostic::new(
                             clock_node.region(),
                             diagnostics::MemoryOnRegionClockMismatch {
                                 component: ctx.to_owned(),
-                                clock: mem_clock,
+                                clock: mem_clock.clone(),
                             },
                         ));
                     }

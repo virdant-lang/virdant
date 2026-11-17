@@ -1,0 +1,49 @@
+// Clock identity survives aliasing (CLOCKCHECKING.md, *Clock
+// classes*): two spellings of one clock are one clock class, so
+// clocked data moves freely across the alias.  A clock buffer's
+// output is the same clock as its input when the provenance is
+// declared.  A clockless submodule's outputs unify with whatever
+// clock reads them.
+
+pub mod ClkBuf {
+    incoming clk_in : Clock
+    outgoing clk_out : Clock dependson clk_in {
+        it := clk_in
+    }
+}
+
+pub mod Top {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+
+    mod buf of ClkBuf
+    buf.clk_in := clk_a
+    unused buf.clk_out
+
+    // An alias of `clk_a`: same clock class.
+    wire clk_a2 : Clock {
+        it := clk_a
+    }
+
+    // Clocked by the alias; the class is `clk_a`'s.
+    reg ra : Word[4] on clk_a2 {
+        initial it <= 0w4
+        it <= it + 1w4
+    }
+
+    reg rb : Word[4] on clk_b {
+        initial it <= 0w4
+        it <= it - 1w4
+    }
+
+    outgoing oa : Word[4] on clk_a {
+        it := ra
+    }
+
+    outgoing ob : Word[4] on clk_b {
+        it := rb
+    }
+}
+
+// CHECK: Check OK
+// CHECK-NOT: ERROR

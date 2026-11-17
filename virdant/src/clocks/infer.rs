@@ -189,12 +189,15 @@ impl Clocking {
         };
         let fn_name = node.parsing().string(ofness.name);
         match fn_name.as_bytes() {
-            // `asclock` produces a clock: `Async`, independent of its
-            // subject's domain.
+            // `asclock` produces a clock: a fresh clock class of its
+            // own (a generating call site is a clock source),
+            // independent of its subject's domain.
             b"asclock" => {
                 let subject = node.subject()?;
                 self.infer(&subject);
-                Some(Domain::Async)
+                let var = self.next_var;
+                self.next_var += 1;
+                Some(Domain::sync_var(var))
             }
             _ => {
                 let parts = children[1..]

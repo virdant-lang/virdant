@@ -41,6 +41,7 @@ use bstr::ByteSlice;
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::component::ComponentAnalysis;
+use crate::types::Type;
 use crate::analysis::dependency::EdgeKind;
 use crate::analysis::symbols::{Symbol, SymbolId, SymbolKind};
 use crate::common::source::Region;
@@ -1022,6 +1023,13 @@ fn check_exhaustiveness_and_unused(
             // Socket channels are exhaustiveness-checked below, against
             // the full incoming universe via their socketdef obligations
             // and `where` clauses.
+            continue;
+        }
+        // A Clock-typed outgoing port's only dependency is the clock it
+        // is defined from: its provenance is the clock checker's
+        // business (`clock-provenance`), not the data `dependson`
+        // machinery's.
+        if component.typ().as_ref() == Some(&Type::Clock) {
             continue;
         }
 

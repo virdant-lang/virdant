@@ -1,0 +1,5 @@
+[project]
+name = "clock_aliases"
+
+[prog]
+top = "clock_aliases::Top"

@@ -1,0 +1,5 @@
+[project]
+name = "clock_classes"
+
+[prog]
+top = "clock_classes::GuardedClock"

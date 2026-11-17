@@ -14,6 +14,7 @@ use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::drivers::{Driver, DriverAnalysis};
 use crate::analysis::symbols::SymbolId;
 use crate::common::{ComponentKind, DriverType};
+use crate::types::Type;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
 use crate::syntax::ast::{AstNode, AstNodeId};
@@ -83,6 +84,19 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
             match drivers {
                 None => {
                     let region = builder.get_location_region(component.location());
+                    // An outgoing Clock-typed port with no definition
+                    // is an undriven clock source: it originates a fresh
+                    // clock rather than aliasing one, so the no-driver
+                    // rule does not apply to it (`clock-provenance`).
+                    if component.typ().as_ref() == Some(&Type::Clock)
+                        && matches!(
+                            component.kind(),
+                            Some(ComponentKind::Outgoing) | Some(ComponentKind::OutgoingWire)
+                        )
+                        && component_analysis.clock_canonical(component.id()).is_none()
+                    {
+                        continue;
+                    }
                     let no_drivers_diag = match component.kind() {
                         Some(ComponentKind::Reg) | Some(ComponentKind::OutgoingReg) => {
                             Some(DiagnosticPayload::NoRegDrivers(diagnostics::NoRegDrivers {

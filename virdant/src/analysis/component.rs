@@ -29,19 +29,29 @@ pub struct ComponentAnalysis {
     moddef: SymbolId,
     components: Vec<(BString, Component)>,
     diagnostics: Vec<Diagnostic>,
-    /// The module's implicit (unique) clock.  A module's clocks are its
-    /// incoming clock ports: its own `incoming` components typed the
-    /// builtin `Clock`, plus the inward (receiving) channels of its own
-    /// socket instances typed `Clock`.  When there is *exactly one*
-    /// such port, `reg`/`outgoing reg` components may omit their
-    /// `on <CLOCK>` clause, and it is as if the user had written
-    /// `on <the_one_clock>`; every component without an explicit domain
-    /// clause is implicitly clocked by it.  `None` when the module has
-    /// zero or more than one incoming clock port (or is not a mod
-    /// definition).  Submodule instance ports, the channels of
-    /// submodule instances' sockets, and platform-synthesized ports do
-    /// not count.
+    /// The module's unique clock: the canonical source of its single
+    /// sourced clock class, when there is exactly one.
+    /// A module's clock sources are its incoming clock ports (its own
+    /// declared `incoming` components typed the builtin `Clock`, and
+    /// the inward (receiving) channels of its own socket instances),
+    /// and the clock output ports of the submodule and `ext mod`
+    /// instances it registers.  When there is *exactly one* sourced
+    /// class, `reg`/`outgoing reg` components may omit their
+    /// `on <CLOCK>` clause, and every local component without an
+    /// explicit domain clause is clocked by the unique clock.  `None`
+    /// when the module has zero or more than one sourced class (or is
+    /// not a mod definition).
     implicit_clock: Option<ComponentId>,
+
+    /// The canonical source of every sourced clock class of the
+    /// module's view, one entry per class.
+    clock_sources: Vec<ComponentId>,
+
+    /// Maps every sourced Clock-typed component of the module's view to
+    /// its class's canonical source.  A Clock-typed component absent
+    /// from the map has a *sourceless* class — a clock wire the module
+    /// never defines (driver analysis diagnoses that).
+    clock_canonical: IndexMap<ComponentId, ComponentId>,
 
     /// The platform this mod def is bound to via its `for` clause, when
     /// the clause resolved to a platform.  Set when platform ports are
@@ -280,10 +290,31 @@ impl ComponentAnalysis {
         self.diagnostics.clone()
     }
 
-    /// The module's implicit clock, if it declares exactly one
-    /// Clock-typed component (see the field docs).
+    /// The module's unique clock, if it has exactly one sourced clock
+    /// class (see the field docs).
     pub fn implicit_clock(&self) -> Option<ComponentId> {
         self.implicit_clock
+    }
+
+    /// The module's clock count: the number of sourced clock classes.
+    /// A module may acquire clocks internally — from
+    /// the clock outputs of its instances — and such clocks count.
+    pub fn clock_count(&self) -> usize {
+        self.clock_sources.len()
+    }
+
+    /// The canonical source of the clock class `component_id` denotes,
+    /// or `None` when the component is not Clock-typed or its class has
+    /// no source.
+    pub fn clock_canonical(&self, component_id: ComponentId) -> Option<ComponentId> {
+        self.clock_canonical.get(&component_id).copied()
+    }
+
+    /// The canonical source of the clock class denoted by the component
+    /// at `path`, or `None`.
+    pub fn clock_canonical_by_path(&self, path: &BStr) -> Option<ComponentId> {
+        self.resolve(path)
+            .and_then(|component| self.clock_canonical(component.id()))
     }
 
     /// The platform bound by the module's `for` clause, if it resolved
@@ -465,6 +496,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
         components: vec![],
         diagnostics: vec![],
         implicit_clock: None,
+        clock_sources: vec![],
+        clock_canonical: IndexMap::new(),
         platform: None,
         references: IndexMap::new(),
     };
@@ -544,12 +577,16 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 };
                 let component_kind = component.kind;
                 let is_async = component.is_async;
-                // Only Clock-typed and `async` components get a
-                // declaration-fixed domain; see the post-pass below.
+                // `async` components get a declaration-fixed domain;
+                // Clock-typed components are clocked by their own clock
+                // classes, resolved in the post-pass below (see
+                // `compute_clock_classes`).
                 let mut domain = None;
-                if typ.as_ref() == Some(&Type::Clock) || component.is_async {
+                if component.is_async {
                     domain = Some(Domain::Async);
-                } else if stmt.on_clause().is_some() {
+                } else if typ.as_ref() != Some(&Type::Clock)
+                    && stmt.on_clause().is_some()
+                {
                     ons_to_resolve.push(id);
                 }
                 let component = Component {
@@ -845,19 +882,21 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 };
                                 // Domain rules per the socket's clock
                                 // structure (see
-                                // `check_socketdef_domains`): async/clock
-                                // → `Async`, explicit `on` → deferred,
-                                // else flexible (0 clocks), implicit (1),
+                                // `check_socketdef_domains`): `async` →
+                                // `Async`, Clock-typed → the channel's
+                                // own clock class (post-pass), explicit
+                                // `on` → deferred, else a clock variable
+                                // (0 Clock channels), implicit (1),
                                 // unclad (≥2).
-                                let domain = if typ.as_ref() == Some(&Type::Clock)
-                                    || channel.is_async
-                                {
+                                let domain = if channel.is_async {
                                     Some(Domain::Async)
+                                } else if typ.as_ref() == Some(&Type::Clock) {
+                                    None
                                 } else if channel_stmt.on_clause().is_some() {
                                     None
                                 } else {
                                     match socket_clock_count {
-                                        0 => Some(Domain::Flexible),
+                                        0 => Some(Domain::sync_var(0)),
                                         1 => {
                                             deferred_socket_clocks.push((
                                                 id,
@@ -1013,16 +1052,20 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         Some(ComponentKind::Incoming)
                     };
                     // Domain rules per the socket's clock structure
-                    // (see `check_socketdef_domains`): async/clock →
-                    // `Async`, explicit `on` → deferred, else flexible
-                    // (0 clocks), implicit (1), unclad (≥2).
-                    let domain = if typ.as_ref() == Some(&Type::Clock) || channel.is_async {
+                    // (see `check_socketdef_domains`): `async` →
+                    // `Async`, Clock-typed → the channel's own clock
+                    // class (post-pass), explicit `on` → deferred, else
+                    // a clock variable (0 Clock channels), implicit
+                    // (1), unclad (≥2).
+                    let domain = if channel.is_async {
                         Some(Domain::Async)
+                    } else if typ.as_ref() == Some(&Type::Clock) {
+                        None
                     } else if socket_stmt.on_clause().is_some() {
                         None
                     } else {
                         match socket_clock_count {
-                            0 => Some(Domain::Flexible),
+                            0 => Some(Domain::sync_var(0)),
                             1 => {
                                 deferred_socket_clocks
                                     .push((id, unique_clock_path.clone().unwrap()));
@@ -1061,193 +1104,6 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 }
             }
             _ => (),
-        }
-    }
-
-    // Resolve the implicit clock now that every component has been
-    // walked and registered: count the module's incoming clock ports
-    // (see `incoming_clock_ports`) and take the unique one, when there
-    // is exactly one.  With exactly one incoming clock port, regs may
-    // omit their `on` clause and are implicitly clocked by it;
-    // otherwise every reg still requires an explicit `on` clause.
-    let clock_count = incoming_clock_ports(&component_analysis).len();
-    let implicit_clock_id = resolve_unique_clock(&component_analysis);
-    component_analysis.implicit_clock = implicit_clock_id;
-    // Under `@unsafe_clocks`, an explicit `on` clause is never
-    // redundant: omitting it is a `MissingDomainClause` error, so the
-    // clause is load-bearing even when it names the unique clock.
-    let has_unsafe_clocks = item_ast.annotations().into_iter().any(|annotation| {
-        matches!(
-            annotation.payload(),
-            AstNodePayload::Annotation(annotation)
-                if parsing.string(annotation.name).as_bytes() == b"unsafe_clocks"
-        )
-    });
-    if clock_count == 1 {
-        let implicit_clock_path = implicit_clock_id
-            .and_then(|id| component_analysis.component(id))
-            .map(|component| component.path());
-        // An explicit `on` clause naming the module's unique clock is
-        // redundant: omitting it has exactly the same meaning — on a
-        // `reg` because the implicit clock covers it, and on every other
-        // kind because the clause is inert.  An `on` clause referencing
-        // anything else (eg, a submodule's clock output) is load-bearing
-        // on a reg and stays silent.
-        if !has_unsafe_clocks {
-        for (component, region, written_clock) in written_ons {
-            if Some(&written_clock) == implicit_clock_path.as_ref() {
-                component_analysis.diagnostics.push(Diagnostic::new(
-                    region,
-                    diagnostics::RedundantOnClause { component },
-                ));
-            }
-        }
-        }
-    } else {
-        for (component, region) in regs_without_on {
-            component_analysis.diagnostics.push(Diagnostic::new(
-                region,
-                diagnostics::MissingOnClause { component },
-            ));
-        }
-    }
-
-    // Resolve each `memory`'s clock slot, exactly
-    // like a `reg`'s: an explicit `on <CLOCK>` clause wins; otherwise
-    // the module's unique `Clock` covers it; otherwise the slot is
-    // unresolved (`MissingOnClause` was reported above) and memory
-    // writes report `MemoryWriteOutsideOnRegion`.
-    {
-        let implicit_clock_path = component_analysis
-            .implicit_clock()
-            .and_then(|id| component_analysis.component(id))
-            .map(|component| component.path());
-        for (_path, component) in component_analysis.components.iter_mut() {
-            if component.kind != Some(ComponentKind::Memory) {
-                continue;
-            }
-            let decl = parsing.ast_node(component.location().ast_node_id());
-            let clock = match decl.clock() {
-                Some(clock_node) => clock_node
-                    .path()
-                    .map(|interned| parsing.string(interned).to_owned()),
-                None => implicit_clock_path.clone(),
-            };
-            component.clock = clock;
-        }
-        // Resolve each `on <CLOCK>` clause to the clock component's
-        // id, re-reading the path from the declaration's AST node.
-        // In a zero-clock module the clause has no clocks to name and
-        // the domain stays unset (the clock checker diagnoses it).
-        if clock_count > 0 {
-            for &owner_id in &ons_to_resolve {
-                let clock_id = component_analysis
-                    .component(owner_id)
-                    .map(|component| component.location.ast_node_id())
-                    .and_then(|ast_node_id| {
-                        let decl = parsing.ast_node(ast_node_id);
-                        decl.on_clause()
-                            .and_then(|clock_node| clock_node.path())
-                    })
-                    .and_then(|interned| {
-                        component_analysis.resolve(parsing.string(interned))
-                    })
-                    .map(|clock| clock.id());
-                if let Some(clock_id) = clock_id {
-                    if let Some((_, component)) = component_analysis
-                        .components
-                        .iter_mut()
-                        .find(|(_, component)| component.id == owner_id)
-                    {
-                        component.domain = Some(Domain::sync(clock_id));
-                    }
-                }
-            }
-        }
-        // Channels implicitly `on` a single-Clock-channel socket's
-        // unique Clock channel: resolve the kept instance paths to the
-        // clock channel's component id.  (Before unique-clock inference,
-        // so the socket's clock — not the module's — decides.)
-        for (component_id, clock_path) in &deferred_socket_clocks {
-            let clock_id = component_analysis
-                .resolve(clock_path.as_bstr())
-                .filter(|clock| clock.typ().as_ref() == Some(&Type::Clock))
-                .map(|clock| clock.id());
-            if let Some(clock_id) = clock_id
-                && let Some((_, component)) = component_analysis
-                    .components
-                    .iter_mut()
-                    .find(|(_, component)| component.id == *component_id)
-            {
-                component.domain = Some(Domain::sync(clock_id));
-            }
-        }
-
-        // Unique-clock inference: every own component whose domain is
-        // still unset after its declaration and any `on` clause — the
-        // declared components and the channels of the module's own
-        // sockets alike — is clocked by the module's unique clock.
-        // (Components whose declaration fixed `Async`, and `on`
-        // clauses resolved above, keep those.)  Domains left as `None`
-        // — the submodule-owned ports and channels, and every
-        // component of a zero- or multi-clock module — are the clock
-        // checker's business.
-        if let Some(implicit_clock_id) = component_analysis.implicit_clock() {
-            for (_, component) in component_analysis.components.iter_mut() {
-                if component.submodule_owned {
-                    continue;
-                }
-                if component.domain.is_none() {
-                    component.domain = Some(Domain::sync(implicit_clock_id));
-                }
-            }
-        }
-
-        // Flexible zero-clock inference: with no incoming clocks and
-        // no `async` component, every still-unset own component is
-        // `Flexible` — the clock checker resolves the module per
-        // instantiation site.  (Regs/memories already reported
-        // `MissingOnClause`, so a flexible module is combinational.)
-        let has_async_component = item_ast.children().into_iter().any(|child| {
-            matches!(
-                child.payload(),
-                AstNodePayload::Component(payload) if payload.is_async
-            )
-        });
-        if clock_count == 0 && !has_async_component {
-            for (_, component) in component_analysis.components.iter_mut() {
-                if component.submodule_owned {
-                    continue;
-                }
-                if component.domain.is_none() {
-                    component.domain = Some(Domain::Flexible);
-                }
-            }
-        }
-
-        // `on <CLOCK>` clauses written on synthesized platform ports and
-        // on socketdef channels resolve here, once every component of
-        // the module — including the named clocks — is registered: the
-        // first candidate naming a Clock-typed component wins.  A clause
-        // naming none leaves the port's domain unset (the checker's
-        // unclad rules apply).
-        for (component_id, candidates) in &deferred_ons {
-            let clock_id = candidates
-                .iter()
-                .find_map(|clock_path| {
-                    component_analysis
-                        .resolve(clock_path.as_bstr())
-                        .filter(|clock| clock.typ().as_ref() == Some(&Type::Clock))
-                        .map(|clock| clock.id())
-                });
-            if let Some(clock_id) = clock_id
-                && let Some((_, component)) = component_analysis
-                    .components
-                    .iter_mut()
-                    .find(|(_, component)| component.id == *component_id)
-            {
-                component.domain = Some(Domain::sync(clock_id));
-            }
         }
     }
 
@@ -1330,6 +1186,289 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
         }
     }
 
+    // Clock classes: resolve every
+    // Clock-typed component in the module's view to the canonical
+    // source of its class — the incoming clock port, instance clock
+    // output, or generator call that introduces the clock identity —
+    // or to nothing when its class has no source (a clock wire the
+    // module never defines; driver analysis diagnoses that).  The
+    // equivalence relation is generated by the *sources* (each
+    // incoming clock port, instance clock output, and generating
+    // builtin is a source of its own; distinct sources are distinct
+    // clocks however the platform ultimately wires them, so a module's
+    // clock structure never depends on its instantiation context) and
+    // by *definitions*: an unconditional driver whose target is a
+    // Clock-typed component and whose driving expression is a plain
+    // reference to a Clock-typed thing asserts the two are the same
+    // clock.  A guarded driver is an assignment, not a definition, and
+    // contributes nothing (it is `ConditionalClockDriver`'s business).
+    let clock_classes = compute_clock_classes(&item_ast, &component_analysis);
+    let clock_count = clock_classes.sources.len();
+    // The module's unique clock: the single sourced class's source,
+    // when there is exactly one.  It may arise from any kind of source
+    // — an incoming clock port, an instance's clock output — and it
+    // needs no naming: local components may omit their `on` clause and
+    // are clocked by it anyway.
+    let implicit_clock_id = if clock_count == 1 {
+        Some(clock_classes.sources[0])
+    } else {
+        None
+    };
+    component_analysis.implicit_clock = implicit_clock_id;
+    component_analysis.clock_sources = clock_classes.sources.clone();
+    component_analysis.clock_canonical = clock_classes.canonical.clone();
+
+    // Clock provenance: an outgoing Clock-typed port declares whether it
+    // aliases an incoming clock (`dependson <clock>`) or originates a
+    // fresh clock (no `dependson`, no definition).  A visible
+    // definition rooted at an incoming clock port without the
+    // declaration is reported here.
+    check_clock_provenance(&parsing, &item_ast, &mut component_analysis);
+
+    // Under `@unsafe_clocks`, an explicit `on` clause is never
+    // redundant: omitting it is a `MissingDomainClause` error, so the
+    // clause is load-bearing even when it names the unique clock.
+    let has_unsafe_clocks = item_ast.annotations().into_iter().any(|annotation| {
+        matches!(
+            annotation.payload(),
+            AstNodePayload::Annotation(annotation)
+                if parsing.string(annotation.name).as_bytes() == b"unsafe_clocks"
+        )
+    });
+
+    // Every Clock-typed component is clocked by the very class it
+    // denotes: its domain is its class's canonical source.  An
+    // instance's unbound incoming clock port is the instance's abstract
+    // clock variable — never sourced, never equal to a concrete class.
+    let mut clock_domains: Vec<(ComponentId, Option<Domain>)> = vec![];
+    for (_, component) in &component_analysis.components {
+        if component.typ.as_ref() != Some(&Type::Clock) {
+            continue;
+        }
+        let domain = match component_analysis.clock_canonical.get(&component.id) {
+            Some(source) => Some(Domain::sync(*source)),
+            None if component.submodule_owned
+                && component.kind == Some(ComponentKind::Incoming) =>
+            {
+                // Unbound instance clock port: the instance's abstract
+                // clock variable.  No definition binds it, so only
+                // guard comparisons can reach this domain, and they
+                // fail.
+                Some(Domain::sync_var(0))
+            }
+            None => None,
+        };
+        clock_domains.push((component.id, domain));
+    }
+    for (component_id, domain) in clock_domains {
+        if let Some((_, component)) = component_analysis
+            .components
+            .iter_mut()
+            .find(|(_, component)| component.id == component_id)
+        {
+            component.domain = domain;
+        }
+    }
+
+    if clock_count == 1 && !has_unsafe_clocks {
+        let unique_class = implicit_clock_id;
+        for (component, region, written_clock) in written_ons {
+            // An explicit `on` clause naming the module's unique clock
+            // — directly, or through any alias of it — is redundant:
+            // omitting it has exactly the same meaning.  An `on` clause
+            // naming a different clock class is load-bearing and stays
+            // silent.
+            let written_class = component_analysis
+                .resolve(written_clock.as_bstr())
+                .filter(|clock| clock.typ.as_ref() == Some(&Type::Clock))
+                .and_then(|clock| component_analysis.clock_canonical.get(&clock.id).copied());
+            if written_class == unique_class {
+                component_analysis.diagnostics.push(Diagnostic::new(
+                    region,
+                    diagnostics::RedundantOnClause { component },
+                ));
+            }
+        }
+    } else {
+        for (component, region) in regs_without_on {
+            component_analysis.diagnostics.push(Diagnostic::new(
+                region,
+                diagnostics::MissingOnClause { component },
+            ));
+        }
+    }
+
+    // Resolve each `memory`'s clock slot, exactly like a `reg`'s: an
+    // explicit `on <CLOCK>` clause wins; otherwise the module's unique
+    // clock covers it; otherwise the slot is unresolved
+    // (`MissingOnClause` was reported above) and memory writes report
+    // `MemoryWriteOutsideOnRegion`.  The slot is a clock class, stored
+    // as its canonical source's path.
+    {
+        let implicit_clock_path = implicit_clock_id
+            .and_then(|id| component_analysis.component(id))
+            .map(|component| component.path());
+        let mut slots: Vec<Option<BString>> = vec![];
+        for (_path, component) in component_analysis.components.iter() {
+            if component.kind != Some(ComponentKind::Memory) {
+                slots.push(None);
+                continue;
+            }
+            let decl = parsing.ast_node(component.location().ast_node_id());
+            let clock: Option<BString> = match decl.clock() {
+                Some(clock_node) => clock_node
+                    .path()
+                    .map(|interned| parsing.string(interned).to_owned())
+                    .and_then(|written| {
+                        // The slot is the named clock's class, stored as
+                        // its canonical source's path.
+                        component_analysis
+                            .resolve(written.as_bstr())
+                            .filter(|clock| clock.typ.as_ref() == Some(&Type::Clock))
+                            .and_then(|clock| component_analysis.clock_canonical(clock.id()))
+                            .and_then(|source| component_analysis.component(source))
+                            .map(|component| component.path())
+                    }),
+                None => implicit_clock_path.clone(),
+            };
+            slots.push(clock);
+        }
+        let mut slot_index = 0;
+        for (_path, component) in component_analysis.components.iter_mut() {
+            component.clock = slots[slot_index].clone();
+            slot_index += 1;
+        }
+    }
+
+    // Resolve each `on <CLOCK>` clause to the class of the clock it
+    // names.  In a zero-clock module the clause has no clocks to name
+    // and the domain stays unset (the clock checker diagnoses it).
+    if clock_count > 0 {
+        for &owner_id in &ons_to_resolve {
+            let clock_class = component_analysis
+                .component(owner_id)
+                .map(|component| component.location.ast_node_id())
+                .and_then(|ast_node_id| {
+                    let decl = parsing.ast_node(ast_node_id);
+                    decl.on_clause()
+                        .and_then(|clock_node| clock_node.path())
+                })
+                .and_then(|interned| {
+                    component_analysis.resolve(parsing.string(interned))
+                })
+                .filter(|clock| clock.typ.as_ref() == Some(&Type::Clock))
+                .and_then(|clock| component_analysis.clock_canonical.get(&clock.id).copied());
+            if let Some(class_source) = clock_class {
+                if let Some((_, component)) = component_analysis
+                    .components
+                    .iter_mut()
+                    .find(|(_, component)| component.id == owner_id)
+                {
+                    component.domain = Some(Domain::sync(class_source));
+                }
+            }
+        }
+    }
+    // Channels implicitly `on` a single-Clock-channel socket's
+    // unique Clock channel: the channel is a source of its own, so its
+    // class is itself.
+    for (component_id, clock_path) in &deferred_socket_clocks {
+        let clock_class = component_analysis
+            .resolve(clock_path.as_bstr())
+            .filter(|clock| clock.typ.as_ref() == Some(&Type::Clock))
+            .and_then(|clock| component_analysis.clock_canonical.get(&clock.id).copied());
+        if let Some(class_source) = clock_class
+            && let Some((_, component)) = component_analysis
+                .components
+                .iter_mut()
+                .find(|(_, component)| component.id == *component_id)
+        {
+            component.domain = Some(Domain::sync(class_source));
+        }
+    }
+
+    // Unique-clock inference: every local component whose domain is
+    // still unset after its declaration and any `on` clause — the
+    // declared components and the channels of the module's own sockets
+    // alike — is clocked by the module's unique clock.  (Components
+    // whose declaration fixed `Async`, and `on` clauses resolved above,
+    // keep those; Clock-typed components carry their own classes.)
+    // Domains left as `None` — the inherited components, and every
+    // component of a zero- or multi-clock module — are the clock
+    // checker's business.
+    if let Some(implicit_clock_id) = component_analysis.implicit_clock() {
+        for (_, component) in component_analysis.components.iter_mut() {
+            if component.submodule_owned {
+                continue;
+            }
+            if component.typ.as_ref() == Some(&Type::Clock) {
+                continue;
+            }
+            if component.domain.is_none() {
+                component.domain = Some(Domain::sync(implicit_clock_id));
+            }
+        }
+    }
+
+    // Flexible zero-clock inference: with no sourced clock class and no
+    // `async` component, the module is clock-polymorphic — the
+    // component analysis gives it a clock variable `α`, and every
+    // still-unset local component is clocked by it (`Sync(α)`), to be
+    // substituted per instantiation site.  Registers and memories are
+    // excluded: `MissingOnClause` has already diagnosed them, and a
+    // flexible module is clock-generic in its combinational structure
+    // only.
+    let has_async_component = item_ast.children().into_iter().any(|child| {
+        matches!(
+            child.payload(),
+            AstNodePayload::Component(payload) if payload.is_async
+        )
+    });
+    if clock_count == 0 && !has_async_component {
+        for (_, component) in component_analysis.components.iter_mut() {
+            if component.submodule_owned {
+                continue;
+            }
+            if component.typ.as_ref() == Some(&Type::Clock) {
+                continue;
+            }
+            if matches!(
+                component.kind,
+                Some(ComponentKind::Reg | ComponentKind::OutgoingReg | ComponentKind::Memory)
+            ) {
+                continue;
+            }
+            if component.domain.is_none() {
+                component.domain = Some(Domain::sync_var(0));
+            }
+        }
+    }
+
+    // `on <CLOCK>` clauses written on synthesized platform ports and
+    // on socketdef channels resolve here, once every component of
+    // the module — including the named clocks — is registered: the
+    // declared name denotes a sibling Clock-typed port/channel of the
+    // same item.  A clause naming none leaves the
+    // component's domain unset.
+    for (component_id, candidates) in &deferred_ons {
+        let clock_class = candidates
+            .iter()
+            .find_map(|clock_path| {
+                component_analysis
+                    .resolve(clock_path.as_bstr())
+                    .filter(|clock| clock.typ.as_ref() == Some(&Type::Clock))
+                    .and_then(|clock| component_analysis.clock_canonical.get(&clock.id).copied())
+            });
+        if let Some(class_source) = clock_class
+            && let Some((_, component)) = component_analysis
+                .components
+                .iter_mut()
+                .find(|(_, component)| component.id == *component_id)
+        {
+            component.domain = Some(Domain::sync(class_source));
+        }
+    }
+
     // Collect references after all components are registered.
     collect_references(&item_ast.children(), &mut component_analysis, None);
 
@@ -1376,46 +1515,308 @@ pub(crate) fn build_component(
 // Clocks
 // ---------------------------------------------------------------------------
 
-/// The module's incoming clock ports: its own `incoming` components
-/// typed the builtin `Clock`, plus the inward (receiving) channels of
-/// its own socket instances typed `Clock`.
-///
-/// These are the only clocks a module has: every own component of the
-/// module is clocked by one of them (or is `async`, or `Constant`; see
-/// `Domain`).  Components that merely *carry* a clock through the
-/// module — a submodule instance's clock output, a `wire` or `outgoing`
-/// port typed `Clock`, a channel the module drives outward — do not
-/// clock it and are not counted.  Nor are submodule-owned components
-/// (instance ports, instance-subsocket channels), which belong to the
-/// submodule (the parent binds the child's domains by driving its
-/// clock port), nor platform-synthesized ports, which are registered
-/// after this classification.
-pub(crate) fn incoming_clock_ports(component_analysis: &ComponentAnalysis) -> Vec<ComponentId> {
-    component_analysis
-        .components
-        .iter()
-        .filter(|(_, component)| {
-            !component.submodule_owned
-                && !component.synthetic
-                && component.kind == Some(ComponentKind::Incoming)
-                && component.typ.as_ref() == Some(&Type::Clock)
-        })
-        .map(|(_, component)| component.id)
-        .collect()
+/// The clock classes of one module view.
+#[derive(Debug, Default)]
+pub struct ClockClasses {
+    /// The canonical source of every sourced class, one entry per
+    /// class, in registration order.
+    pub sources: Vec<ComponentId>,
+    /// Maps every sourced Clock-typed component of the view to its
+    /// class's canonical source.  Clock-typed components absent from
+    /// the map have a *sourceless* class.
+    pub canonical: IndexMap<ComponentId, ComponentId>,
 }
 
-/// The module's unique clock: its one incoming clock port
-/// ([`incoming_clock_ports`]) when the module has exactly one, `None`
-/// for zero or more than one.  `ComponentAnalysis` memoizes this as
-/// `implicit_clock` at build time; query the memo through
-/// `ComponentAnalysis::implicit_clock` where the built analysis is at
-/// hand, and this function to classify a component list directly.
-pub(crate) fn resolve_unique_clock(component_analysis: &ComponentAnalysis) -> Option<ComponentId> {
-    let ports = incoming_clock_ports(component_analysis);
-    if ports.len() == 1 {
-        Some(ports[0])
-    } else {
-        None
+/// Computes the module's clock classes.
+///
+/// A *clock source* is a construct that introduces a fresh clock
+/// identity.  Clocks coming from the outside are each distinct sources
+/// — they have the *potential* to differ, regardless of how the
+/// platform ultimately wires them, so a module's clock structure never
+/// depends on its instantiation context:
+///
+/// 1. each incoming clock port — a declared `incoming` component typed
+///    `Clock`, or the receiving-side Clock channel of one of the
+///    module's own socket instances — is a source of its own;
+/// 2. the clock output port of a submodule or `ext mod` instance (and
+///    the driving-side Clock channel of one of the instance's sockets)
+///    is a source of its own, unless it declares a clock `dependson`;
+/// 3. a call to a clock-generating builtin (none wired through here;
+///    the checker mints fresh classes for `asclock` calls).
+///
+/// The equivalence relation additionally relates a Clock-typed
+/// component to the clock its *definitions* name: an unconditional
+/// driver whose target is a Clock-typed component and whose driving
+/// expression is a plain reference to a Clock-typed thing asserts the
+/// two are the same clock.  A guarded driver is an assignment, not a
+/// definition, and contributes nothing.  Clock identity is static: it
+/// is fixed by the module's structure, never by runtime behavior, and
+/// never by instantiation-site usage.
+fn compute_clock_classes(
+    item_ast: &AstNode<'_>,
+    component_analysis: &ComponentAnalysis,
+) -> ClockClasses {
+    let mut classes = ClockClasses::default();
+
+    // Every Clock-typed component of the view, in registration order.
+    let clock_ids: Vec<ComponentId> = component_analysis
+        .components
+        .iter()
+        .filter(|(_, component)| component.typ.as_ref() == Some(&Type::Clock))
+        .map(|(_, component)| component.id)
+        .collect();
+
+    // Union-find over the Clock-typed components.
+    let mut parent: IndexMap<ComponentId, ComponentId> =
+        clock_ids.iter().map(|&id| (id, id)).collect();
+    fn find(parent: &IndexMap<ComponentId, ComponentId>, mut id: ComponentId) -> ComponentId {
+        while parent[&id] != id {
+            id = parent[&id];
+        }
+        id
+    }
+
+    // The sources: each is the canonical source of its own class.
+    let mut is_source: IndexSet<ComponentId> = IndexSet::new();
+    for (_, component) in &component_analysis.components {
+        if component.typ.as_ref() != Some(&Type::Clock) {
+            continue;
+        }
+        let source = match component.submodule_owned {
+            // A local incoming clock port — declared, or the
+            // receiving-side channel of one of the module's own socket
+            // instances — is a source of its own.  (Synthesized
+            // platform ports are excluded: the module cannot reference
+            // one without declaring it, so it cannot source anything in
+            // this view.)
+            false => {
+                !component.synthetic
+                    && component.kind == Some(ComponentKind::Incoming)
+            }
+            // The clock output of a submodule or `ext mod` instance —
+            // an outgoing port, or the driving-side Clock channel of
+            // one of the instance's sockets — is a source of its own.
+            true => component.flow == Flow::Source,
+        };
+        if source {
+            is_source.insert(component.id());
+        }
+    }
+
+    // The definitions union the target with the clock its driving
+    // expression names.
+    let mut definitions: Vec<(ComponentId, ComponentId)> = vec![];
+    collect_clock_definitions(item_ast, component_analysis, &mut definitions);
+    for (target, source) in &definitions {
+        let root_target = find(&parent, *target);
+        let root_source = find(&parent, *source);
+        if root_target != root_source {
+            // Keep the earlier-registered component as the root, for
+            // determinism.
+            if root_target.index <= root_source.index {
+                parent.insert(root_source, root_target);
+            } else {
+                parent.insert(root_target, root_source);
+            }
+        }
+    }
+
+    // A class's canonical source is its single source.  Classes are
+    // precluded from having two sources (a component is driven at most
+    // once, and a source is never driven), and a class with no source
+    // is a clock name with no definition: its members get no domain,
+    // and driver analysis diagnoses the undriven clock wire.
+    let mut root_source: IndexMap<ComponentId, ComponentId> = IndexMap::new();
+    for &id in &clock_ids {
+        if !is_source.contains(&id) {
+            continue;
+        }
+        let root = find(&parent, id);
+        if root_source.contains_key(&root) {
+            continue;
+        }
+        root_source.insert(root, id);
+        classes.sources.push(id);
+    }
+    for &id in &clock_ids {
+        let root = find(&parent, id);
+        if let Some(&source) = root_source.get(&root) {
+            classes.canonical.insert(id, source);
+        }
+    }
+    classes
+}
+
+/// Collects the module's clock *definitions*: drivers whose target is a
+/// Clock-typed component and whose driving expression is a plain
+/// reference to a Clock-typed thing, each as `(target, source)`.
+/// Everything beneath a statement-position `if`/`match` arm is
+/// guarded: a guarded driver is an *assignment*, not a definition, and
+/// contributes no equivalence.
+fn collect_clock_definitions<'p>(
+    node: &AstNode<'p>,
+    component_analysis: &ComponentAnalysis,
+    out: &mut Vec<(ComponentId, ComponentId)>,
+) {
+    let parsing = node.parsing();
+    match node.payload() {
+        // Every driver beneath a statement-position `when`/`match` arm
+        // is guarded.  Nothing in the arm contributes to the class
+        // relation.
+        AstNodePayload::If | AstNodePayload::Match => {}
+        AstNodePayload::Driver(_) | AstNodePayload::InitialDriver | AstNodePayload::IndexedDriver(_) => {
+            let it_context = find_it_context(node);
+            let resolve = |interned| -> Option<Component> {
+                let mut name = parsing.string(interned).to_owned();
+                resolve_it_path(
+                    &mut name,
+                    it_context.as_ref().map(|context| context.as_bstr()),
+                );
+                component_analysis.resolve(name.as_bstr())
+            };
+            let target = node
+                .target()
+                .and_then(|path| resolve(path))
+                .or_else(|| {
+                    node.driver_target_node()
+                        .and_then(|target_node| {
+                            component_analysis.component_at(target_node.location())
+                        })
+                        .cloned()
+                });
+            let Some(target) = target else { return };
+            if target.typ().as_ref() != Some(&Type::Clock) {
+                return;
+            }
+            let Some(rhs) = node.driver() else { return };
+            if !matches!(rhs.payload(), AstNodePayload::ExprReference) {
+                return;
+            }
+            let Some(rhs_path) = rhs.path() else { return };
+            let Some(source) = resolve(rhs_path) else { return };
+            if source.typ().as_ref() != Some(&Type::Clock) {
+                return;
+            }
+            out.push((target.id(), source.id()));
+        }
+        _ => {
+            for child in node.children() {
+                collect_clock_definitions(&child, component_analysis, out);
+            }
+        }
+    }
+}
+
+/// Clock provenance: an outgoing Clock-typed port of the module declares whether it
+/// *aliases* an incoming clock — `dependson <clock>`, and then exactly
+/// one unconditional definition from that clock's class — or
+/// *originates* a fresh clock: no `dependson`, and no definition (driver
+/// analysis's no-driver rule does not apply to it).  A visible
+/// definition rooted at an incoming clock port without the declaration
+/// is reported `MissingClockDependson`; a definition rooted at an
+/// internal source (e.g. `clkout := pll.clkout`) needs no declaration,
+/// and is conservatively treated as a fresh source outside the module.
+/// The `dependson` clause of a clock is singleton: a clock that depends
+/// on two clocks merges two classes.
+fn check_clock_provenance(
+    parsing: &Parsing,
+    item_ast: &AstNode<'_>,
+    component_analysis: &mut ComponentAnalysis,
+) {
+    for stmt in item_ast.children() {
+        let AstNodePayload::Component(payload) = stmt.payload() else {
+            continue;
+        };
+        if !matches!(
+            payload.kind,
+            ComponentKind::Outgoing | ComponentKind::OutgoingWire
+        ) {
+            continue;
+        }
+        let name = parsing.string(payload.name);
+        let Some(component) = component_analysis.resolve(name.as_bstr()) else {
+            continue;
+        };
+        if component.typ().as_ref() != Some(&Type::Clock) {
+            continue;
+        }
+        let deps: Vec<Component> = stmt
+            .dependson_entries()
+            .into_iter()
+            .filter_map(|entry| entry.path())
+            .filter_map(|interned| component_analysis.resolve(parsing.string(interned)))
+            .filter(|dep| dep.typ().as_ref() == Some(&Type::Clock))
+            .collect();
+        if deps.len() > 1 {
+            // A clock that depends on two clocks merges two classes.
+            component_analysis.diagnostics.push(Diagnostic::new(
+                stmt.region(),
+                diagnostics::DomainMismatch {
+                    left: render_clock_class(component_analysis, &deps[0]),
+                    right: render_clock_class(component_analysis, &deps[1]),
+                },
+            ));
+            continue;
+        }
+        let declared = deps.first().map(|dep| dep.id());
+        let class_source = component_analysis.clock_canonical.get(&component.id).copied();
+        match (declared, class_source) {
+            (Some(dep), Some(source)) => {
+                // A declared alias must be defined from the declared
+                // clock's class.
+                if source != dep {
+                    component_analysis.diagnostics.push(Diagnostic::new(
+                        stmt.region(),
+                        diagnostics::MissingClockDependson {
+                            component: name.to_owned(),
+                            clock: component_path(component_analysis, source),
+                        },
+                    ));
+                }
+            }
+            (None, Some(source)) => {
+                // An undeclared alias of an incoming clock port must
+                // declare its provenance.  A definition rooted at an
+                // internal source (an instance's clock output) needs no
+                // declaration.
+                let is_incoming = component_analysis
+                    .component(source)
+                    .map(|source| {
+                        !source.submodule_owned
+                            && source.kind() == Some(ComponentKind::Incoming)
+                    })
+                    .unwrap_or(false);
+                if is_incoming {
+                    component_analysis.diagnostics.push(Diagnostic::new(
+                        stmt.region(),
+                        diagnostics::MissingClockDependson {
+                            component: name.to_owned(),
+                            clock: component_path(component_analysis, source),
+                        },
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The path of a component, or `<?clock?>` when it cannot be resolved.
+fn component_path(component_analysis: &ComponentAnalysis, id: ComponentId) -> BString {
+    component_analysis
+        .component(id)
+        .map(|component| component.path())
+        .unwrap_or_else(|| BString::from("<?clock?>"))
+}
+
+/// Renders a Clock-typed component's class for a diagnostic.
+fn render_clock_class(component_analysis: &ComponentAnalysis, component: &Component) -> BString {
+    match component_analysis.clock_canonical.get(&component.id) {
+        Some(source) => {
+            let path = component_path(component_analysis, *source);
+            format!("clocked by `{}`", path).into()
+        }
+        None => BString::from("<?clock?>"),
     }
 }
 

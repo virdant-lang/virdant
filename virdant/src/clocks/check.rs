@@ -7,8 +7,9 @@
 
 use super::*;
 use bstr::{BString, ByteSlice};
-use crate::analysis::component::{Component, ComponentAnalysis, ComponentId, incoming_clock_ports};
-use crate::analysis::dependency::{find_it_context, resolve_it_path_to_owned};
+use crate::analysis::component::{Component, ComponentAnalysis, ComponentId};
+use crate::analysis::domain::Clock;
+use crate::analysis::dependency::resolve_it_path_to_owned;
 use crate::common::source::Region;
 use crate::common::ComponentKind;
 use crate::db::Builder;
@@ -38,7 +39,11 @@ impl Clocking {
     /// The module-level checks of one mod def.
     fn check_moddef(&mut self, builder: &mut Builder, node: &AstNode<'_>) {
         let unsafe_clocks = has_annotation(node, b"unsafe_clocks".as_bstr());
-        let clock_count = incoming_clock_ports(self.component_analysis()).len();
+        // The clock count is the number of sourced clock classes,
+        // computed by the component analysis's clock-class resolution:
+        // a module may acquire clocks internally, from
+        // the clock outputs of its instances, and such clocks count.
+        let clock_count = self.component_analysis().clock_count();
         let has_submodules = contains_submodule(node);
 
         // Submodule clock binding must run before everything else: the
@@ -50,8 +55,16 @@ impl Clocking {
         // driver, and flexible socket channels resolve per usage.
         let has_socket_instances = contains_socket(node);
         if has_submodules || has_socket_instances {
+            // A module's own socket instances need no binding pass: the
+            // clock-class resolution in the component analysis already
+            // relates each socket's Clock channel — through the module's
+            // definitions — to the clock the module drives it from, and
+            // the channels implicitly `on` it inherit that class.
+            // Submodule instances do need the
+            // mapping pass: their components' domains live in the
+            // submodule's own view and are mapped onto the parent's
+            // instance paths here.
             let mut flexible_instances = self.bind_submodule_clocks(builder, node);
-            self.bind_socket_clocks(node);
             flexible_instances.extend(self.flexible_socket_instances(builder));
             self.resolve_flexible_instances(node, flexible_instances);
         }
@@ -91,44 +104,51 @@ impl Clocking {
             }
 
             // The single-domain fast path skips the walk: in a
-            // unique-clock module every own component is
+            // unique-clock module every local component is
             // `Sync(<unique clock>)`, in a flexible zero-clock module
-            // every one is `Flexible` — no own join or driver can fail
-            // either way.  A module with submodule instances never
-            // takes it: boundary drivers must be checked against the
-            // bound parent domains.
+            // every one is `Sync(<the module's clock variable>)` — no
+            // local join or driver can fail either way.  A module with
+            // submodule instances never takes it: boundary drivers must
+            // be checked against the mapped parent domains.
             let fast_path =
                 clock_count <= 1 && !has_async_components(node) && !has_submodules;
             if !fast_path {
                 // Color every subexpression of the module and check
                 // the module's drivers and connections.
                 self.skipped = false;
-                self.walk(builder, node, None, &[]);
+                self.walk(builder, node, None, &[], false);
             }
         }
     }
 
-    /// Binds each submodule instance's incoming clocks, filling
-    /// `submodule_domains` with the parent-view domain of every
-    /// submodule-owned component of the module.
+    /// Maps each submodule instance's components into the parent's
+    /// view, filling `submodule_domains` with the parent-view domain of
+    /// every inherited component of the module.
     ///
     /// Each incoming clock of a submodule — a port, or an inward channel
     /// of one of its sockets — is a free variable in the submodule's
     /// definition: the submodule's own clock analysis phrases its
-    /// internal `Sync` domains in those clocks.  Driving the instance's
-    /// clock port instantiates the variable: the driving expression, a
-    /// plain reference to a Clock-typed component of this module, *is*
-    /// the concrete clock, and every child component clocked by the
-    /// bound variable takes its domain.  Child components that are
-    /// `async` or `Constant` keep their domains; a child clock the
-    /// parent never drove leaves the child components clocked by it
-    /// unmapped, and so unchecked here.
+    /// internal `Sync` domains in terms of that variable.  The
+    /// component analysis's clock-class resolution has already
+    /// instantiated those variables: the module's definitions driving
+    /// the instance's clock ports are clock definitions, so the
+    /// parent-side port's clock class *is* the bound clock.
+    /// Mapping a child component clocked by the
+    /// child's clock class `c` therefore resolves the parent-side
+    /// component `<instance>.c` to its clock class.  Child components
+    /// that are `async` or `Constant` keep their domains; a child clock
+    /// the parent never bound leaves the child components clocked by it
+    /// unmapped, and so unchecked here — while the unbound port itself
+    /// carries the instance's abstract clock variable, assigned by the
+    /// component analysis.
     ///
-    /// A component of a *flexible* child (zero clocks, nothing
-    /// `async`) is mapped through as [`Domain::Flexible`], and
-    /// `resolve_flexible_instances` pins the whole instance to `Async`
-    /// or to one shared `Sync` domain; the instances with flexible
-    /// components are returned for that.
+    /// A component of a *flexible* child (a zero-clock, nothing-`async`
+    /// module) is clocked by the child's clock variable and mapped
+    /// through as the parent's abstract variable too;
+    /// `resolve_flexible_instances` substitutes it — pinning the whole
+    /// instance to one shared `Sync` class, or leaving it unbound, which
+    /// the parent's view treats as `Async`.  The instances
+    /// with flexible components are returned for that.
     fn bind_submodule_clocks(
         &mut self,
         builder: &mut Builder,
@@ -136,8 +156,6 @@ impl Clocking {
     ) -> Vec<FlexibleInstance> {
         let parsing = node.parsing();
         let mut flexible_instances: Vec<FlexibleInstance> = vec![];
-        let mut drivers: Vec<(AstNode<'_>, Option<BString>)> = vec![];
-        collect_driver_statements(node, &mut drivers);
 
         for stmt in node.children() {
             let AstNodePayload::Submodule(module) = stmt.payload() else {
@@ -166,41 +184,6 @@ impl Clocking {
             };
             let child_analysis = builder.get_component_analysis(submodule_symbol.id());
 
-            // The instance's clock-binding sites: drivers whose target is
-            // one of the instance's incoming Clock ports.
-            let mut bindings: IndexMap<ComponentId, Domain> = IndexMap::new();
-            for (driver, context) in &drivers {
-                let Some(target) = driver.target() else { continue };
-                let target = resolve_it_path_to_owned(
-                    parsing.string(target),
-                    context.as_ref().map(|ctx| ctx.as_bstr()),
-                );
-                let Some(target_component) =
-                    self.component_analysis().resolve(target.as_bstr())
-                else {
-                    continue;
-                };
-                if !is_instance_clock_port(&target_component) {
-                    continue;
-                }
-                let Some(rhs) = driver.driver() else { continue };
-                if let Some(domain) = clock_identity(
-                    &rhs,
-                    parsing,
-                    context.as_ref().map(|ctx| ctx.as_bstr()),
-                    self.component_analysis(),
-                ) {
-                    // A port driven more than once keeps its first
-                    // binding; conflicting re-drives are driver
-                    // analysis's business, not the clock checker's.
-                    bindings.entry(target_component.id()).or_insert(domain);
-                }
-            }
-
-            // Map each child component with a declared domain onto its
-            // parent-side instance path; components with no parent-side
-            // counterpart (a submodule instance's own internals) drop out
-            // when the resolution fails.
             let mut instance_prefix = bstr::BString::from(instance_name.clone());
             instance_prefix.push(b'.');
             let mut flexible_components: Vec<ComponentId> = vec![];
@@ -215,8 +198,14 @@ impl Clocking {
                 };
                 let mapped = match child_domain {
                     Domain::Async | Domain::Constant => Some(*child_domain),
-                    Domain::Flexible => Some(Domain::Flexible),
-                    Domain::Sync(child_clock) => child_analysis
+                    // A flexible child's components are clocked by the
+                    // child's clock variable: the parent-side abstract
+                    // variable stands in until pinning substitutes it.
+                    Domain::Sync(Clock::Var(_)) => Some(Domain::sync_var(0)),
+                    // A child component clocked by the child's clock
+                    // class `c` takes the class bound to the parent-side
+                    // component `<instance>.c`.
+                    Domain::Sync(Clock::Class(child_clock)) => child_analysis
                         .component(*child_clock)
                         .map(|clock| clock.path())
                         .and_then(|clock_path| {
@@ -224,12 +213,15 @@ impl Clocking {
                             port_path.extend_from_slice(&clock_path);
                             self.component_analysis()
                                 .resolve(port_path.as_bstr())
-                                .and_then(|port| bindings.get(&port.id()).copied())
+                                .and_then(|port| {
+                                    self.component_analysis().clock_canonical(port.id())
+                                })
+                                .map(Domain::sync)
                         }),
                 };
                 if let Some(domain) = mapped {
                     self.submodule_domains.insert(parent_component.id(), domain);
-                    if matches!(domain, Domain::Flexible) {
+                    if matches!(domain, Domain::Sync(Clock::Var(_))) {
                         flexible_components.push(parent_component.id());
                     }
                 }
@@ -245,83 +237,17 @@ impl Clocking {
         flexible_instances
     }
 
-    /// Binds each socket instance's unique Clock channel the way
-    /// submodule binding binds a child's clock port: the module driving
-    /// `it.clk := <clock>` instantiates the socket's clock variable, and
-    /// every channel implicitly `on` it takes that concrete domain.  A
-    /// clock channel that is the module's implicit clock (a `server`
-    /// socket's inward `Clock` channel) binds to itself; an undriven one
-    /// leaves the channels on the clock channel's own domain.
-    fn bind_socket_clocks(&mut self, node: &AstNode<'_>) {
-        let mut drivers: Vec<(AstNode<'_>, Option<BString>)> = vec![];
-        collect_driver_statements(node, &mut drivers);
-        let parsing = node.parsing();
-        for stmt in node.children() {
-            let AstNodePayload::Socket(socket) = stmt.payload() else {
-                continue;
-            };
-            let instance_name = parsing.string(socket.name);
-            let owned: Vec<Component> = self
-                .component_analysis()
-                .components_owned_by(instance_name.as_bstr())
-                .into_iter()
-                .filter_map(|id| self.component_analysis().component(id).cloned())
-                .filter(|component| {
-                    component.socket_channel()
-                        && !component.submodule_owned()
-                        && component.typ().as_ref() == Some(&Type::Clock)
-                })
-                .collect();
-            if owned.len() != 1 {
-                continue;
-            }
-            let clk = &owned[0];
-            for (driver, context) in &drivers {
-                let Some(target) = driver.target() else { continue };
-                let target = resolve_it_path_to_owned(
-                    parsing.string(target),
-                    context.as_ref().map(|context| context.as_bstr()),
-                );
-                let Some(target_component) =
-                    self.component_analysis().resolve(target.as_bstr())
-                else {
-                    continue;
-                };
-                if target_component.id() != clk.id() {
-                    continue;
-                }
-                let Some(rhs) = driver.driver() else { continue };
-                if let Some(domain) = clock_identity(
-                    &rhs,
-                    parsing,
-                    context.as_ref().map(|context| context.as_bstr()),
-                    self.component_analysis(),
-                ) {
-                    // A port driven more than once keeps its first
-                    // binding, as in submodule binding.
-                    for component in &owned {
-                        if component.domain() == Some(&Domain::sync(clk.id())) {
-                            self.submodule_domains
-                                .insert(component.id(), domain);
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
     /// The flexible socket instances: each socket instance (of a
-    /// zero-Clock-channel socketdef) whose channels registered
-    /// `Flexible`, grouped under the instance's name — resolved per
-    /// usage like flexible submodule instances.
+    /// zero-Clock-channel socketdef) whose channels are clocked by the
+    /// socketdef's clock variable, grouped under the instance's name —
+    /// resolved per usage like flexible submodule instances.
     fn flexible_socket_instances(&self, builder: &mut Builder) -> Vec<FlexibleInstance> {
         let mut groups: IndexMap<BString, Vec<ComponentId>> = IndexMap::new();
         let mut regions: IndexMap<BString, Region> = IndexMap::new();
         for (path, component) in self.component_analysis().components() {
             if !component.socket_channel()
                 || component.submodule_owned()
-                || component.domain() != Some(&Domain::Flexible)
+                || !matches!(component.domain(), Some(Domain::Sync(Clock::Var(_))))
             {
                 continue;
             }
@@ -410,6 +336,7 @@ impl Clocking {
         node: &AstNode<'_>,
         context: Option<ComponentId>,
         guards: &[(Domain, Location)],
+        conditional: bool,
     ) {
         match node.payload() {
             AstNodePayload::Component(payload) => {
@@ -422,7 +349,7 @@ impl Clocking {
                     .resolve(name.as_bstr())
                     .map(|component| component.id());
                 for child in node.children() {
-                    self.walk(builder, &child, context, guards);
+                    self.walk(builder, &child, context, guards, conditional);
                 }
             }
             AstNodePayload::Socket(payload) => {
@@ -434,14 +361,14 @@ impl Clocking {
                     .resolve(name.as_bstr())
                     .map(|component| component.id());
                 for child in node.children() {
-                    self.walk(builder, &child, context, guards);
+                    self.walk(builder, &child, context, guards, conditional);
                 }
             }
             AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
                 if let Some(rhs) = node.driver() {
                     self.infer(&rhs);
                 }
-                self.check_driver(builder, node, context, guards);
+                self.check_driver(builder, node, context, guards, conditional);
             }
             AstNodePayload::IndexedDriver(_) => {
                 if let Some(index) = node.driver_index() {
@@ -450,7 +377,7 @@ impl Clocking {
                 if let Some(rhs) = node.driver() {
                     self.infer(&rhs);
                 }
-                self.check_driver(builder, node, context, guards);
+                self.check_driver(builder, node, context, guards, conditional);
             }
             AstNodePayload::BidirectionalDriver => {
                 self.check_connection(node);
@@ -464,7 +391,7 @@ impl Clocking {
                     self.infer(clock);
                 }
                 for child in node.children() {
-                    self.walk(builder, &child, context, guards);
+                    self.walk(builder, &child, context, guards, conditional);
                 }
             }
             AstNodePayload::If => {
@@ -482,7 +409,7 @@ impl Clocking {
                     {
                         arm_guards.push((domain, guard.location()));
                     }
-                    self.walk(builder, &body, context, &arm_guards);
+                    self.walk(builder, &body, context, &arm_guards, true);
                 }
             }
             AstNodePayload::Match => {
@@ -498,18 +425,18 @@ impl Clocking {
                     arm_guards.push((domain, subject.location()));
                 }
                 for (_pat, body) in match_arm_children(&children) {
-                    self.walk(builder, &body, context, &arm_guards);
+                    self.walk(builder, &body, context, &arm_guards, true);
                 }
             }
             AstNodePayload::Let => {
                 self.infer(node);
                 for child in node.children() {
-                    self.walk(builder, &child, context, guards);
+                    self.walk(builder, &child, context, guards, conditional);
                 }
             }
             _ => {
                 for child in node.children() {
-                    self.walk(builder, &child, context, guards);
+                    self.walk(builder, &child, context, guards, conditional);
                 }
             }
         }
@@ -528,17 +455,61 @@ impl Clocking {
         node: &AstNode<'_>,
         context: Option<ComponentId>,
         guards: &[(Domain, Location)],
+        conditional: bool,
     ) {
         let Some(target) = self.driver_target(node, context) else {
             return;
         };
+        let target_name = target.path();
+
+        // Clocks are defined, not assigned: a
+        // Clock-typed target admits only definitions — unconditional
+        // drivers whose driving expression is a plain reference to a
+        // Clock-typed thing.  Anything else — a guarded driver, or a
+        // driving expression that is not a plain clock reference — is
+        // reported here, and the ordinary upcast checks do not apply:
+        // a definition that binds an instance clock port is checked
+        // definitionally, and guard checking never applies to a
+        // Clock-typed target.
+        if target.typ().as_ref() == Some(&Type::Clock) {
+            let is_plain_clock_reference = node.driver().is_some_and(|rhs| {
+                if !matches!(rhs.payload(), AstNodePayload::ExprReference) {
+                    return false;
+                }
+                let Some(path) = rhs.path() else { return false };
+                let context_path = context.as_ref().and_then(|context| {
+                    self.component_analysis().component(*context)
+                }).map(|component| component.path());
+                let name = resolve_it_path_to_owned(
+                    node.parsing().string(path),
+                    context_path.as_ref().map(|path| path.as_bstr()),
+                );
+                self.component_analysis()
+                    .resolve(name.as_bstr())
+                    .is_some_and(|component| {
+                        component.typ().as_ref() == Some(&Type::Clock)
+                    })
+            });
+            // An `else` arm carries no guard *expression*, but it is
+            // still a conditional context: the arm's driver is
+            // guarded by the negation of the preceding conditions.
+            if !guards.is_empty() || conditional || !is_plain_clock_reference {
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::ConditionalClockDriver {
+                        target: target_name.clone(),
+                    },
+                ));
+            }
+            return;
+        }
+
         // A submodule-owned target takes its bound parent domain; an
-        // undetermined domain (unbound instance clock, missing clause)
-        // was already diagnosed — do not cascade.
+        // undetermined domain (missing clause) was already diagnosed —
+        // do not cascade.
         let Some(target_domain) = self.component_domain(&target) else {
             return;
         };
-        let target_name = target.path();
 
         // The driving expression (and an indexed write's index) is
         // this driver's own; each is checked here.
@@ -685,6 +656,15 @@ impl Clocking {
         // against, and the module's connections: each contributes the
         // clocks of its `Sync`-domain sides to every flexible instance
         // its references touch.
+        // The usage scan infers subexpression domains against the
+        // pre-pinning world (flexible components still on their clock
+        // variables).  Substitution invalidates those domains, so
+        // snapshot the memo table and the diagnostics here: after
+        // pinning, everything the scan inferred is dropped and the walk
+        // re-infers it — and re-reports it — against the pinned
+        // parent-view domains.
+        let domains_before: IndexSet<AstNodeId> = self.domains.keys().copied().collect();
+        let diagnostics_before = self.diagnostics.len();
         let scans: Vec<DriverScan<'_>> = self.collect_driver_checks(node, None, vec![]);
         for scan in &scans {
             // The clock domains in play: the driven component's, the
@@ -692,22 +672,22 @@ impl Clocking {
             // and the enclosing guards'.
             let mut clocks: Vec<ComponentId> = vec![];
             if let Some(target) = self.driver_target(&scan.driver, scan.context)
-                && let Some(Domain::Sync(clock)) = self.component_domain(&target)
+                && let Some(Domain::Sync(Clock::Class(clock))) = self.component_domain(&target)
             {
                 clocks.push(clock);
             }
             if let Some(index) = scan.driver.driver_index()
-                && let Some(Domain::Sync(clock)) = self.infer(&index)
+                && let Some(Domain::Sync(Clock::Class(clock))) = self.infer(&index)
             {
                 clocks.push(clock);
             }
             if let Some(rhs) = scan.driver.driver()
-                && let Some(Domain::Sync(clock)) = self.infer(&rhs)
+                && let Some(Domain::Sync(Clock::Class(clock))) = self.infer(&rhs)
             {
                 clocks.push(clock);
             }
             for (domain, _) in &scan.guards {
-                if let Domain::Sync(clock) = domain {
+                if let Domain::Sync(Clock::Class(clock)) = domain {
                     clocks.push(*clock);
                 }
             }
@@ -736,7 +716,7 @@ impl Clocking {
                 if let Some(component) = self
                     .component_analysis()
                     .component_at(side.location())
-                    && let Some(Domain::Sync(clock)) = self.component_domain(&component)
+                    && let Some(Domain::Sync(Clock::Class(clock))) = self.component_domain(&component)
                 {
                     clocks.push(clock);
                 }
@@ -753,11 +733,36 @@ impl Clocking {
             );
         }
 
+        for (instance, clocks) in instances.iter().zip(&instance_clocks) {
+        }
         // Pin the single-clock instances; report the conflicted ones.
+        // An instance touched by no clock leaves its clock variable
+        // unbound — the all-async mode: every flexible component of the
+        // instance is treated as `Async` in the parent's view.
+        // Substitution (`pinning`): a recorded domain never changes
+        // once recorded — except here, where the instantiation site
+        // substitutes the clock variable.  Everything the usage scan
+        // inferred is dropped now, and the walk re-infers it against
+        // the substituted parent-view domains.
+        let scanned_nodes: Vec<AstNodeId> = self
+            .domains
+            .keys()
+            .copied()
+            .filter(|node_id| !domains_before.contains(node_id))
+            .collect();
+        for node_id in scanned_nodes {
+            self.domains.shift_remove(&node_id);
+        }
+        self.diagnostics.truncate(diagnostics_before);
+
         for (instance, clocks) in instances.iter().zip(&instance_clocks) {
             let clocks: Vec<ComponentId> = clocks.iter().copied().collect();
             match clocks.as_slice() {
-                [] => {}
+                [] => {
+                    for &component in &instance.components {
+                        self.submodule_domains.insert(component, Domain::Async);
+                    }
+                }
                 [clock] => {
                     for &component in &instance.components {
                         self.submodule_domains
@@ -1037,55 +1042,3 @@ fn has_annotation(node: &AstNode<'_>, name: &bstr::BStr) -> bool {
     })
 }
 
-/// Collects every driver statement of the module (it-blocks, socket
-/// it-blocks, and component forwarding blocks alike), each with its
-/// `it` context as `find_it_context` resolves it.
-fn collect_driver_statements<'p>(
-    node: &AstNode<'p>,
-    out: &mut Vec<(AstNode<'p>, Option<BString>)>,
-) {
-    if matches!(
-        node.payload(),
-        AstNodePayload::Driver(_) | AstNodePayload::InitialDriver | AstNodePayload::IndexedDriver(_)
-    ) {
-        out.push((node.clone(), find_it_context(node)));
-        return;
-    }
-    for child in node.children() {
-        collect_driver_statements(&child, out);
-    }
-}
-
-/// Whether `component` is one of a submodule instance's incoming clock
-/// ports: a submodule-owned incoming component typed `Clock` — an
-/// instance's clock port, or the inward Clock channel of one of the
-/// instance's sockets.
-fn is_instance_clock_port(component: &Component) -> bool {
-    component.submodule_owned()
-        && component.kind() == Some(ComponentKind::Incoming)
-        && component.typ().as_ref() == Some(&Type::Clock)
-}
-
-/// The domain the driving expression `rhs` binds an instance's clock
-/// port to: a plain reference to a Clock-typed component of this
-/// module *is* the concrete clock, keyed by that component.  Anything
-/// else leaves the clock unbound (`None`), and the child components
-/// clocked by it are not checked in this module.  (A non-clock at a
-/// clock port is a type error, reported by the typechecker.)
-fn clock_identity(
-    rhs: &AstNode<'_>,
-    parsing: &Parsing,
-    context: Option<&bstr::BStr>,
-    component_analysis: &ComponentAnalysis,
-) -> Option<Domain> {
-    if !matches!(rhs.payload(), AstNodePayload::ExprReference) {
-        return None;
-    }
-    let path = rhs.path()?;
-    let name = resolve_it_path_to_owned(parsing.string(path), context);
-    let component = component_analysis.resolve(name.as_bstr())?;
-    if component.typ().as_ref() != Some(&Type::Clock) {
-        return None;
-    }
-    Some(Domain::sync(component.id()))
-}
