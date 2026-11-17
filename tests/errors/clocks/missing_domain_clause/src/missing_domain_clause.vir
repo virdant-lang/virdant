@@ -26,4 +26,7 @@ pub mod TwoClocksNoClause {
     }
 }
 
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
 // CHECK: Check failed

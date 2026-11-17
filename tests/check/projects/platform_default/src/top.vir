@@ -52,6 +52,7 @@ pub mod Override for Buttons {
     must_declare := true
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

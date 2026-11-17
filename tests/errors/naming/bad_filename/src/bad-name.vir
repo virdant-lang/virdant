@@ -8,3 +8,7 @@
 // The error is raised at load time, before `vir check` produces any
 // summary output.
 // CHECK: bad-name.vir: file name is not a valid package identifier
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

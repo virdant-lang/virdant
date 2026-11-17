@@ -4,8 +4,6 @@
 // `Clock` is an incoming clock port like any other — two of them are
 // just as ambiguous as two declared `incoming` clocks.
 
-// CHECK: Check OK
-
 socket ClkBus {
     cosi clk : Clock
 }
@@ -51,3 +49,8 @@ pub mod PortAndSocket {
         it := data_buf
     }
 }
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

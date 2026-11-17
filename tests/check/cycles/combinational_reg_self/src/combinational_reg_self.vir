@@ -98,6 +98,7 @@ pub mod RegSelfAssign {
     out := identity + counter + guarded + matched + zext(a) + zext(b) + plain + pipelined
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

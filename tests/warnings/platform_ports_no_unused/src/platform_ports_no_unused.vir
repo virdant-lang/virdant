@@ -18,6 +18,7 @@ pub mod Top for Widgets {
 }
 
 // CHECK-NOT: Unused signal
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

@@ -85,6 +85,7 @@ pub mod AnnotationsTest {
     unused test_port
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK

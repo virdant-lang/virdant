@@ -35,6 +35,7 @@ pub mod Top for ice40::IceSugar {
     unused flash_miso
 }
 
+// CHECK: PASSED with
 // CHECK-NOT: ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check OK
