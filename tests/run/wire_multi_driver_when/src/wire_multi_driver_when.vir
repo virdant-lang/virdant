@@ -17,20 +17,20 @@ import virt
 //> `when`.
 mod WireMultiDriverWhen {
     //> First operand.
-    incoming a : Word[8] async
+    incoming a : Word[8]
 
     //> Second operand.
-    incoming b : Word[8] async
+    incoming b : Word[8]
 
     //> Arm selector: high runs the `case` arm, low the `else` arm.
-    incoming sel : Bit async
+    incoming sel : Bit
 
     //> Value carried by the multi-driver wire under test.
-    outgoing result : Word[8] async dependson a, b, sel
+    outgoing result : Word[8] dependson a, b, sel
 
     //> Wire with a driver in each arm of the statement `when` below.
     //> Being a wire, the `when` must be total: every arm assigns it.
-    wire picked : Word[8] async
+    wire picked : Word[8]
 
     // Both arms drive `picked`: `case` computes the sum, `else` the
     // wrapping difference.  Evaluated in order; `else` catches every
@@ -135,13 +135,13 @@ pub mod WireMultiDriverTest for virt::Virt {
 
     //> Index of the vector under test, cycling 0 through 7.  The 8
     //> cases exactly cover `Word[3]`, so the match is exhaustive.
-    reg index : Word[3] on clock {
+    reg index : Word[3] {
         initial it <= 0
         it <= index + 1
     }
 
     //> Latched high once a `case`-arm vector has been on the inputs.
-    reg saw_case : Bit on clock {
+    reg saw_case : Bit {
         initial it <= false
         if {
             when sel {
@@ -151,7 +151,7 @@ pub mod WireMultiDriverTest for virt::Virt {
     }
 
     //> Latched high once an `else`-arm vector has been on the inputs.
-    reg saw_else : Bit on clock {
+    reg saw_else : Bit {
         initial it <= false
         if {
             when !sel {
@@ -162,14 +162,14 @@ pub mod WireMultiDriverTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each cycle
     //> folds in the verdict for the vector on the inputs.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && (dut.result == expected)
     }
 
     //> Number of vectors checked so far, 0 through 8.  Holds at 8 so
     //> that `finished` stays high.
-    reg checked : Word[4] on clock {
+    reg checked : Word[4] {
         initial it <= 0
         if {
             when checked != 8 {

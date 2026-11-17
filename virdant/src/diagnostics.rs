@@ -78,6 +78,8 @@ pub enum DiagnosticPayload {
     /// A clocked component (`reg`, `outgoing reg`, `memory`) was
     /// declared `async`.
     AsyncRegister(AsyncRegister),
+    /// A flexible module instance is used on two different clock domains.
+    FlexibleInstanceClockConflict(FlexibleInstanceClockConflict),
     /// A driver's expression (or an enclosing `when` guard, or an
     /// indexed write's index) sits on a clock domain the driven
     /// component cannot accept: the driving domain must upcast to the
@@ -460,6 +462,16 @@ pub struct MissingDomainClause {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsyncRegister {
     pub component: BString,
+}
+
+/// A submodule instance of a clockless ("flexible") module is used on
+/// two different clock domains; a flexible module resolves to one
+/// domain per instantiation, so an instance cannot serve two clocks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlexibleInstanceClockConflict {
+    pub instance: BString,
+    pub left: BString,
+    pub right: BString,
 }
 
 /// A driver drives a component from an incompatible clock domain: the
@@ -1068,6 +1080,12 @@ impl Diagnostic {
                     d.component,
                 ).into()
             }
+            DiagnosticPayload::FlexibleInstanceClockConflict(d) => {
+                format!(
+                    "Instance `{}` of a clockless module is used on both {} and {}; a clockless module resolves to a single domain per instantiation",
+                    d.instance, d.left, d.right,
+                ).into()
+            }
             DiagnosticPayload::DriverDomainMismatch(d) => {
                 format!(
                     "Domain mismatch: cannot drive `{}` ({}) with {}",
@@ -1528,6 +1546,7 @@ impl Diagnostic {
             DiagnosticPayload::DomainMismatch(_) => "DomainMismatch",
             DiagnosticPayload::MissingDomainClause(_) => "MissingDomainClause",
             DiagnosticPayload::AsyncRegister(_) => "AsyncRegister",
+            DiagnosticPayload::FlexibleInstanceClockConflict(_) => "FlexibleInstanceClockConflict",
             DiagnosticPayload::DriverDomainMismatch(_) => "DriverDomainMismatch",
             DiagnosticPayload::WrongDriverType(_) => "WrongDriverType",
             DiagnosticPayload::NoRegDrivers(_) => "NoRegDrivers",
@@ -1710,4 +1729,5 @@ from_diagnostic! {
     CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, PlatformNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
     UnusedImport,
     DomainMismatch, MissingDomainClause, AsyncRegister, DriverDomainMismatch,
+    FlexibleInstanceClockConflict,
 }

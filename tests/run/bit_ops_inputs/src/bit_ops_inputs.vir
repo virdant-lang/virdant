@@ -20,23 +20,23 @@ import virt
 //> Computes the three boolean operators on its input ports.
 mod BitOps {
     //> First operand.
-    incoming a : Bit async
+    incoming a : Bit
 
     //> Second operand.
-    incoming b : Bit async
+    incoming b : Bit
 
     //> Logical AND of the two operands.
-    outgoing and_out : Bit async dependson a, b {
+    outgoing and_out : Bit dependson a, b {
         it := a && b
     }
 
     //> Logical OR of the two operands.
-    outgoing or_out : Bit async dependson a, b {
+    outgoing or_out : Bit dependson a, b {
         it := a || b
     }
 
     //> Logical XOR of the two operands.
-    outgoing xor_out : Bit async dependson a, b {
+    outgoing xor_out : Bit dependson a, b {
         it := a ^^ b
     }
 }
@@ -68,7 +68,7 @@ pub mod BitOpsInputsTest for virt::Virt {
     }
 
     //> First operand under test, driven by the sequencer.
-    reg a : Bit on clock {
+    reg a : Bit {
         initial it <= false
         it <= match next {
             with 0 => false
@@ -79,7 +79,7 @@ pub mod BitOpsInputsTest for virt::Virt {
     }
 
     //> Second operand under test, driven by the sequencer.
-    reg b : Bit on clock {
+    reg b : Bit {
         initial it <= false
         it <= match next {
             with 0 => false
@@ -90,7 +90,7 @@ pub mod BitOpsInputsTest for virt::Virt {
     }
 
     //> Truth-table row under test, 0 through 3.
-    reg index : Word[2] on clock {
+    reg index : Word[2] {
         initial it <= 0
         if {
             when !finished {
@@ -101,7 +101,7 @@ pub mod BitOpsInputsTest for virt::Virt {
 
     //> Rises the cycle after row 3 is checked, so that `exit` sees the
     //> final fold into `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when index == 3 {
@@ -112,7 +112,7 @@ pub mod BitOpsInputsTest for virt::Virt {
 
     //> Running AND of every row's verdict.  Power-on true; each row
     //> folds its verdict in while the sequencer is stepping.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         if {
             when !finished {

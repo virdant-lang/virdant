@@ -4,7 +4,7 @@
 // `async` freely — they then live on the `Async` domain.
 
 // CHECK: `counter` cannot be `async`: registers and memories are clocked
-mod AsyncReg {
+pub mod AsyncReg {
     incoming clock : Clock
 
     reg counter : Bit async {
@@ -14,7 +14,7 @@ mod AsyncReg {
 }
 
 // CHECK: `stage` cannot be `async`: registers and memories are clocked
-mod AsyncOutgoingReg {
+pub mod AsyncOutgoingReg {
     incoming clock : Clock
     incoming inp : Bit
 
@@ -24,8 +24,9 @@ mod AsyncOutgoingReg {
 }
 
 // CHECK: `scratch` cannot be `async`: registers and memories are clocked
-mod AsyncMemory {
+pub mod AsyncMemory {
     memory scratch[4] : Word[8] async
+    unused scratch
 }
 
 // Non-clocked kinds are `async` legally — but in a module with no
@@ -33,7 +34,7 @@ mod AsyncMemory {
 // unannotated component has no domain at all.
 
 // CHECK: Missing `on` or `async` clause for out: the module has no clocks
-mod AsyncWireMissing {
+pub mod AsyncWireMissing {
     incoming inp : Bit async
     outgoing out : Bit dependson inp {
         it := inp
@@ -42,7 +43,7 @@ mod AsyncWireMissing {
 
 // Declaring them `async` checks clean (zero clocks: the coloring
 // itself is skipped).
-mod AsyncWire {
+pub mod AsyncWire {
     incoming inp : Bit async
     outgoing out : Bit async dependson inp {
         it := inp

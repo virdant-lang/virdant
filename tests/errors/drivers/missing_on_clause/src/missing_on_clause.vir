@@ -43,21 +43,23 @@ socket ClkBus {
     cosi clk : Clock
 }
 
-mod PortAndSocket {
+pub mod PortAndSocket {
     incoming clock : Clock
     server socket link of ClkBus {
-        unused link.clk
+        unused it.clk
     }
 
     reg data_buf : Word[8]
 
+    unused clock
+    unused data_buf
     data_buf <= 0
 }
 
 // A declared `incoming` clock and a Clock-typed *outgoing* channel (a
 // clock the module drives outward, not one it receives) are still only
 // one incoming clock port, so the `on` clause is optional.
-mod PortAndOutwardSocket {
+pub mod PortAndOutwardSocket {
     incoming clock : Clock
     client socket link of ClkBus {
         it.clk := clock
@@ -65,18 +67,22 @@ mod PortAndOutwardSocket {
 
     reg data_buf : Word[8]
 
+    unused data_buf
     data_buf <= 0
 }
 
 // Two inward socket channels typed `Clock` are two incoming clock
 // ports, just like two declared `incoming` clocks: ambiguous, `on` is
 // still required.
-mod TwoSocketClocks {
+pub mod TwoSocketClocks {
     server socket bus_a of ClkBus
     server socket bus_b of ClkBus
 
     reg data_buf : Word[8]
 
+    unused bus_a.clk
+    unused bus_b.clk
+    unused data_buf
     data_buf <= 0
 }
 
@@ -89,12 +95,13 @@ mod ClockSrc {
     }
 }
 
-mod OnlySubmoduleClock {
+pub mod OnlySubmoduleClock {
     mod src of ClockSrc
     unused src.clock_out
 
     reg data_buf : Word[8]
 
+    unused data_buf
     data_buf <= 0
 }
 
@@ -102,10 +109,9 @@ mod OnlySubmoduleClock {
 // CHECK: Missing on clause for reg data_buf
 // CHECK: Missing on clause for reg data_buf
 // CHECK: Missing on clause for reg data_buf
-// CHECK: Missing on clause for reg data_buf
 // CHECK-NOT: Missing on clause for reg OneClock
 // CHECK-NOT: Missing on clause for reg PortAndOutwardSocket
 // CHECK: FAILED with
-// CHECK: 5 ERROR
+// CHECK: 6 ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check failed

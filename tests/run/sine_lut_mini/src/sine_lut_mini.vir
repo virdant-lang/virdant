@@ -16,10 +16,10 @@ import virt
 //> shows the sine sample stored at that position.
 mod SineLut {
     //> Table index, 0 through 3.
-    incoming index : Word[2] async
+    incoming index : Word[2]
 
     //> Sine sample stored at `index`.
-    outgoing sample : Word[8] async dependson index
+    outgoing sample : Word[8] dependson index
 
     match index {
         with 0 {
@@ -56,7 +56,7 @@ pub mod SineLutTest for virt::Virt {
 
     //> Index of the entry under test, walking 0 through 3 and then
     //> wrapping back to 0.
-    reg index : Word[2] on clock {
+    reg index : Word[2] {
         initial it <= 0
         it <= index + 1
     }
@@ -75,14 +75,14 @@ pub mod SineLutTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each check
     //> folds its verdict in on the cycle its entry is on the inputs.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && lut.sample == expected
     }
 
     //> Number of entries checked so far, 0 through 4.  Holds at 4 so
     //> that `finished` stays high.
-    reg checked : Word[3] on clock {
+    reg checked : Word[3] {
         initial it <= 0
         if {
             when checked != 4 {

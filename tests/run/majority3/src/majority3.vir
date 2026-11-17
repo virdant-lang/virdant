@@ -18,16 +18,16 @@ mod Majority3 {
     incoming clock : Clock
 
     //> First operand.
-    incoming a : Bit async
+    incoming a : Bit
 
     //> Second operand.
-    incoming b : Bit async
+    incoming b : Bit
 
     //> Third operand.
-    incoming c : Bit async
+    incoming c : Bit
 
     //> Majority: `a && b`, `a && c`, or `b && c` makes it `1`.
-    outgoing out : Bit async dependson a, b, c {
+    outgoing out : Bit dependson a, b, c {
         it := (a && b) || (a && c) || (b && c)
     }
 
@@ -57,7 +57,7 @@ pub mod Majority3Test for virt::Virt {
     //> Index of the row under test, 0 through 7.  Its three bits are
     //> driven straight into the unit, so the 8 values sweep every
     //> combination of the three input bits.
-    reg index : Word[3] on clock {
+    reg index : Word[3] {
         initial it <= 0
         if {
             when !finished {
@@ -68,14 +68,14 @@ pub mod Majority3Test for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each cycle
     //> folds in the verdict for the current row.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && maj.out == expected
     }
 
     //> Rises one cycle after the last row is checked, so that the
     //> exit code sees the final `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when index == 7 {

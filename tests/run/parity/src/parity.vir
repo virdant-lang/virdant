@@ -20,26 +20,26 @@ import virt
 //> the word has even parity.
 mod Parity {
     //> Word whose parity is computed.
-    incoming x : Word[8] async
+    incoming x : Word[8]
 
     //> Fold of the two 4-bit halves: bit `i` here is `x[8..4][i] ^
     //> x[4..0][i]`.
-    wire p4 : Word[4] async {
+    wire p4 : Word[4] {
         it := x[8..4] ^ x[4..0]
     }
 
     //> Fold of the two 2-bit halves of `p4`.
-    wire p2 : Word[2] async {
+    wire p2 : Word[2] {
         it := p4[4..2] ^ p4[2..0]
     }
 
     //> Fold of the two bits of `p2`: the XOR of all 8 bits of `x`.
-    wire p1 : Word[1] async {
+    wire p1 : Word[1] {
         it := p2[2..1] ^ p2[1..0]
     }
 
     //> `1` when `x` has an even number of set bits.
-    outgoing even : Bit async dependson x {
+    outgoing even : Bit dependson x {
         it := p1 == 0
     }
 }
@@ -63,7 +63,7 @@ pub mod ParityTest for virt::Virt {
     }
 
     //> Index of the vector under test, 0 through 15.
-    reg index : Word[4] on clock {
+    reg index : Word[4] {
         initial it <= 0
         if {
             when !finished {
@@ -74,14 +74,14 @@ pub mod ParityTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each cycle
     //> folds in the verdict for the current vector.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && parity.even == expected
     }
 
     //> Rises one cycle after the last vector is checked, so that the
     //> exit code sees the final `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when index == 15 {

@@ -5,7 +5,7 @@
 // from any domain.  Enclosing `when` guards and `match` subjects drive
 // the components they gate, and count the same way.
 
-mod Mixed {
+pub mod Mixed {
     incoming clock : Clock
     incoming ext_data : Word[4] async
 
@@ -18,14 +18,14 @@ mod Mixed {
     // Constants upcast to every domain: a constant driver is fine.
     reg seeded : Word[4] {
         initial it <= 5w4
-        it <= seeded + 1w4
+        it <= it + 1w4
     }
 
     // `initial` statements drive too, and are checked the same way.
     reg bad_seed : Word[4] {
         // CHECK: Domain mismatch: cannot drive `bad_seed` (clocked by `clock`) with async
         initial it <= ext_data
-        it <= bad_seed + 1w4
+        it <= it + 1w4
     }
 
     // A `when` guard drives the component it gates: a guard on the
@@ -35,10 +35,7 @@ mod Mixed {
         if {
             // CHECK: Domain mismatch: cannot drive `gated` (clocked by `clock`) with async
             when ext_data[0] {
-                it <= gated + 1w4
-            }
-            else {
-                it <= gated
+                it <= it + 1w4
             }
         }
     }
@@ -50,18 +47,17 @@ mod Mixed {
         // CHECK: Domain mismatch: cannot drive `picked` (clocked by `clock`) with async
         match ext_data[1..0] {
             with 0w2 {
-                it <= picked + 1w4
-            }
-            else {
-                it <= picked
+                it <= it + 1w4
             }
         }
     }
+
+    unused counter
 }
 
 // An async component may be driven from any domain: the upcast
 // direction is always allowed.  (No CHECKs: this module checks clean.)
-mod Upcast {
+pub mod Upcast {
     incoming clock : Clock
     incoming ext_data : Word[4] async
 
@@ -73,36 +69,36 @@ mod Upcast {
     outgoing tapped : Word[4] async {
         it := counter
     }
+
+    unused ext_data
 }
 
 // Memory writes are drivers too: both the written data and a dynamic
 // write index must upcast to the memory's clock domain.
-mod MemData {
+pub mod MemData {
     incoming clock : Clock
     incoming ext_data : Word[8] async
 
     memory mem[16] : Word[8]
+    unused mem
 
-    on clock {
-        // CHECK: Domain mismatch: cannot drive `mem` (clocked by `clock`) with async
-        mem[3] <= ext_data
-    }
+    // CHECK: Domain mismatch: cannot drive `mem` (clocked by `clock`) with async
+    mem[3] <= ext_data
 }
 
-mod MemIndex {
+pub mod MemIndex {
     incoming clock : Clock
     incoming ext_addr : Word[4] async
 
     memory mem[16] : Word[8]
+    unused mem
 
-    on clock {
-        // CHECK: Domain mismatch: cannot drive `mem` (clocked by `clock`) with async
-        mem[dyn ext_addr] <= 0w8
-    }
+    // CHECK: Domain mismatch: cannot drive `mem` (clocked by `clock`) with async
+    mem[dyn ext_addr] <= 0w8
 }
 
 // The same rule across two explicit clocks.
-mod TwoClocks {
+pub mod TwoClocks {
     incoming clk_a : Clock
     incoming clk_b : Clock
     incoming b_data : Word[4] on clk_b
@@ -112,6 +108,8 @@ mod TwoClocks {
         // CHECK: Domain mismatch: cannot drive `a_reg` (clocked by `clk_a`) with clocked by `clk_b`
         it <= b_data
     }
+
+    unused a_reg
 }
 
 // CHECK: FAILED with

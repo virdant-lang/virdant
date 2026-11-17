@@ -17,17 +17,17 @@ import virt
 //> condition.
 mod MinMax {
     //> First operand.
-    incoming x : Word[8] async
+    incoming x : Word[8]
 
     //> Second operand.
-    incoming y : Word[8] async
+    incoming y : Word[8]
 
     //> Minimum of `x` and `y`: with equal operands, either order
     //> gives the same value.
-    outgoing lo : Word[8] async dependson x, y
+    outgoing lo : Word[8] dependson x, y
 
     //> Maximum of `x` and `y`.
-    outgoing hi : Word[8] async dependson x, y
+    outgoing hi : Word[8] dependson x, y
 
     if {
         when x <= y {
@@ -61,7 +61,7 @@ pub mod MinMaxTest for virt::Virt {
     }
 
     //> Index of the vector under test, 0 through 12.
-    reg index : Word[4] on clock {
+    reg index : Word[4] {
         initial it <= 0
         if {
             when !finished {
@@ -72,14 +72,14 @@ pub mod MinMaxTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each cycle
     //> folds in the verdict for both outputs of the current vector.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && mm.lo == expected_lo && mm.hi == expected_hi
     }
 
     //> Rises one cycle after the last vector is checked, so that the
     //> exit code sees the final `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when index == 12 {

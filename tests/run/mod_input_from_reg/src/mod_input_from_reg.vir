@@ -20,10 +20,10 @@ import virt
 //> register.
 mod Doubler {
     //> Value registered in the parent one cycle after the raw stimulus.
-    incoming input : Word[8] async
+    incoming input : Word[8]
 
     //> `input` doubled (wrapping modulo 256).
-    outgoing doubled : Word[8] async dependson input {
+    outgoing doubled : Word[8] dependson input {
         it := input + input
     }
 }
@@ -48,7 +48,7 @@ pub mod ModInputFromRegTest for virt::Virt {
 
     //> Index of the raw stimulus step currently being presented;
     //> free-runs through 0..15 and wraps.
-    reg index : Word[4] on clock {
+    reg index : Word[4] {
         initial it <= 0
         it <= it + 1
     }
@@ -56,7 +56,7 @@ pub mod ModInputFromRegTest for virt::Virt {
     //> Captures the raw `stimulus` once per clock edge.  This register
     //> is what drives the child's `input`, so the child sees the
     //> previous cycle's raw stimulus.
-    reg stimulus_reg : Word[8] on clock {
+    reg stimulus_reg : Word[8] {
         initial it <= 0
         it <= stimulus
     }
@@ -64,21 +64,21 @@ pub mod ModInputFromRegTest for virt::Virt {
     //> Lags `index` by one cycle: at any cycle after the first it
     //> holds the stimulus step applied the cycle before, selecting the
     //> golden (one-cycle-delayed) raw stimulus.
-    reg check_index : Word[4] on clock {
+    reg check_index : Word[4] {
         initial it <= 0
         it <= index
     }
 
     //> False only during cycle 0, before any stimulus has been
     //> registered and hence before any check is meaningful.
-    reg started : Bit on clock {
+    reg started : Bit {
         initial it <= false
         it <= true
     }
 
     //> Rises at the end of the final check (step 15), freezing the
     //> fold and validating `exit` on the next cycle.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when checking && check_index == 15 {
@@ -89,7 +89,7 @@ pub mod ModInputFromRegTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each check
     //> folds its verdict in on the cycle after its step is registered.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         if {
             when checking {

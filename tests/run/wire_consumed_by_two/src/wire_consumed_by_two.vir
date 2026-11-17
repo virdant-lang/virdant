@@ -18,28 +18,28 @@ import virt
 //> must always expose the same value.
 mod Consumers {
     //> First summand.
-    incoming a : Word[8] async
+    incoming a : Word[8]
 
     //> Second summand.
-    incoming b : Word[8] async
+    incoming b : Word[8]
 
     //> The one wire under test, consumed by both outputs below.
-    wire sum : Word[8] async {
+    wire sum : Word[8] {
         it := a + b
     }
 
     //> First consumer: reads `sum` directly.
-    outgoing out_direct : Word[8] async dependson a, b {
+    outgoing out_direct : Word[8] dependson a, b {
         it := sum
     }
 
     //> Intermediate wire whose computation also consumes `sum`.
-    wire double : Word[8] async {
+    wire double : Word[8] {
         it := sum + sum
     }
 
     //> Second consumer: reads `sum` through `double`.
-    outgoing out_recombined : Word[8] async dependson a, b {
+    outgoing out_recombined : Word[8] dependson a, b {
         it := double - sum
     }
 }
@@ -64,13 +64,13 @@ pub mod WireConsumedTest for virt::Virt {
     }
 
     //> First counter, stepping by 3 each cycle.
-    reg count_a : Word[8] on clock {
+    reg count_a : Word[8] {
         initial it <= 0
         it <= it + 3
     }
 
     //> Second counter, stepping by 5 each cycle.
-    reg count_b : Word[8] on clock {
+    reg count_b : Word[8] {
         initial it <= 0
         it <= it + 5
     }
@@ -98,13 +98,13 @@ pub mod WireConsumedTest for virt::Virt {
 
     //> Running AND of every cycle's checks.  Power-on true; each cycle
     //> folds its verdict in.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && ok_this_cycle
     }
 
     //> Cycles elapsed since power-on.
-    reg elapsed : Word[4] on clock {
+    reg elapsed : Word[4] {
         initial it <= 0
         it <= it + 1
     }

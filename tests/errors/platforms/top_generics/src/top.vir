@@ -8,8 +8,8 @@ pub mod Fifo[T : Type] {
     q := d
 }
 
+// The flow command's `vir check` stage passes (the warning asserted
+// below); the top-generics rule then fails the flow.
+// CHECK: Unused signal clk
 // CHECK: top module top::Fifo cannot have generic parameters
-// CHECK: FAILED with
-// CHECK: 1 ERROR
-// CHECK-NOT: WARNING
-// CHECK: Check failed
+// CHECK: Build failed

@@ -14,12 +14,12 @@ import virt
 //> deterministic sibling the harness can check.
 mod DontcareSource {
     //> Deterministic sibling of the `dontcare` port.
-    outgoing fixed : Bit async {
+    outgoing fixed : Bit {
         it := true
     }
 
     //> Outgoing port driven `dontcare`.
-    outgoing out : Word[8] async {
+    outgoing out : Word[8] {
         it := dontcare
     }
 }
@@ -52,14 +52,14 @@ pub mod DontcareOutgoingTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; the check
     //> verdict folds in on the first clock edge.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && ok_fixed
     }
 
     //> Rises on the first clock edge, so that `exit` never observes
     //> the vacuous power-on `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         it <= true
     }

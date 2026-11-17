@@ -43,9 +43,12 @@ impl Clocking {
 
         // Submodule clock binding must run before everything else: the
         // checks below (and the walk) see submodule-owned components
-        // through the mapped domains it produces.
+        // through the mapped domains it produces — including flexible
+        // instances, whose per-instance mode is pinned here from this
+        // module's usage.
         if has_submodules {
-            self.bind_submodule_clocks(builder, node);
+            let flexible_instances = self.bind_submodule_clocks(builder, node);
+            self.resolve_flexible_instances(node, flexible_instances);
         }
 
         // A register (or memory) can never be `async`: clocked components
@@ -62,12 +65,14 @@ impl Clocking {
             );
         } else {
             if clock_count == 0 {
-                // Zero clocks: there is no clock any component could be `Sync`
-                // on, so the full coloring has nothing to do — but that only
-                // works if every component is explicitly `async` (or
-                // Clock-typed: clocks are always `Async`).  A component left
-                // unset has no domain at all.
-                self.flag_unclad_components(node, "the module has no clocks");
+                // Zero clocks: with no `async` component the module is
+                // flexible (every unclad component is `Flexible`) and
+                // nothing is flagged; with one, the module is pinned
+                // async and the remaining unclad components have no
+                // domain at all.
+                if has_async_components(node) {
+                    self.flag_unclad_components(node, "the module has no clocks");
+                }
             } else if clock_count >= 2 {
                 // Multi-clock module: no unique clock, so nothing can be
                 // inferred and every component needs an explicit `on` (or
@@ -80,13 +85,15 @@ impl Clocking {
                 self.flag_unclad_components(node, "the module has multiple clocks");
             }
 
-            // The single-domain fast path skips the walk: every own
-            // component is `Sync(<unique clock>)`, so no own join or
-            // driver can fail.  A module with submodule instances never
-            // takes it: the drivers crossing the module boundary must be
-            // checked against the bound parent domains.
+            // The single-domain fast path skips the walk: in a
+            // unique-clock module every own component is
+            // `Sync(<unique clock>)`, in a flexible zero-clock module
+            // every one is `Flexible` — no own join or driver can fail
+            // either way.  A module with submodule instances never
+            // takes it: boundary drivers must be checked against the
+            // bound parent domains.
             let fast_path =
-                clock_count == 1 && !has_async_components(node) && !has_submodules;
+                clock_count <= 1 && !has_async_components(node) && !has_submodules;
             if !fast_path {
                 // Color every subexpression of the module and check
                 // the module's drivers and connections.
@@ -111,8 +118,19 @@ impl Clocking {
     /// `async` or `Constant` keep their domains; a child clock the
     /// parent never drove leaves the child components clocked by it
     /// unmapped, and so unchecked here.
-    fn bind_submodule_clocks(&mut self, builder: &mut Builder, node: &AstNode<'_>) {
+    ///
+    /// A component of a *flexible* child (zero clocks, nothing
+    /// `async`) is mapped through as [`Domain::Flexible`], and
+    /// `resolve_flexible_instances` pins the whole instance to `Async`
+    /// or to one shared `Sync` domain; the instances with flexible
+    /// components are returned for that.
+    fn bind_submodule_clocks(
+        &mut self,
+        builder: &mut Builder,
+        node: &AstNode<'_>,
+    ) -> Vec<FlexibleInstance> {
         let parsing = node.parsing();
+        let mut flexible_instances: Vec<FlexibleInstance> = vec![];
         let mut drivers: Vec<(AstNode<'_>, Option<BString>)> = vec![];
         collect_driver_statements(node, &mut drivers);
 
@@ -178,8 +196,9 @@ impl Clocking {
             // parent-side instance path; components with no parent-side
             // counterpart (a submodule instance's own internals) drop out
             // when the resolution fails.
-            let mut instance_prefix = bstr::BString::from(instance_name);
+            let mut instance_prefix = bstr::BString::from(instance_name.clone());
             instance_prefix.push(b'.');
+            let mut flexible_components: Vec<ComponentId> = vec![];
             for (child_path, child_component) in child_analysis.components() {
                 let Some(child_domain) = child_component.domain() else { continue };
                 let mut parent_path = instance_prefix.clone();
@@ -191,6 +210,7 @@ impl Clocking {
                 };
                 let mapped = match child_domain {
                     Domain::Async | Domain::Constant => Some(*child_domain),
+                    Domain::Flexible => Some(Domain::Flexible),
                     Domain::Sync(child_clock) => child_analysis
                         .component(*child_clock)
                         .map(|clock| clock.path())
@@ -204,9 +224,20 @@ impl Clocking {
                 };
                 if let Some(domain) = mapped {
                     self.submodule_domains.insert(parent_component.id(), domain);
+                    if matches!(domain, Domain::Flexible) {
+                        flexible_components.push(parent_component.id());
+                    }
                 }
             }
+            if !flexible_components.is_empty() {
+                flexible_instances.push(FlexibleInstance {
+                    name: instance_name,
+                    region: stmt.region(),
+                    components: flexible_components,
+                });
+            }
         }
+        flexible_instances
     }
 
     /// Flags every top-level clocked component (`reg`, `outgoing reg`,
@@ -510,6 +541,299 @@ impl Clocking {
             ));
         }
     }
+
+    /// Resolves the per-instance mode of every flexible submodule
+    /// instance mapped by `bind_submodule_clocks`: the module's usage
+    /// decides it.  Every driver, guard, and connection contributor on
+    /// a `Sync(c)` domain that touches one of the instance's
+    /// components records `c`; an instance touched by one clock is
+    /// pinned to `Sync(c)` across all its flexible components, an
+    /// untouched instance stays `Flexible` (the all-async mode), and
+    /// an instance touched by two clocks is a
+    /// `FlexibleInstanceClockConflict`, left `Flexible` so checking
+    /// does not cascade.  Runs before the walk, sharing `infer`'s memo
+    /// table.
+    fn resolve_flexible_instances(
+        &mut self,
+        node: &AstNode<'_>,
+        instances: Vec<FlexibleInstance>,
+    ) {
+        if instances.is_empty() {
+            return;
+        }
+        let parsing = node.parsing();
+
+        // An owner map from each flexible parent-side component to its
+        // instance, and one clock set per instance.
+        let mut owner: IndexMap<ComponentId, usize> = IndexMap::new();
+        for (index, instance) in instances.iter().enumerate() {
+            for &component in &instance.components {
+                owner.insert(component, index);
+            }
+        }
+        let mut instance_clocks: Vec<IndexSet<ComponentId>> =
+            vec![IndexSet::new(); instances.len()];
+
+        // The drivers, with the guards the walk would check them
+        // against, and the module's connections: each contributes the
+        // clocks of its `Sync`-domain sides to every flexible instance
+        // its references touch.
+        let scans: Vec<DriverScan<'_>> = self.collect_driver_checks(node, None, vec![]);
+        for scan in &scans {
+            // The clock domains in play: the driven component's, the
+            // driving expression's (and an indexed write's index's),
+            // and the enclosing guards'.
+            let mut clocks: Vec<ComponentId> = vec![];
+            if let Some(target) = self.driver_target(&scan.driver, scan.context)
+                && let Some(Domain::Sync(clock)) = self.component_domain(&target)
+            {
+                clocks.push(clock);
+            }
+            if let Some(index) = scan.driver.driver_index()
+                && let Some(Domain::Sync(clock)) = self.infer(&index)
+            {
+                clocks.push(clock);
+            }
+            if let Some(rhs) = scan.driver.driver()
+                && let Some(Domain::Sync(clock)) = self.infer(&rhs)
+            {
+                clocks.push(clock);
+            }
+            for (domain, _) in &scan.guards {
+                if let Domain::Sync(clock) = domain {
+                    clocks.push(*clock);
+                }
+            }
+            if clocks.is_empty() {
+                continue;
+            }
+            let mut regions: Vec<Region> = vec![scan.driver.region()];
+            regions.extend(scan.guards.iter().map(|(_, region)| *region));
+            self.record_sync_touches(
+                parsing,
+                &regions,
+                &clocks,
+                &owner,
+                &mut instance_clocks,
+            );
+        }
+
+        let connections = collect_connections(node);
+        for connection in &connections {
+            let mut clocks: Vec<ComponentId> = vec![];
+            for side in connection
+                .connection_lhs()
+                .into_iter()
+                .chain(connection.connection_rhs())
+            {
+                if let Some(component) = self
+                    .component_analysis()
+                    .component_at(side.location())
+                    && let Some(Domain::Sync(clock)) = self.component_domain(&component)
+                {
+                    clocks.push(clock);
+                }
+            }
+            if clocks.is_empty() {
+                continue;
+            }
+            self.record_sync_touches(
+                parsing,
+                &[connection.region()],
+                &clocks,
+                &owner,
+                &mut instance_clocks,
+            );
+        }
+
+        // Pin the single-clock instances; report the conflicted ones.
+        for (instance, clocks) in instances.iter().zip(&instance_clocks) {
+            let clocks: Vec<ComponentId> = clocks.iter().copied().collect();
+            match clocks.as_slice() {
+                [] => {}
+                [clock] => {
+                    for &component in &instance.components {
+                        self.submodule_domains
+                            .insert(component, Domain::sync(*clock));
+                    }
+                }
+                [left, right, ..] => {
+                    self.diagnostics.push(Diagnostic::new(
+                        instance.region,
+                        diagnostics::FlexibleInstanceClockConflict {
+                            instance: instance.name.clone(),
+                            left: self.render_domain(&Domain::sync(*left)),
+                            right: self.render_domain(&Domain::sync(*right)),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+
+    /// Records, for each instance owning a referenced component under
+    /// one of `regions`, every clock in `clocks`.
+    fn record_sync_touches(
+        &self,
+        parsing: &Parsing,
+        regions: &[Region],
+        clocks: &[ComponentId],
+        owner: &IndexMap<ComponentId, usize>,
+        instance_clocks: &mut [IndexSet<ComponentId>],
+    ) {
+        for (location, (component_id, _kind)) in
+            self.component_analysis().references().iter()
+        {
+            let Some(&instance) = owner.get(component_id) else {
+                continue;
+            };
+            let reference_region = parsing.ast_node(location.ast_node_id()).region();
+            if regions.iter().any(|region| {
+                region.package() == reference_region.package()
+                    && region.span().contains_span(reference_region.span())
+            }) {
+                instance_clocks[instance].extend(clocks.iter().copied());
+            }
+        }
+    }
+
+    /// Collects every driver statement of the module with the guards
+    /// the walk would check it against, mirroring `walk`'s guard
+    /// propagation, for the flexible-instance usage scan.
+    fn collect_driver_checks<'p>(
+        &mut self,
+        node: &AstNode<'p>,
+        context: Option<ComponentId>,
+        guards: Vec<(Domain, Region)>,
+    ) -> Vec<DriverScan<'p>> {
+        match node.payload() {
+            AstNodePayload::Component(payload) => {
+                let name = node.parsing().string(payload.name);
+                let context = self
+                    .component_analysis()
+                    .resolve(name.as_bstr())
+                    .map(|component| component.id());
+                let mut out = vec![];
+                for child in node.children() {
+                    for scan in self.collect_driver_checks(&child, context, guards.clone()) {
+                        out.push(scan);
+                    }
+                }
+                out
+            }
+            AstNodePayload::Socket(payload) => {
+                let name = node.parsing().string(payload.name);
+                let context = self
+                    .component_analysis()
+                    .resolve(name.as_bstr())
+                    .map(|component| component.id());
+                let mut out = vec![];
+                for child in node.children() {
+                    for scan in self.collect_driver_checks(&child, context, guards.clone()) {
+                        out.push(scan);
+                    }
+                }
+                out
+            }
+            AstNodePayload::Driver(_) | AstNodePayload::InitialDriver | AstNodePayload::IndexedDriver(_) => {
+                vec![DriverScan {
+                    driver: node.clone(),
+                    context,
+                    guards,
+                }]
+            }
+            AstNodePayload::If => {
+                // Same rule as the walk: when the guards conflict among
+                // themselves, they do not constrain the drivers beneath.
+                let joined = self.infer(node);
+                let children = node.children();
+                let mut out = vec![];
+                for (guard, body) in if_arm_children(&children) {
+                    let mut arm_guards = guards.clone();
+                    if joined.is_some()
+                        && let Some(guard) = guard
+                        && let Some(domain) = self.infer(guard)
+                    {
+                        arm_guards.push((domain, guard.region()));
+                    }
+                    for scan in self.collect_driver_checks(body, context, arm_guards) {
+                        out.push(scan);
+                    }
+                }
+                out
+            }
+            AstNodePayload::Match => {
+                self.infer(node);
+                let children = node.children();
+                let mut arm_guards = guards;
+                if let Some(subject) = node.subject()
+                    && let Some(domain) = self.infer(&subject)
+                {
+                    arm_guards.push((domain, subject.region()));
+                }
+                let mut out = vec![];
+                for (_pat, body) in match_arm_children(&children) {
+                    for scan in self.collect_driver_checks(body, context, arm_guards.clone()) {
+                        out.push(scan);
+                    }
+                }
+                out
+            }
+            AstNodePayload::Let => {
+                self.infer(node);
+                let mut out = vec![];
+                for child in node.children() {
+                    for scan in self.collect_driver_checks(&child, context, guards.clone()) {
+                        out.push(scan);
+                    }
+                }
+                out
+            }
+            _ => {
+                let mut out = vec![];
+                for child in node.children() {
+                    for scan in self.collect_driver_checks(&child, context, guards.clone()) {
+                        out.push(scan);
+                    }
+                }
+                out
+            }
+        }
+    }
+}
+
+/// A submodule instance of a flexible (zero-clock) module: the
+/// parent-side components mapped `Flexible` by the submodule clock
+/// binding, resolved per instance by `Clocking::resolve_flexible_instances`.
+struct FlexibleInstance {
+    name: BString,
+    region: Region,
+    components: Vec<ComponentId>,
+}
+
+/// One driver statement of the module with the guards the walk would
+/// check it against, collected by the flexible-instance usage scan.
+/// Guards are kept as (domain, region): their references are found by
+/// region containment.
+struct DriverScan<'p> {
+    driver: AstNode<'p>,
+    context: Option<ComponentId>,
+    guards: Vec<(Domain, Region)>,
+}
+
+/// Collects every `:=:` / `#=#` connection statement of the module
+/// (recursively, through it-blocks and component bodies).
+fn collect_connections<'p>(node: &AstNode<'p>) -> Vec<AstNode<'p>> {
+    if matches!(node.payload(), AstNodePayload::BidirectionalDriver) {
+        return vec![node.clone()];
+    }
+    let mut out = vec![];
+    for child in node.children() {
+        for connection in collect_connections(&child) {
+            out.push(connection);
+        }
+    }
+    out
 }
 
 /// The `Component` statements at the top level of a mod def.

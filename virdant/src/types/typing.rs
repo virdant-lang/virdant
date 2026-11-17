@@ -361,6 +361,9 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
                 && !use_locations.contains_key(&path)
                 && !unused_marks.contains_key(&path)
                 && !component.synthetic()
+                // A component whose type failed to resolve is already
+                // diagnosed; do not pile an unused warning on it.
+                && component.typ().is_some()
                 && (component_analysis.implicit_clock() != Some(component.id())
                     || !has_implicitly_clocked_reg)
                 && !matches!(

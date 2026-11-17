@@ -67,8 +67,8 @@ pub mod NotAMemory {
 pub mod OutsideClockedContext {
     incoming clk_a : Clock
     incoming clk_b : Clock
-    incoming addr : Word[4]
-    incoming write_data : Word[8]
+    incoming addr : Word[4] on clk_a
+    incoming write_data : Word[8] on clk_a
 
     // Two clocks and no explicit `on` clause: no implicit clocked
     // context exists, so this write site has no clock.
@@ -81,7 +81,6 @@ pub mod OutsideClockedContext {
     // driver. The unused marks silence the incidental UnusedSource
     // warnings so the filecheck stays focused on the
     // MemoryWriteOutsideOnRegion rule.
-    unused clk_a
     unused clk_b
     unused mem
 }

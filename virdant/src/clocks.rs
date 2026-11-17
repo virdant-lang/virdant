@@ -119,6 +119,7 @@ impl Clocking {
             }
             Domain::Async => BString::from("async"),
             Domain::Constant => BString::from("constant"),
+            Domain::Flexible => BString::from("flexible (clockless)"),
         }
     }
 

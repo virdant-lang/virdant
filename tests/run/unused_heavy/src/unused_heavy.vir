@@ -38,12 +38,12 @@ mod Peer {
 
     //> The used response: `addr + 1`, computed from `addr` alone --
     //> `sel` is ignored, so the transform must never depend on it.
-    wire rsp : Word[8] async {
+    wire rsp : Word[8] {
         it := link.addr + 1w8
     }
 
     //> The ignored-by-client response: the low nibble of `addr`.
-    wire addr_low : Word[4] async {
+    wire addr_low : Word[4] {
         it := link.addr[4..0]
     }
 }
@@ -53,17 +53,17 @@ mod Peer {
 //> are suppressed with `unused` in the instantiation.
 mod Extras {
     //> Port the harness actually consumes.
-    outgoing kept_out : Word[8] async {
+    outgoing kept_out : Word[8] {
         it := 0xabw8
     }
 
     //> Port the harness ignores.
-    outgoing spare_a : Word[8] async {
+    outgoing spare_a : Word[8] {
         it := 0x11w8
     }
 
     //> Another port the harness ignores.
-    outgoing spare_b : Word[8] async {
+    outgoing spare_b : Word[8] {
         it := 0x22w8
     }
 }
@@ -100,7 +100,7 @@ mod Stim {
     }
 
     //> Request address, cycling 0 through 15.
-    reg addr : Word[8] on clock {
+    reg addr : Word[8] {
         initial it <= 0
         if {
             when !done {
@@ -111,7 +111,7 @@ mod Stim {
 
     //> Request selector bit, toggling every cycle; the server ignores
     //> it, so it must never influence the response.
-    reg sel : Bit on clock {
+    reg sel : Bit {
         initial it <= false
         if {
             when !done {
@@ -158,7 +158,7 @@ mod Stim {
     unused unused_const
 
     //> Cycle counter, 0 through 15.
-    reg cycles : Word[4] on clock {
+    reg cycles : Word[4] {
         initial it <= 0
         if {
             when !done {
@@ -169,7 +169,7 @@ mod Stim {
 
     //> Rises once 16 cycles have been checked; freezes `all_ok` and
     //> lets `exit` become `@Valid`.
-    reg done : Bit on clock {
+    reg done : Bit {
         initial it <= false
         if {
             when cycles == 15w4 {
@@ -180,7 +180,7 @@ mod Stim {
 
     //> Running AND of every check so far.  Power-on true; each cycle
     //> folds both verdicts in until `done`.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         if {
             when !done {

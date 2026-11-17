@@ -20,17 +20,17 @@ import virt
 //> bit slices.
 mod ShiftOne {
     //> Value to shift.
-    incoming x : Word[8] async
+    incoming x : Word[8]
 
     //> `x` shifted left by 1: drop the top bit (shifted out and
     //> lost) and append a 0 at the bottom.
-    outgoing left1 : Word[8] async dependson x {
+    outgoing left1 : Word[8] dependson x {
         it := word(x[7..0], 0w1)
     }
 
     //> `x` shifted right by 1: prepend a 0 at the top and drop the
     //> bottom bit (shifted out and lost).
-    outgoing right1 : Word[8] async dependson x {
+    outgoing right1 : Word[8] dependson x {
         it := word(0w1, x[8..1])
     }
 }
@@ -54,7 +54,7 @@ pub mod ShiftLeftOneTest for virt::Virt {
     }
 
     //> Index of the vector under test, 0 through 15.
-    reg index : Word[4] on clock {
+    reg index : Word[4] {
         initial it <= 0
         if {
             when !finished {
@@ -65,14 +65,14 @@ pub mod ShiftLeftOneTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each cycle
     //> folds in the verdicts for the current vector.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && shifter.left1 == expected_left && shifter.right1 == expected_right
     }
 
     //> Rises one cycle after the last vector is checked, so that the
     //> exit code sees the final `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when index == 15 {

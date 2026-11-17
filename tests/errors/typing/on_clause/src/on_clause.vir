@@ -1,40 +1,43 @@
 // A `reg`'s `on` clause naming a non-clock component.
-mod NotAClock {
+pub mod NotAClock {
     incoming clock : Clock
     incoming data : Bit
 
     // CHECK: Wrong type: Expected Clock but found Bit
+    unused clock
     reg data_reg : Word[4] on data {
-        initial data_reg <= 0
-        data_reg <= data_reg + 1w4
+        initial it <= 0
+        it <= it + 1w4
     }
 }
 
 // Non-reg kinds carry `on` clauses too (the clause fixes the
 // component's clock domain), and are checked the same way.
-mod WireNotAClock {
+pub mod WireNotAClock {
     incoming clock : Clock
     incoming data : Bit
 
     // CHECK: Wrong type: Expected Clock but found Bit
+    unused clock
     wire tapped : Bit on data {
         it := true
     }
 
-    outgoing out : Bit dependson tapped {
+    outgoing out : Bit {
         it := tapped
     }
 }
 
 // The `on` clause must name a component of this module; an unknown
 // name is unresolved, not merely non-clock.
-mod UnresolvedClock {
+pub mod UnresolvedClock {
     incoming clock : Clock
 
     // CHECK: Unknown component typo_clock
+    unused clock
     reg counted : Word[4] on typo_clock {
-        initial counted <= 0
-        counted <= counted + 1w4
+        initial it <= 0
+        it <= it + 1w4
     }
 }
 

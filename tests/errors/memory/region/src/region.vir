@@ -5,8 +5,8 @@
 pub mod ClockMismatch {
     incoming clk_a : Clock
     incoming clk_b : Clock
-    incoming addr : Word[4]
-    incoming write_data : Word[8]
+    incoming addr : Word[4] on clk_a
+    incoming write_data : Word[8] on clk_a
 
     // The memory is clocked by clk_a; the region names clk_b.
     memory mem[16] : Word[8] on clk_a {

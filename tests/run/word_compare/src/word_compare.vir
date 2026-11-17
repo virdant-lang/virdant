@@ -15,28 +15,28 @@ import virt
 //> All four ordered comparisons of the operands.
 mod WordCompare {
     //> First operand.
-    incoming a : Word[8] async
+    incoming a : Word[8]
 
     //> Second operand.
-    incoming b : Word[8] async
+    incoming b : Word[8]
 
     //> `a < b`.
-    outgoing lt : Bit async dependson a, b {
+    outgoing lt : Bit dependson a, b {
         it := a < b
     }
 
     //> `a > b`.
-    outgoing gt : Bit async dependson a, b {
+    outgoing gt : Bit dependson a, b {
         it := a > b
     }
 
     //> `a <= b`.
-    outgoing le : Bit async dependson a, b {
+    outgoing le : Bit dependson a, b {
         it := a <= b
     }
 
     //> `a >= b`.
-    outgoing ge : Bit async dependson a, b {
+    outgoing ge : Bit dependson a, b {
         it := a >= b
     }
 }
@@ -61,7 +61,7 @@ pub mod WordCompareTest for virt::Virt {
     }
 
     //> Index of the vector under test, 0 through 11.
-    reg index : Word[4] on clock {
+    reg index : Word[4] {
         initial it <= 0
         if {
             when !finished {
@@ -72,14 +72,14 @@ pub mod WordCompareTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each cycle
     //> folds in the verdict for the current vector.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && verdict == expected
     }
 
     //> Rises one cycle after the last vector is checked, so that the
     //> exit code sees the final `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when index == 11 {

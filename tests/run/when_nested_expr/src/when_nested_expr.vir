@@ -23,14 +23,14 @@ import virt
 //> set.
 mod NestedWhen {
     //> Select bit feeding the outer `case` conditions.
-    incoming a : Bit async
+    incoming a : Bit
 
     //> Select bit feeding the inner `case` conditions.
-    incoming b : Bit async
+    incoming b : Bit
 
     //> Value from a `when` nested in both a `case` arm and the `else`
     //> arm of an outer `when`.
-    outgoing nested : Word[8] async dependson a, b {
+    outgoing nested : Word[8] dependson a, b {
         it := if {
             when a => if {
                 when b => 0xa1
@@ -46,7 +46,7 @@ mod NestedWhen {
 
     //> Value from a `when` nested inside an arm whose outer condition
     //> (`a || b`) overlaps the inner one (`a && b`).
-    outgoing overlap : Word[8] async dependson a, b {
+    outgoing overlap : Word[8] dependson a, b {
         it := if {
             when a || b => if {
                 when a && b => 0xb1
@@ -78,7 +78,7 @@ pub mod WhenNestedTest for virt::Virt {
 
     //> Select bits under test: the sequencer cycles them 0, 1, 2, 3,
     //> wrapping back to 0.
-    reg sel : Word[2] on clock {
+    reg sel : Word[2] {
         initial it <= 0
         it <= if {
             when it == 3 => 0
@@ -88,14 +88,14 @@ pub mod WhenNestedTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each cycle
     //> folds in the verdicts for the current vector.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && dut.nested == expected_nested && dut.overlap == expected_overlap
     }
 
     //> Rises one cycle after the last vector is checked, so that the
     //> exit code sees the final `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when sel == 3 {

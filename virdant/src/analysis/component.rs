@@ -229,6 +229,14 @@ impl ComponentAnalysis {
         self.moddef
     }
 
+    /// The collected references, keyed by the referencing AST node's
+    /// location.  See `collect_references`.
+    pub fn references(
+        &self,
+    ) -> &IndexMap<Location, (ComponentId, ReferenceKind)> {
+        &self.references
+    }
+
     pub fn type_of(&self, path: &BStr) -> Option<Type> {
         for (path_, component) in &self.components {
             if path == path_ {
@@ -937,6 +945,16 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     let clock_count = incoming_clock_ports(&component_analysis).len();
     let implicit_clock_id = resolve_unique_clock(&component_analysis);
     component_analysis.implicit_clock = implicit_clock_id;
+    // Under `@unsafe_clocks`, an explicit `on` clause is never
+    // redundant: omitting it is a `MissingDomainClause` error, so the
+    // clause is load-bearing even when it names the unique clock.
+    let has_unsafe_clocks = item_ast.annotations().into_iter().any(|annotation| {
+        matches!(
+            annotation.payload(),
+            AstNodePayload::Annotation(annotation)
+                if parsing.string(annotation.name).as_bytes() == b"unsafe_clocks"
+        )
+    });
     if clock_count == 1 {
         let implicit_clock_path = implicit_clock_id
             .and_then(|id| component_analysis.component(id))
@@ -947,6 +965,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
         // kind because the clause is inert.  An `on` clause referencing
         // anything else (eg, a submodule's clock output) is load-bearing
         // on a reg and stays silent.
+        if !has_unsafe_clocks {
         for (component, region, written_clock) in written_ons {
             if Some(&written_clock) == implicit_clock_path.as_ref() {
                 component_analysis.diagnostics.push(Diagnostic::new(
@@ -954,6 +973,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     diagnostics::RedundantOnClause { component },
                 ));
             }
+        }
         }
     } else {
         for (component, region) in regs_without_on {
@@ -1032,6 +1052,28 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 }
                 if component.domain.is_none() {
                     component.domain = Some(Domain::sync(implicit_clock_id));
+                }
+            }
+        }
+
+        // Flexible zero-clock inference: with no incoming clocks and
+        // no `async` component, every still-unset own component is
+        // `Flexible` — the clock checker resolves the module per
+        // instantiation site.  (Regs/memories already reported
+        // `MissingOnClause`, so a flexible module is combinational.)
+        let has_async_component = item_ast.children().into_iter().any(|child| {
+            matches!(
+                child.payload(),
+                AstNodePayload::Component(payload) if payload.is_async
+            )
+        });
+        if clock_count == 0 && !has_async_component {
+            for (_, component) in component_analysis.components.iter_mut() {
+                if component.submodule_owned {
+                    continue;
+                }
+                if component.domain.is_none() {
+                    component.domain = Some(Domain::Flexible);
                 }
             }
         }

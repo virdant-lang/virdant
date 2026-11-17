@@ -17,10 +17,10 @@ import mem
 //> the external RAM, entirely in Virdant.
 mod AddOne {
     //> Word read from the external RAM (the `ext mod` boundary).
-    incoming data : Word[32] async
+    incoming data : Word[32]
 
     //> `data + 1`.
-    outgoing sum : Word[32] async dependson data {
+    outgoing sum : Word[32] dependson data {
         it := data + 1
     }
 }
@@ -57,7 +57,7 @@ pub mod Top for virt::Virt {
     }
 
     //> Free-running cycle counter, 0 through 15.
-    reg count : Word[4] on clock {
+    reg count : Word[4] {
         initial it <= 0
         it <= it + 1
     }
@@ -65,7 +65,7 @@ pub mod Top for virt::Virt {
     //> Byte address presented to the RAM.  It walks 0, 4, 8, 12 and
     //> wraps, so the write phase (cycles 0..3) and the read phase
     //> (cycles 4..7) visit the same four words.
-    reg addr : Word[16] on clock {
+    reg addr : Word[16] {
         initial it <= 0
         it <= if {
             when it == 12 => 0
@@ -136,7 +136,7 @@ pub mod Top for virt::Virt {
     }
 
     //> False during cycle 0, before any stimulus has been applied.
-    reg started : Bit on clock {
+    reg started : Bit {
         initial it <= false
         it <= true
     }
@@ -144,7 +144,7 @@ pub mod Top for virt::Virt {
     //> Running AND of every cross-boundary check so far.  Power-on
     //> true; each read-back folds its verdict in on the cycle after
     //> its address is presented.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         if {
             when checking {
@@ -155,7 +155,7 @@ pub mod Top for virt::Virt {
 
     //> Rises at the end of the final read-back check (cycle 7), so
     //> that the exit code sees the final `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when read && count == 7 {

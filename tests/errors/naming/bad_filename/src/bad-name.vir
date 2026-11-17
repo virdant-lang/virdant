@@ -5,8 +5,6 @@
 // so a package named `bad-name` could never be imported by another file.
 // The error message names the file and suggests the usual fix.
 
+// The error is raised at load time, before `vir check` produces any
+// summary output.
 // CHECK: bad-name.vir: file name is not a valid package identifier
-// CHECK: FAILED with
-// CHECK: 1 ERROR
-// CHECK-NOT: WARNING
-// CHECK: Check failed
