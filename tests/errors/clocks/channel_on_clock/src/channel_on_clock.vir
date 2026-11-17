@@ -1,0 +1,57 @@
+// A socketdef channel's `on <CLOCK>` clause resolves within the
+// socketdef's own scope: the written name must denote a sibling Clock
+// channel, and at instantiation time it resolves through the socket
+// instance's namespace (`b.clk`).  A name outside the socketdef — as if
+// the socketdef were a macro expanded into the module — is a hard
+// error.  The probe below drives a `clock`-domain wire from the
+// resolved channel: the distinct-clock mismatch proves the clause
+// resolved — an unresolved clause would leave the channel's domain
+// unset and the read silently unchecked.
+
+socket WithOwnClock {
+    cosi clk : Clock
+    // An explicit `on` naming the socket's unique Clock channel is
+    // redundant (clause-less channels are implicitly `on` it), but
+    // still resolves: the probe below proves `data` is `Sync(b.clk)`.
+    // CHECK: Redundant `on` clause: `data`
+    cosi data : Word[8] on clk
+}
+
+pub mod UsesOwnClockChannel {
+    incoming clock : Clock
+
+    server socket b of WithOwnClock
+
+    // CHECK: Domain mismatch: cannot drive `probe` (clocked by `clock`) with clocked by `b.clk`
+    wire probe : Word[8] on clock {
+        it := b.data
+    }
+
+    unused probe
+}
+
+socket OnModuleClock {
+    // CHECK: Unknown component clock
+    cosi data : Word[8] on clock
+}
+
+pub mod OnModuleClockUser {
+    incoming clock : Clock
+    incoming aux : Clock
+
+    server socket b of OnModuleClock
+
+    // The clause never resolved, so `b.data` has no domain and the
+    // read is silently unchecked — the Unknown error above is the
+    // report.
+    wire probe : Word[8] on aux {
+        it := b.data
+    }
+
+    unused probe
+}
+
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK: 3 WARNING
+// CHECK: Check failed

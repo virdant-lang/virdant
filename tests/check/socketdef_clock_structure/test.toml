@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "A socketdef's clock structure decides its channels' domains: no Clock channels -> flexible (resolved per module), one Clock channel -> others implicitly on it (bound through the module's driver), async overrides."
+filecheck = "src/socketdef_clock_structure.vir"

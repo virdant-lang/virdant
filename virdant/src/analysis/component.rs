@@ -448,6 +448,17 @@ fn checked_instantiation_args(
     )
 }
 
+fn join_paths(parts: &[&BStr]) -> BString {
+    let mut joined = BString::new(Vec::new());
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            joined.push(b'.');
+        }
+        joined.extend_from_slice(part);
+    }
+    joined
+}
+
 pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<ComponentAnalysis> {
     let mut component_analysis = ComponentAnalysis {
         moddef,
@@ -472,6 +483,14 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     // Domains not fixed by the declaration itself (`on` clauses and
     // unique-clock inference) are resolved in the post-pass below.
     let mut ons_to_resolve: Vec<ComponentId> = vec![];
+    // `on <CLOCK>` clauses on synthesized platform ports and socketdef
+    // channels, resolved in the post-pass below.
+    let mut deferred_ons: Vec<(ComponentId, Vec<BString>)> = vec![];
+    // Channels of single-Clock-channel socket instances that carry no
+    // explicit clause: implicitly `on` the socket's unique Clock
+    // channel, whose instance path is kept here and resolved to a
+    // component id in the post-pass, once every channel is registered.
+    let mut deferred_socket_clocks: Vec<(ComponentId, BString)> = vec![];
 
     let symboltable = builder.get_symboltable();
     let location = symboltable.symbol(moddef).location();
@@ -765,13 +784,46 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                             let socket_def_parsing = builder.get_parsing(socket_def_location.package());
                             let socket_def_ast = socket_def_parsing.ast_node(socket_def_location.ast_node_id());
 
+                            // The socket's clock structure decides the
+                            // channels' domains, exactly like the
+                            // module-level socket arm below.
+                            let mut channel_decls: Vec<(AstNode<'_>, crate::syntax::payload::Channel, Option<Type>)> = vec![];
                             for channel_stmt in socket_def_ast.children() {
+                                let AstNodePayload::Channel(channel) = channel_stmt.payload() else {
+                                    continue;
+                                };
+                                let typ_node = channel_stmt.typ().unwrap();
+                                // The channel type as written in the
+                                // socketdef, substituted with the
+                                // instance's (composed) type arguments.
+                                let typ = match builder.get_type_at(typ_node.location()) {
+                                    Ok(typ) => Some(substitute(&typ, &mono_socket_args)),
+                                    Err(_) => None,
+                                };
+                                channel_decls.push((channel_stmt.clone(), channel, typ));
+                            }
+                            let socket_clock_count = channel_decls
+                                .iter()
+                                .filter(|(_, _, typ)| typ.as_ref() == Some(&Type::Clock))
+                                .count();
+                            let unique_clock_path: Option<BString> = if socket_clock_count == 1 {
+                                channel_decls
+                                    .iter()
+                                    .find(|(_, _, typ)| typ.as_ref() == Some(&Type::Clock))
+                                    .map(|(_, channel, _)| {
+                                        join_paths(&[
+                                            instance_name.as_bstr(),
+                                            socket_instance_name.as_bstr(),
+                                            socket_def_parsing.string(channel.name).as_bstr(),
+                                        ])
+                                    })
+                            } else {
+                                None
+                            };
+                            for (channel_stmt, channel, typ) in channel_decls {
                                 let id = ComponentId {
                                     item_id: moddef,
                                     index: component_analysis.components.len(),
-                                };
-                                let AstNodePayload::Channel(channel) = channel_stmt.payload() else {
-                                    continue;
                                 };
 
                                 let channel_name = socket_def_parsing.string(channel.name);
@@ -781,14 +833,6 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                         socket_instance_name.to_str_lossy(),
                                         channel_name.to_str_lossy()).into_bytes()
                                 );
-                                let typ_node = channel_stmt.typ().unwrap();
-                                // The channel type as written in the
-                                // socketdef, substituted with the
-                                // instance's (composed) type arguments.
-                                let typ = match builder.get_type_at(typ_node.location()) {
-                                    Ok(typ) => Some(substitute(&typ, &mono_socket_args)),
-                                    Err(_) => None,
-                                };
                                 let flow = if drives_channel(submodule_socket.role, channel.dir) {
                                     Flow::Source
                                 } else {
@@ -799,6 +843,43 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     Flow::Source => Some(ComponentKind::Outgoing),
                                     Flow::Duplex => None,
                                 };
+                                // Domain rules per the socket's clock
+                                // structure (see
+                                // `check_socketdef_domains`): async/clock
+                                // → `Async`, explicit `on` → deferred,
+                                // else flexible (0 clocks), implicit (1),
+                                // unclad (≥2).
+                                let domain = if typ.as_ref() == Some(&Type::Clock)
+                                    || channel.is_async
+                                {
+                                    Some(Domain::Async)
+                                } else if channel_stmt.on_clause().is_some() {
+                                    None
+                                } else {
+                                    match socket_clock_count {
+                                        0 => Some(Domain::Flexible),
+                                        1 => {
+                                            deferred_socket_clocks.push((
+                                                id,
+                                                unique_clock_path.clone().unwrap(),
+                                            ));
+                                            None
+                                        }
+                                        _ => None,
+                                    }
+                                };
+                                if let Some(on_clause) = channel_stmt.on_clause()
+                                    && let Some(path) = on_clause.path()
+                                {
+                                    deferred_ons.push((
+                                        id,
+                                        vec![join_paths(&[
+                                            instance_name,
+                                            socket_instance_name,
+                                            socket_def_parsing.string(path),
+                                        ])],
+                                    ));
+                                }
                                 let component = Component {
                                     id,
                                     path: path.clone(),
@@ -812,7 +893,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     default_expr: None,
                                     depth: None,
                                     clock: None,
-                                    domain: None,
+                                    domain,
                                 };
                                 if !components_seen.contains(&path) {
                                     components_seen.insert(path.clone());
@@ -867,19 +948,18 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let socket_location = socket_symbol.location();
                 let socket_parsing = builder.get_parsing(socket_location.package());
                 let socket_ast = socket_parsing.ast_node(socket_location.ast_node_id());
+
+                // The socket's clock structure decides the channels'
+                // domains: a channel typed `Clock` is a clock (always
+                // `Async`); with no Clock channels the other channels are
+                // flexible; with exactly one, they are implicitly `on`
+                // it (unless declared `async`); with several, they need
+                // explicit clauses (reported at the socketdef).
+                let mut channel_decls: Vec<(AstNode<'_>, crate::syntax::payload::Channel, Option<Type>)> = vec![];
                 for socket_stmt in socket_ast.children() {
-                    let id = ComponentId {
-                        item_id: moddef,
-                        index: component_analysis.components.len(),
-                    };
                     let AstNodePayload::Channel(channel) = socket_stmt.payload() else {
                         continue;
                     };
-
-                    let port_name = socket_parsing.string(channel.name);
-                    let path = bstr::BString::from(
-                        format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
-                    );
                     let typ_node = socket_stmt.typ().unwrap();
                     // The channel type as written in the socketdef,
                     // substituted with this instance's type arguments.
@@ -887,6 +967,35 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         Ok(typ) => Some(substitute(&typ, &socket_args)),
                         Err(_) => None,
                     };
+                    channel_decls.push((socket_stmt.clone(), channel, typ));
+                }
+                let socket_clock_count = channel_decls
+                    .iter()
+                    .filter(|(_, _, typ)| typ.as_ref() == Some(&Type::Clock))
+                    .count();
+                let unique_clock_path: Option<BString> = if socket_clock_count == 1 {
+                    channel_decls
+                        .iter()
+                        .find(|(_, _, typ)| typ.as_ref() == Some(&Type::Clock))
+                        .map(|(_, channel, _)| {
+                            join_paths(&[
+                                instance_name.as_bstr(),
+                                socket_parsing.string(channel.name).as_bstr(),
+                            ])
+                        })
+                } else {
+                    None
+                };
+                for (socket_stmt, channel, typ) in channel_decls {
+                    let id = ComponentId {
+                        item_id: moddef,
+                        index: component_analysis.components.len(),
+                    };
+
+                    let port_name = socket_parsing.string(channel.name);
+                    let path = bstr::BString::from(
+                        format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
+                    );
                     // The channel in its driving role (`client` for
                     // `cosi`, `server` for `soci`) is an outgoing port of
                     // this module; in the receiving role it is an incoming
@@ -903,14 +1012,33 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     } else {
                         Some(ComponentKind::Incoming)
                     };
-                    // A channel typed `Clock` is a clock, and clocks are
-                    // always `Async`, whatever the module's clock count.
-                    let is_clock_channel = typ.as_ref() == Some(&Type::Clock);
-                    let domain = if is_clock_channel {
+                    // Domain rules per the socket's clock structure
+                    // (see `check_socketdef_domains`): async/clock →
+                    // `Async`, explicit `on` → deferred, else flexible
+                    // (0 clocks), implicit (1), unclad (≥2).
+                    let domain = if typ.as_ref() == Some(&Type::Clock) || channel.is_async {
                         Some(Domain::Async)
-                    } else {
+                    } else if socket_stmt.on_clause().is_some() {
                         None
+                    } else {
+                        match socket_clock_count {
+                            0 => Some(Domain::Flexible),
+                            1 => {
+                                deferred_socket_clocks
+                                    .push((id, unique_clock_path.clone().unwrap()));
+                                None
+                            }
+                            _ => None,
+                        }
                     };
+                    if let Some(on_clause) = socket_stmt.on_clause()
+                        && let Some(on_path) = on_clause.path()
+                    {
+                        deferred_ons.push((
+                            id,
+                            vec![join_paths(&[instance_name, socket_parsing.string(on_path)])],
+                        ));
+                    }
                     let component = Component {
                         id,
                         path: path.clone(),
@@ -1036,6 +1164,25 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 }
             }
         }
+        // Channels implicitly `on` a single-Clock-channel socket's
+        // unique Clock channel: resolve the kept instance paths to the
+        // clock channel's component id.  (Before unique-clock inference,
+        // so the socket's clock — not the module's — decides.)
+        for (component_id, clock_path) in &deferred_socket_clocks {
+            let clock_id = component_analysis
+                .resolve(clock_path.as_bstr())
+                .filter(|clock| clock.typ().as_ref() == Some(&Type::Clock))
+                .map(|clock| clock.id());
+            if let Some(clock_id) = clock_id
+                && let Some((_, component)) = component_analysis
+                    .components
+                    .iter_mut()
+                    .find(|(_, component)| component.id == *component_id)
+            {
+                component.domain = Some(Domain::sync(clock_id));
+            }
+        }
+
         // Unique-clock inference: every own component whose domain is
         // still unset after its declaration and any `on` clause — the
         // declared components and the channels of the module's own
@@ -1075,6 +1222,31 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 if component.domain.is_none() {
                     component.domain = Some(Domain::Flexible);
                 }
+            }
+        }
+
+        // `on <CLOCK>` clauses written on synthesized platform ports and
+        // on socketdef channels resolve here, once every component of
+        // the module — including the named clocks — is registered: the
+        // first candidate naming a Clock-typed component wins.  A clause
+        // naming none leaves the port's domain unset (the checker's
+        // unclad rules apply).
+        for (component_id, candidates) in &deferred_ons {
+            let clock_id = candidates
+                .iter()
+                .find_map(|clock_path| {
+                    component_analysis
+                        .resolve(clock_path.as_bstr())
+                        .filter(|clock| clock.typ().as_ref() == Some(&Type::Clock))
+                        .map(|clock| clock.id())
+                });
+            if let Some(clock_id) = clock_id
+                && let Some((_, component)) = component_analysis
+                    .components
+                    .iter_mut()
+                    .find(|(_, component)| component.id == *component_id)
+            {
+                component.domain = Some(Domain::sync(clock_id));
             }
         }
     }
@@ -1123,6 +1295,14 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         },
                         PortDir::Bidir => continue,
                     };
+                    let domain = if platform_port.is_async {
+                        Some(Domain::Async)
+                    } else {
+                        None
+                    };
+                    if let Some(on_path) = &platform_port.on_path {
+                        deferred_ons.push((id, vec![on_path.clone()]));
+                    }
                     let component = Component {
                         id,
                         path: platform_port.name.clone(),
@@ -1136,7 +1316,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         default_expr,
                         depth: None,
                         clock: None,
-                        domain: None,
+                        domain,
                     };
                     components_seen.insert(platform_port.name.clone());
                     component_analysis.components.push((platform_port.name, component));

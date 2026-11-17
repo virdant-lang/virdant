@@ -45,9 +45,14 @@ impl Clocking {
         // checks below (and the walk) see submodule-owned components
         // through the mapped domains it produces — including flexible
         // instances, whose per-instance mode is pinned here from this
-        // module's usage.
-        if has_submodules {
-            let flexible_instances = self.bind_submodule_clocks(builder, node);
+        // module's usage.  Socket instances get the same treatment: the
+        // socket's unique Clock channel binds through the module's
+        // driver, and flexible socket channels resolve per usage.
+        let has_socket_instances = contains_socket(node);
+        if has_submodules || has_socket_instances {
+            let mut flexible_instances = self.bind_submodule_clocks(builder, node);
+            self.bind_socket_clocks(node);
+            flexible_instances.extend(self.flexible_socket_instances(builder));
             self.resolve_flexible_instances(node, flexible_instances);
         }
 
@@ -238,6 +243,108 @@ impl Clocking {
             }
         }
         flexible_instances
+    }
+
+    /// Binds each socket instance's unique Clock channel the way
+    /// submodule binding binds a child's clock port: the module driving
+    /// `it.clk := <clock>` instantiates the socket's clock variable, and
+    /// every channel implicitly `on` it takes that concrete domain.  A
+    /// clock channel that is the module's implicit clock (a `server`
+    /// socket's inward `Clock` channel) binds to itself; an undriven one
+    /// leaves the channels on the clock channel's own domain.
+    fn bind_socket_clocks(&mut self, node: &AstNode<'_>) {
+        let mut drivers: Vec<(AstNode<'_>, Option<BString>)> = vec![];
+        collect_driver_statements(node, &mut drivers);
+        let parsing = node.parsing();
+        for stmt in node.children() {
+            let AstNodePayload::Socket(socket) = stmt.payload() else {
+                continue;
+            };
+            let instance_name = parsing.string(socket.name);
+            let owned: Vec<Component> = self
+                .component_analysis()
+                .components_owned_by(instance_name.as_bstr())
+                .into_iter()
+                .filter_map(|id| self.component_analysis().component(id).cloned())
+                .filter(|component| {
+                    component.socket_channel()
+                        && !component.submodule_owned()
+                        && component.typ().as_ref() == Some(&Type::Clock)
+                })
+                .collect();
+            if owned.len() != 1 {
+                continue;
+            }
+            let clk = &owned[0];
+            for (driver, context) in &drivers {
+                let Some(target) = driver.target() else { continue };
+                let target = resolve_it_path_to_owned(
+                    parsing.string(target),
+                    context.as_ref().map(|context| context.as_bstr()),
+                );
+                let Some(target_component) =
+                    self.component_analysis().resolve(target.as_bstr())
+                else {
+                    continue;
+                };
+                if target_component.id() != clk.id() {
+                    continue;
+                }
+                let Some(rhs) = driver.driver() else { continue };
+                if let Some(domain) = clock_identity(
+                    &rhs,
+                    parsing,
+                    context.as_ref().map(|context| context.as_bstr()),
+                    self.component_analysis(),
+                ) {
+                    // A port driven more than once keeps its first
+                    // binding, as in submodule binding.
+                    for component in &owned {
+                        if component.domain() == Some(&Domain::sync(clk.id())) {
+                            self.submodule_domains
+                                .insert(component.id(), domain);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    /// The flexible socket instances: each socket instance (of a
+    /// zero-Clock-channel socketdef) whose channels registered
+    /// `Flexible`, grouped under the instance's name — resolved per
+    /// usage like flexible submodule instances.
+    fn flexible_socket_instances(&self, builder: &mut Builder) -> Vec<FlexibleInstance> {
+        let mut groups: IndexMap<BString, Vec<ComponentId>> = IndexMap::new();
+        let mut regions: IndexMap<BString, Region> = IndexMap::new();
+        for (path, component) in self.component_analysis().components() {
+            if !component.socket_channel()
+                || component.submodule_owned()
+                || component.domain() != Some(&Domain::Flexible)
+            {
+                continue;
+            }
+            let Some(dot) = path.iter().position(|byte| *byte == b'.') else {
+                continue;
+            };
+            let instance = BString::from(path[..dot].to_vec());
+            groups
+                .entry(instance.clone())
+                .or_default()
+                .push(component.id());
+            regions
+                .entry(instance)
+                .or_insert_with(|| builder.get_location_region(component.location()));
+        }
+        groups
+            .into_iter()
+            .map(|(name, components)| FlexibleInstance {
+                region: regions[&name],
+                name,
+                components,
+            })
+            .collect()
     }
 
     /// Flags every top-level clocked component (`reg`, `outgoing reg`,
@@ -908,6 +1015,15 @@ fn contains_submodule(node: &AstNode<'_>) -> bool {
         return true;
     }
     node.children().into_iter().any(|child| contains_submodule(&child))
+}
+
+/// Whether any statement of the mod def (recursively) instantiates a
+/// socket (`client socket foo of Bar`).
+fn contains_socket(node: &AstNode<'_>) -> bool {
+    if matches!(node.payload(), AstNodePayload::Socket(_)) {
+        return true;
+    }
+    node.children().into_iter().any(|child| contains_socket(&child))
 }
 
 /// Whether the mod def carries an `@name` annotation.

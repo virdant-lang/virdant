@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A socketdef with multiple Clock channels requires explicit on/async clauses on its other channels; a clockless socket's channels resolve to one domain per instantiation (two-clock touch is a conflict)."
+filecheck = "src/socketdef_clocks.vir"

@@ -1,0 +1,53 @@
+// A socketdef channel declared `async` sits on the `Async` domain in
+// every module instantiating the socket, like an `async` port.  The
+// driving role may feed it from any domain (an upcast); the receiving
+// role may only consume it combinationally — registering it would be
+// an `Async -> Sync` downcast.
+
+socket AsyncBus {
+    //> Declared `async`: `Async` in every instantiating module.
+    cosi data : Word[8] async
+}
+
+pub mod Source {
+    incoming clock : Clock
+
+    reg count : Word[8] {
+        initial it <= 0
+        it <= it + 1w8
+    }
+
+    client socket link of AsyncBus {
+        it.data := count
+    }
+}
+
+pub mod Sink {
+    incoming clock : Clock
+
+    server socket link of AsyncBus
+
+    //> The `async` channel, echoed combinationally.
+    wire echo : Word[8] async {
+        it := link.data
+    }
+
+    unused clock
+    unused echo
+}
+
+pub mod Top {
+    incoming clock : Clock
+
+    mod source of Source {
+        it.clock := clock
+    }
+
+    mod sink of Sink {
+        it.clock := clock
+    }
+
+    source.link :=: sink.link
+}
+
+// CHECK: Check OK

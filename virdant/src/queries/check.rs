@@ -233,6 +233,174 @@ fn check_builtin_modifier(builder: &mut Builder, diagnostics: &mut Vec<Diagnosti
     }
 }
 
+/// The clock rules for a socketdef's channels, checked once at the
+/// socketdef (the analog of a moddef's clock structure):
+///
+/// - A channel typed `Clock` is a clock and needs no clause.
+/// - With no Clock channels, clause-less channels are flexible (the
+///   instantiating module resolves them); nothing to check here.
+/// - With exactly one, clause-less channels are implicitly `on` it, so
+///   an explicit `on` naming that clock channel is redundant.
+/// - With more than one, every non-Clock channel must carry an explicit
+///   `on` or `async` clause.
+fn check_socketdef_domains(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind() != SymbolKind::SocketDef {
+            continue;
+        }
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+
+        let mut channels: Vec<(
+            bstr::BString,
+            Option<crate::types::Type>,
+            bool,
+            Option<bstr::BString>,
+            crate::common::source::Region,
+        )> = vec![];
+        for child in node.children() {
+            let AstNodePayload::Channel(channel) = child.payload() else {
+                continue;
+            };
+            let typ = child
+                .typ()
+                .and_then(|typ_node| builder.get_type_at(typ_node.location()).ok());
+            let on_path = child
+                .on_clause()
+                .and_then(|on| on.path())
+                .map(|interned| parsing.string(interned).to_owned());
+            channels.push((
+                parsing.string(channel.name).to_owned(),
+                typ,
+                channel.is_async,
+                on_path,
+                child.region(),
+            ));
+        }
+        let clock_names: Vec<&bstr::BString> = channels
+            .iter()
+            .filter(|(_, typ, _, _, _)| typ.as_ref() == Some(&crate::types::Type::Clock))
+            .map(|(name, _, _, _, _)| name)
+            .collect();
+        for (name, typ, is_async, on_path, region) in &channels {
+            if typ.as_ref() == Some(&crate::types::Type::Clock) {
+                continue;
+            }
+            // `async` is its own clause: the channel needs nothing else.
+            if *is_async {
+                continue;
+            }
+            if let Some(on_path) = on_path {
+                // Naming the socket's unique Clock channel is redundant:
+                // clause-less channels are implicitly `on` it.
+                if clock_names.len() == 1 && clock_names[0].as_bstr() == on_path.as_bstr() {
+                    diagnostics.push(Diagnostic::new(
+                        *region,
+                        diagnostics::RedundantOnClause { component: name.clone() },
+                    ));
+                }
+                continue;
+            }
+            if clock_names.len() >= 2 {
+                diagnostics.push(Diagnostic::new(
+                    *region,
+                    diagnostics::MissingDomainClause {
+                        component: name.clone(),
+                        reason: bstr::BString::from(
+                            "the socket has multiple Clock channels",
+                        ),
+                    },
+                ));
+            }
+        }
+    }
+}
+
+/// An `on <CLOCK>` clause written on a socketdef channel or a platform
+/// port resolves *within its own item*: a socketdef or platform is
+/// checked as a self-contained item, not a macro expanded into the
+/// instantiating module, so the written name must denote a Clock-typed
+/// sibling channel (or port) of the same item.  This is the analog of a
+/// moddef's rule that an `on` clause must name a Clock-typed component
+/// of the module.
+fn check_socketdef_and_platform_on_clauses(
+    builder: &mut Builder,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        let kind = item.kind();
+        if kind != SymbolKind::SocketDef && kind != SymbolKind::Platform {
+            continue;
+        }
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+
+        let mut decls: Vec<(
+            bstr::BString,
+            Option<crate::types::Type>,
+            Option<(bstr::BString, crate::common::source::Region)>,
+        )> = vec![];
+        for child in node.children() {
+            let (name, typ, on_clause) = match child.payload() {
+                AstNodePayload::Channel(channel) => (
+                    parsing.string(channel.name).to_owned(),
+                    child.typ(),
+                    child.on_clause(),
+                ),
+                AstNodePayload::Component(component) => (
+                    // Platform ports: component declarations.  (Moddefs
+                    // are separate items with their own namespace, and
+                    // their `on` clauses are checked by typing.)
+                    parsing.string(component.name).to_owned(),
+                    child.typ(),
+                    child.on_clause(),
+                ),
+                _ => continue,
+            };
+            let typ = typ.and_then(|typ_node| builder.get_type_at(typ_node.location()).ok());
+            let on = on_clause.and_then(|on| {
+                on.path()
+                    .map(|interned| (parsing.string(interned).to_owned(), on.region()))
+            });
+            decls.push((name, typ, on));
+        }
+
+        for (_name, _typ, on) in &decls {
+            let Some((on_path, on_region)) = on else { continue };
+            let sibling = decls
+                .iter()
+                .find(|(sibling_name, _, _)| sibling_name.as_bstr() == on_path.as_bstr());
+            match sibling {
+                Some((_, Some(sibling_typ), _)) if sibling_typ == &crate::types::Type::Clock => {}
+                Some((_, Some(sibling_typ), _)) => {
+                    diagnostics.push(Diagnostic::new(
+                        *on_region,
+                        diagnostics::WrongType {
+                            expected: crate::types::Type::Clock.to_string().into(),
+                            actual: sibling_typ.to_string().into(),
+                        },
+                    ));
+                }
+                // The sibling's type failed to resolve: reported there.
+                Some((_, None, _)) => {}
+                None => {
+                    diagnostics.push(Diagnostic::new(
+                        *on_region,
+                        diagnostics::Unknown {
+                            message: format!("Unknown component {}", on_path).into(),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+}
+
+
 /// A non-`builtin` item must not share its name with an item of the
 /// `builtin` package: the builtin package is implicitly in scope, so
 /// such a name collides with a builtin item (`Bit`, `Word`, `Sync`,
@@ -295,6 +463,8 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     check_qualified_references(builder, &mut diagnostics);
     check_builtin_modifier(builder, &mut diagnostics);
     check_builtin_name_shadowing(builder, &mut diagnostics);
+    check_socketdef_domains(builder, &mut diagnostics);
+    check_socketdef_and_platform_on_clauses(builder, &mut diagnostics);
 
     let symboltable = builder.get_symboltable();
     diagnostics.extend(symboltable.diagnostics.clone());

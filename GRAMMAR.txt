@@ -75,8 +75,8 @@ BuiltinDef := DocString? Annotations "pub"? "builtin" "type" Ident Generics? "{"
 SocketDef := DocString? Annotations "pub"? "builtin"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
 SocketDefStmt :=
-      DocString? Annotations "cosi" Ident ":" Type DependsonList?
-    | DocString? Annotations "soci" Ident ":" Type DependsonList?
+      DocString? Annotations "cosi" Ident ":" Type OnClause? DependsonList?
+    | DocString? Annotations "soci" Ident ":" Type OnClause? DependsonList?
 
 DependsonList := "dependson" DependsonPathList
 

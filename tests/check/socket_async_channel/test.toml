@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "A socketdef channel declared `async` is `Async` in every instantiating module: the driving role upcasts into it, the receiving role consumes it combinationally."
+filecheck = "src/socket_async_channel.vir"
