@@ -28,14 +28,14 @@ import virt
 //> `(x == 0 || y == 5) && y[2]` and row 0 would fall to `else`.
 mod WhenCondComplex {
     //> First operand.
-    incoming x : Word[4] async
+    incoming x : Word[4]
 
     //> Second operand.
-    incoming y : Word[4] async
+    incoming y : Word[4]
 
     //> Code of the first arm whose condition matched: `1`, `2`, `3`,
     //> or `0` for the `else` arm.
-    outgoing branch : Word[2] async dependson x, y {
+    outgoing branch : Word[2] dependson x, y {
         it := if {
             when x > 3 && y[0] => 1
             when x == 0 || (y == 5 && y[2]) => 2
@@ -72,7 +72,7 @@ pub mod WhenBoolCondTest for virt::Virt {
     }
 
     //> First operand under test, driven by the sequencer.
-    reg x : Word[4] on clock {
+    reg x : Word[4] {
         initial it <= 0
         it <= match next {
             with 0 => 0
@@ -87,7 +87,7 @@ pub mod WhenBoolCondTest for virt::Virt {
     }
 
     //> Second operand under test, driven by the sequencer.
-    reg y : Word[4] on clock {
+    reg y : Word[4] {
         initial it <= 0
         it <= match next {
             with 0 => 0
@@ -102,7 +102,7 @@ pub mod WhenBoolCondTest for virt::Virt {
     }
 
     //> Truth-table row under test, 0 through 7.
-    reg index : Word[3] on clock {
+    reg index : Word[3] {
         initial it <= 0
         if {
             when !finished {
@@ -113,7 +113,7 @@ pub mod WhenBoolCondTest for virt::Virt {
 
     //> Rises the cycle after row 7 is checked, so that `exit` sees the
     //> final fold into `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when index == 7 {
@@ -124,7 +124,7 @@ pub mod WhenBoolCondTest for virt::Virt {
 
     //> Running AND of every row's verdict.  Power-on true; each row
     //> folds its verdict in while the sequencer is stepping.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         if {
             when !finished {

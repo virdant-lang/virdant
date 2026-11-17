@@ -16,10 +16,10 @@ import virt
 //> (MSB=1) stays negative and a positive value (MSB=0) stays positive.
 mod Sra2 {
     //> Value to shift.
-    incoming x : Word[8] async
+    incoming x : Word[8]
 
     //> `x` arithmetically shifted right by 2.
-    outgoing result : Word[8] async dependson x {
+    outgoing result : Word[8] dependson x {
         it := word(x[7], x[7], x[8..2])
     }
 }

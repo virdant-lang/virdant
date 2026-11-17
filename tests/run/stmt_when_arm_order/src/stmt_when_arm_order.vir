@@ -19,18 +19,18 @@ import virt
 //> `b` is high.
 mod WhenOrder {
     //> First condition: its arm comes first in the `when`.
-    incoming a : Bit async
+    incoming a : Bit
 
     //> Second condition: its arm also matches when `a` is high.
-    incoming b : Bit async
+    incoming b : Bit
 
     //> Which arm fired: 1 for the first arm, 2 for the second, 0 for
     //> `else`.  Both-high must read 1 — the first arm's value.
-    outgoing sel : Word[2] async dependson a, b
+    outgoing sel : Word[2] dependson a, b
 
     //> Mirrors the first arm only: true if (and only if) the first arm
     //> fired, false from the second arm and from `else`.
-    outgoing tag : Bit async dependson a, b
+    outgoing tag : Bit dependson a, b
 
     if {
         when a {
@@ -77,14 +77,14 @@ pub mod StmtWhenOrderTest for virt::Virt {
     }
 
     //> Index of the vector under test, cycling 0 through 3.
-    reg index : Word[2] on clock {
+    reg index : Word[2] {
         initial it <= 0
         it <= index + 1
     }
 
     //> Running AND of every check so far.  Power-on true; each check
     //> folds its verdicts in on the cycle its vector is on the inputs.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && (dut.sel == expected_sel) && (dut.tag == expected_tag)
     }
@@ -118,7 +118,7 @@ pub mod StmtWhenOrderTest for virt::Virt {
 
     //> Number of vectors checked so far, 0 through 4.  Holds at 4 so
     //> that `finished` stays high.
-    reg checked : Word[3] on clock {
+    reg checked : Word[3] {
         initial it <= 0
         if {
             when checked != 4 {

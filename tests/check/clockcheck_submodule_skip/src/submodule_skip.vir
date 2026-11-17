@@ -1,10 +1,7 @@
-// Modules containing submodule instances are skipped by the clock
-// checker (submodule clock binding is not yet implemented), with a
-// TODO note at the module.  Standard-library modules are exempt from
-// the note: the libraries ship with the compiler and are not the
-// user's to fix.
-
-// CHECK: TODO: clockcheck is not yet implemented for modules with submodules; skipping
+// Modules containing submodule instances are clock-checked: the
+// submodule clock binding maps the child's internal clock domains onto
+// the parent's driven clock, so the parent's drivers across the
+// boundary are checked normally.
 pub mod Top {
     incoming clock : Clock
     outgoing out : Bit

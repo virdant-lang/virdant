@@ -23,16 +23,16 @@ enum type AluOp {
 //> Tiny ALU: `opcode` selects the operation applied to `a` and `b`.
 mod Alu {
     //> First operand.
-    incoming a : Word[8] async
+    incoming a : Word[8]
 
     //> Second operand.
-    incoming b : Word[8] async
+    incoming b : Word[8]
 
     //> Selects add, sub, and, or, or xor.
-    incoming opcode : AluOp async
+    incoming opcode : AluOp
 
     //> Result of the operation selected by `opcode`.
-    outgoing result : Word[8] async dependson a, b, opcode {
+    outgoing result : Word[8] dependson a, b, opcode {
         it := match opcode {
             with #Add => a + b
             with #Sub => a - b
@@ -64,7 +64,7 @@ pub mod AluTest for virt::Virt {
     }
 
     //> High while the loaded vector is being checked.
-    reg busy : Bit on clock {
+    reg busy : Bit {
         initial it <= false
         if {
             when finished {
@@ -78,7 +78,7 @@ pub mod AluTest for virt::Virt {
 
     //> Index of the vector under test, 0 through 15.  The 16 cases
     //> exactly cover `Word[4]`, so the vector table is exhaustive.
-    reg index : Word[4] on clock {
+    reg index : Word[4] {
         initial it <= 0
         if {
             when busy {
@@ -88,7 +88,7 @@ pub mod AluTest for virt::Virt {
     }
 
     //> First operand of the loaded vector.
-    reg va : Word[8] on clock {
+    reg va : Word[8] {
         initial it <= 0
         if {
             when loading {
@@ -98,7 +98,7 @@ pub mod AluTest for virt::Virt {
     }
 
     //> Second operand of the loaded vector.
-    reg vb : Word[8] on clock {
+    reg vb : Word[8] {
         initial it <= 0
         if {
             when loading {
@@ -109,7 +109,7 @@ pub mod AluTest for virt::Virt {
 
     //> Opcode of the loaded vector, driven into a register so that the
     //> enum flows through a reg before reaching the ALU.
-    reg vop : AluOp on clock {
+    reg vop : AluOp {
         initial it <= #Add
         if {
             when loading {
@@ -119,7 +119,7 @@ pub mod AluTest for virt::Virt {
     }
 
     //> Golden result of the loaded vector.
-    reg vexp : Word[8] on clock {
+    reg vexp : Word[8] {
         initial it <= 0
         if {
             when loading {
@@ -130,7 +130,7 @@ pub mod AluTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each check
     //> folds its verdict in on the cycle the vector is checked.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         if {
             when busy {
@@ -141,7 +141,7 @@ pub mod AluTest for virt::Virt {
 
     //> Rises one cycle after the last vector is checked, so that the
     //> exit code sees the final `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when busy && index == 15 {

@@ -11,15 +11,15 @@ pub mod Carriers {
     incoming clk : Clock
     incoming inp : Word[8]
 
-    outgoing reg outreg : Word[8] on clk dependson inp {
+    outgoing reg outreg : Word[8] dependson inp {
         it <= inp
     }
 
-    reg r : Word[8] on clk dependson inp {
+    reg r : Word[8] dependson inp {
         it <= inp
     }
 
-    wire w : Word[8] on clk dependson inp
+    wire w : Word[8] dependson inp
     w := inp
 
     bus b : Word[8] dependson inp

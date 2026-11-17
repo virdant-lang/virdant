@@ -15,10 +15,10 @@ import virt
 //> one bit set, at the position given by `code`.
 mod Decoder {
     //> Binary code to decode.
-    incoming code : Word[2] async
+    incoming code : Word[2]
 
     //> One-hot encoding of `code`: bit `code` set, all others clear.
-    outgoing onehot : Word[4] async dependson code
+    outgoing onehot : Word[4] dependson code
 
     match code {
         with 0 {
@@ -79,21 +79,21 @@ pub mod Top for virt::Virt {
     }
 
     //> Index of the code under test, cycling 0 through 3.
-    reg index : Word[2] on clock {
+    reg index : Word[2] {
         initial it <= 0
         it <= index + 1
     }
 
     //> Running AND of every check so far.  Power-on true; each check
     //> folds its verdict in on the cycle its code is on the inputs.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && decoder.onehot == expected
     }
 
     //> Number of codes checked so far, 0 through 4.  Holds at 4 so
     //> that `finished` stays high.
-    reg checked : Word[3] on clock {
+    reg checked : Word[3] {
         initial it <= 0
         if {
             when checked != 4 {

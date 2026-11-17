@@ -15,26 +15,26 @@ import virt
 //> conditional `word()` shifts.
 mod BarrelShifter {
     //> Word to shift.
-    incoming x : Word[8] async
+    incoming x : Word[8]
 
     //> Shift amount, 0 through 7.
-    incoming s : Word[3] async
+    incoming s : Word[3]
 
     //> `x` shifted left by `s`; bits shifted out are lost.
-    outgoing shifted : Word[8] async dependson x, s
+    outgoing shifted : Word[8] dependson x, s
 
     //> Stage for the shift-amount bit weighting 4.
-    wire stage4 : Word[8] async {
+    wire stage4 : Word[8] {
         it := mux(s[2], word(x[4..0], 0w4), x)
     }
 
     //> Stage for the shift-amount bit weighting 2.
-    wire stage2 : Word[8] async {
+    wire stage2 : Word[8] {
         it := mux(s[1], word(stage4[6..0], 0w2), stage4)
     }
 
     //> Stage for the shift-amount bit weighting 1.
-    wire stage1 : Word[8] async {
+    wire stage1 : Word[8] {
         it := mux(s[0], word(stage2[7..0], 0w1), stage2)
     }
 
@@ -135,7 +135,7 @@ pub mod BarrelShifterTest for virt::Virt {
     }
 
     //> Running AND of every check.  Power-on true.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && check0 && check1 && check2 && check3 && check4 && check5 && check6 && check7
     }

@@ -19,21 +19,21 @@ import virt
 //> `total` stays below `threshold`.
 mod ThresholdUnit {
     //> Constant added onto `value`, tied to a literal by the parent.
-    incoming offset : Word[8] async
+    incoming offset : Word[8]
 
     //> Constant limit compared against, tied to a literal by the parent.
-    incoming threshold : Word[8] async
+    incoming threshold : Word[8]
 
     //> Data input, driven by the parent's counter.
-    incoming value : Word[8] async
+    incoming value : Word[8]
 
     //> `value` plus the constant `offset`.
-    outgoing total : Word[8] async dependson offset, value {
+    outgoing total : Word[8] dependson offset, value {
         it := value + offset
     }
 
     //> High while `total` stays below the constant `threshold`.
-    outgoing under : Bit async dependson offset, threshold, value {
+    outgoing under : Bit dependson offset, threshold, value {
         it := total < threshold
     }
 }
@@ -60,13 +60,13 @@ pub mod ModConstantsTest for virt::Virt {
 
     //> Free-running counter driving the child's `value` input, so the
     //> checks sweep `value + 3` across the threshold.
-    reg value : Word[8] on clock {
+    reg value : Word[8] {
         initial it <= 0
         it <= it + 1
     }
 
     //> Cycles elapsed since reset; `exit` goes valid at 12.
-    reg cycles : Word[4] on clock {
+    reg cycles : Word[4] {
         initial it <= 0
         it <= it + 1
     }
@@ -94,7 +94,7 @@ pub mod ModConstantsTest for virt::Virt {
     }
 
     //> Running AND of every cycle's checks.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && ok
     }

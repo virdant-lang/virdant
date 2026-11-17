@@ -11,10 +11,10 @@ import virt
 //> `Virdant` followed by a NUL byte.
 pub mod EscRom {
     //> Read address.
-    incoming read_addr : Word[3] async
+    incoming read_addr : Word[3]
 
     //> The addressed word.
-    outgoing read_data : Word[8] async dependson read_addr {
+    outgoing read_data : Word[8] dependson read_addr {
         it := rom[dyn read_addr]
     }
 
@@ -26,10 +26,10 @@ pub mod EscRom {
 //> `\xNN` hex escapes: 0x56 0x69 0x72 0x64 0x61 0x6e 0x74 0x00.
 pub mod HexEscRom {
     //> Read address.
-    incoming read_addr : Word[3] async
+    incoming read_addr : Word[3]
 
     //> The addressed word.
-    outgoing read_data : Word[8] async dependson read_addr {
+    outgoing read_data : Word[8] dependson read_addr {
         it := rom[dyn read_addr]
     }
 
@@ -41,10 +41,10 @@ pub mod HexEscRom {
 //> most-significant byte first (0x4142, 0x0102, 0x4344, 0x0304, ...).
 pub mod WordRom {
     //> Read address.
-    incoming read_addr : Word[3] async
+    incoming read_addr : Word[3]
 
     //> The addressed word.
-    outgoing read_data : Word[16] async dependson read_addr {
+    outgoing read_data : Word[16] dependson read_addr {
         it := rom[dyn read_addr]
     }
 

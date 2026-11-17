@@ -15,31 +15,31 @@ import virt
 mod MuxNested {
     //> Selects between the `mux(b, x, y)` arm (true) and the
     //> `mux(c, z, w)` arm (false).
-    incoming a : Bit async
+    incoming a : Bit
 
     //> Selects `x` (true) or `y` (false); only consulted when `a` is
     //> true.
-    incoming b : Bit async
+    incoming b : Bit
 
     //> Selects `z` (true) or `w` (false); only consulted when `a` is
     //> false.
-    incoming c : Bit async
+    incoming c : Bit
 
     //> Data operand selected when `a` and `b` are both true.
-    incoming x : Word[3] async
+    incoming x : Word[3]
 
     //> Data operand selected when `a` is true and `b` is false.
-    incoming y : Word[3] async
+    incoming y : Word[3]
 
     //> Data operand selected when `a` is false and `c` is true.
-    incoming z : Word[3] async
+    incoming z : Word[3]
 
     //> Data operand selected when `a` and `c` are both false.
-    incoming w : Word[3] async
+    incoming w : Word[3]
 
     //> The 4-way selector: `x` when `a` and `b`, `y` when `a` and
     //> `!b`, `z` when `!a` and `c`, `w` when `!a` and `!c`.
-    outgoing sel : Word[3] async dependson a, b, c, x, y, z, w {
+    outgoing sel : Word[3] dependson a, b, c, x, y, z, w {
         it := mux(a, mux(b, x, y), mux(c, z, w))
     }
 }
@@ -70,7 +70,7 @@ pub mod MuxNestedTest for virt::Virt {
 
     //> Index of the select-bit combination under test, 0 through 7:
     //> bit 2 drives `a`, bit 1 drives `b`, bit 0 drives `c`.
-    reg index : Word[3] on clock {
+    reg index : Word[3] {
         initial it <= 0
         if {
             when !finished {
@@ -81,14 +81,14 @@ pub mod MuxNestedTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each cycle
     //> folds in the verdict for the current combination.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         it <= it && mux_nested.sel == expected
     }
 
     //> Rises one cycle after the last combination is checked, so that
     //> the exit code sees the final `all_ok`.
-    reg finished : Bit on clock {
+    reg finished : Bit {
         initial it <= false
         if {
             when index == 7 {

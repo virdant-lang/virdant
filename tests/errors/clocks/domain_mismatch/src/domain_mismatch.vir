@@ -5,13 +5,14 @@
 // two operands of a `:=:` connection.  Constants join with anything;
 // two distinct `Sync` domains never do.
 
-mod CrossClock {
+pub mod CrossClock {
     incoming clk_a : Clock
     incoming clk_b : Clock
     incoming a_data : Word[4] on clk_a
     incoming b_data : Word[4] on clk_b
 
     // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+    unused bad_add
     wire bad_add : Word[4] on clk_a {
         it := a_data + b_data
     }
@@ -46,13 +47,14 @@ struct type Pair {
     lo : Word[2]
 }
 
-mod CrossStruct {
+pub mod CrossStruct {
     incoming clk_a : Clock
     incoming clk_b : Clock
     incoming a_data : Word[4] on clk_a
     incoming b_data : Word[4] on clk_b
 
     // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+    unused bad_struct
     wire bad_struct : Pair on clk_a {
         it := ${ hi = a_data[3..1], lo = b_data[2..0] }
     }
@@ -61,11 +63,13 @@ mod CrossStruct {
     memory mem[16] : Word[8] on clk_a
 
     // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
+    unused bad_read
     wire bad_read : Word[8] on clk_a {
         it := mem[dyn b_data]
     }
 
     // Statement `when` guards must share one domain too.
+    unused stage
     reg stage : Word[4] on clk_a {
         initial it <= 0
         // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
@@ -73,6 +77,7 @@ mod CrossStruct {
             when a_data[0] {
                 it <= a_data
             }
+            // CHECK: Domain mismatch: cannot drive `stage` (clocked by `clk_a`) with clocked by `clk_b`
             when b_data[0] {
                 it <= b_data
             }
@@ -82,7 +87,7 @@ mod CrossStruct {
 
 // A `:=:` connection joins its two operands to one domain: nets on
 // distinct clocks cannot be connected.
-mod CrossConnect {
+pub mod CrossConnect {
     incoming clk_a : Clock
     incoming clk_b : Clock
     wire net_a : Word[4] on clk_a {
@@ -97,6 +102,6 @@ mod CrossConnect {
 }
 
 // CHECK: FAILED with
-// CHECK: 7 ERROR
+// CHECK: 8 ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check failed

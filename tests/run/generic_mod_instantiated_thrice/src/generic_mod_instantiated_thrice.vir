@@ -12,8 +12,8 @@ import virt
 //> Instantiated below at `Word[2]`, `Word[4]`, and `Word[8]`; the
 //> doubling arithmetic is re-elaborated at each width.
 mod Doubler[T : Type] {
-    incoming d : T async
-    outgoing q : T async dependson d {
+    incoming d : T
+    outgoing q : T dependson d {
         it := d + d
     }
 }
@@ -79,7 +79,7 @@ pub mod Top for virt::Virt {
     }
 
     //> Cycles elapsed since reset.
-    reg cycle : Word[2] on clock {
+    reg cycle : Word[2] {
         initial it <= 0
         it <= it + 1
     }

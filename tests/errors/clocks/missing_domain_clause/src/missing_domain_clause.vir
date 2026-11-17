@@ -15,7 +15,7 @@ pub mod TwoClocksNoClause {
     }
 
     // CHECK: Missing `on` or `async` clause for lazy: the module has multiple clocks
-    wire lazy : Word[4] dependson b_data {
+    wire lazy : Word[4] {
         it := b_data
     }
     unused lazy

@@ -41,6 +41,10 @@ pub enum Domain {
     /// and union values built entirely from constants, and any
     /// expression combining only such values.
     Constant,
+    /// Clock-polymorphic: a component of a zero-clock module with no
+    /// `async` component.  A wildcard until the instantiation site
+    /// pins it to `Async` or one shared `Sync` domain.
+    Flexible,
 }
 
 impl Domain {
@@ -53,16 +57,19 @@ impl Domain {
     pub fn clock(&self) -> Option<ComponentId> {
         match self {
             Domain::Sync(clock) => Some(*clock),
-            Domain::Async | Domain::Constant => None,
+            Domain::Async | Domain::Constant | Domain::Flexible => None,
         }
     }
 
     /// Whether this domain may be used where `target` is expected:
     /// the lattice order `Constant <= Sync(c) <= Async`, with distinct
-    /// clock domains incomparable.
+    /// clock domains incomparable.  `Flexible` is a wildcard in both
+    /// directions: the instantiation site pins its actual domain.
     pub fn upcasts_to(&self, target: &Domain) -> bool {
         match (self, target) {
             (Domain::Constant, _) => true,
+            (Domain::Flexible, _) => true,
+            (_, Domain::Flexible) => true,
             (Domain::Sync(clock1), Domain::Sync(clock2)) => clock1 == clock2,
             (Domain::Sync(_), Domain::Async) => true,
             (Domain::Async, Domain::Async) => true,
@@ -72,21 +79,25 @@ impl Domain {
 
     /// The least upper bound of two domains in the lattice: the least
     /// domain both may be upcast to.  The join of two distinct clock
-    /// domains is `Async`.
+    /// domains is `Async`; joining a `Flexible` domain yields the
+    /// other operand's domain.
     pub fn lub(a: &Domain, b: &Domain) -> Domain {
         match (a, b) {
             _ if a == b => *a,
             (Domain::Constant, other) | (other, Domain::Constant) => *other,
+            (Domain::Flexible, other) | (other, Domain::Flexible) => *other,
             _ => Domain::Async,
         }
     }
 
     /// The greatest lower bound of two domains in the lattice: the
     /// greatest domain that may be upcast to both.  The meet of two
-    /// distinct clock domains is `Constant`.
+    /// distinct clock domains is `Constant`; meeting a `Flexible`
+    /// domain yields the other operand's domain.
     pub fn glb(a: &Domain, b: &Domain) -> Domain {
         match (a, b) {
             _ if a == b => *a,
+            (Domain::Flexible, other) | (other, Domain::Flexible) => *other,
             (Domain::Async, other) | (other, Domain::Async) => *other,
             _ => Domain::Constant,
         }

@@ -1,4 +1,4 @@
 kind = "check"
 expect = "ok_no_warnings"
-description = "Modules with submodule instances skip the clock checker entirely (submodule clock binding is not yet implemented), with an Info-level TODO note at the module."
+description = "Modules with submodule instances are clock-checked via the submodule clock binding: the child's domains map onto the parent's driven clock."
 filecheck = "src/submodule_skip.vir"

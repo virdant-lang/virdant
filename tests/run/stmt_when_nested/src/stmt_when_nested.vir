@@ -22,17 +22,17 @@ import virt
 mod WhenNest {
     //> Outer `match` selector: 0 enters the nested `when`s, 1 takes
     //> the `match` `else` arm and ignores `a` and `b` entirely.
-    incoming op : Word[1] async
+    incoming op : Word[1]
 
     //> Middle `when` condition: its arm contains the inner `when`.
-    incoming a : Bit async
+    incoming a : Bit
 
     //> Inner `when` condition, nested inside the `when a` arm.
-    incoming b : Bit async
+    incoming b : Bit
 
     //> Code identifying the path taken through the nesting: 1, 2, 3,
     //> or 4 as listed above.
-    outgoing r : Word[3] async dependson op, a, b
+    outgoing r : Word[3] dependson op, a, b
 
     match op {
         with 0 {
@@ -80,7 +80,7 @@ pub mod StmtWhenNestedTest for virt::Virt {
     //> Warm-up cycle counter: counts 0, 1, 2, 3 and then saturates.
     //> Checks only start once warm-up is over, so simulator start-up
     //> randomness on the first clock edge cannot leak into a verdict.
-    reg warm : Word[2] on clock {
+    reg warm : Word[2] {
         initial it <= 0
         if {
             when it != 3 {
@@ -92,7 +92,7 @@ pub mod StmtWhenNestedTest for virt::Virt {
     //> Index of the vector under test, 0 through 3.  Advances only
     //> while checks are running, so vector 0 stays on the inputs
     //> during warm-up.
-    reg index : Word[2] on clock {
+    reg index : Word[2] {
         initial it <= 0
         if {
             when checking {
@@ -103,7 +103,7 @@ pub mod StmtWhenNestedTest for virt::Virt {
 
     //> Number of paths checked so far, 0 through 4.  Holds at 4 so
     //> that `finished` stays high.
-    reg checked : Word[3] on clock {
+    reg checked : Word[3] {
         initial it <= 0
         if {
             when checking {
@@ -114,7 +114,7 @@ pub mod StmtWhenNestedTest for virt::Virt {
 
     //> Running AND of every check so far.  Power-on true; each check
     //> folds its verdict in on the cycle its vector is on the inputs.
-    reg all_ok : Bit on clock {
+    reg all_ok : Bit {
         initial it <= true
         if {
             when checking {
