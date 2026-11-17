@@ -38,8 +38,8 @@ mod Internal {
 // Top module instantiates everything and wires it up.
 pub mod Top {
     incoming clk      : Clock
-    incoming inp      : Word[8]
-    outgoing final_out : Word[8]
+    incoming inp      : Word[8] on clk
+    outgoing final_out : Word[8] on clk
 
     // Instantiate the PLL
     mod pll of PLL
