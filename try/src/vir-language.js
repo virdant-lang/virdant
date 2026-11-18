@@ -5,6 +5,7 @@
 // (virdant/src/syntax/token.rs `KEYWORDS`).
 
 import { StreamLanguage } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 
 const KEYWORDS = [
   'pub', 'export', 'import', 'mod', 'ext', 'builtin',
@@ -22,9 +23,14 @@ const KEYWORD_RE = new RegExp(`(?:${KEYWORDS.join('|')})\\b`);
 
 export const virdantLanguage = StreamLanguage.define({
   name: 'virdant',
+  // Map the custom `self` token (the special `it` keyword) onto the
+  // builtin-variable tag so it gets its bold color in the theme.
+  tokenTable: { self: tags.self },
   token(stream) {
-    // Comments: line comments and both docstring forms.
-    if (stream.match('//>.*') || stream.match('//!.*') || stream.match('//.*')) {
+    // Comments: line comments and both docstring forms.  Note: regex
+    // patterns here — `stream.match` with a string is a literal match,
+    // so `'.*'` would never match anything.
+    if (stream.match(/^\/\/\>.*/) || stream.match(/^\/\/\!.*/) || stream.match(/^\/\/.*/)) {
       return 'comment';
     }
     // Strings.
@@ -44,7 +50,10 @@ export const virdantLanguage = StreamLanguage.define({
     if (stream.match(/[0-9][0-9_]*/)) return 'number';
     // Identifiers and keywords.
     if (stream.match(/^[A-Za-z_][A-Za-z0-9_]*/)) {
-      return KEYWORD_RE.test(stream.current()) ? 'keyword' : 'variableName';
+      const word = stream.current();
+      if (word === 'it') return 'self';
+      if (word === 'true' || word === 'false') return 'bool';
+      return KEYWORD_RE.test(word) ? 'keyword' : 'variableName';
     }
     stream.next();
     return null;

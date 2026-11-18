@@ -160,7 +160,7 @@ body {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  background: #282c34;
+  background: var(--bg);
 }
 #editorhost .cm-editor { height: 100%; }
 #editorhost .cm-scroller { font-family: var(--mono); }

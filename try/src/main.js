@@ -37,10 +37,46 @@ import {
   highlightActiveLineGutter, drawSelection, dropCursor,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands';
-import { bracketMatching, indentOnInput, foldGutter, indentUnit } from '@codemirror/language';
+import {
+  bracketMatching, indentOnInput, foldGutter, indentUnit,
+  HighlightStyle, syntaxHighlighting,
+} from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
 import { linter } from '@codemirror/lint';
-import { oneDark } from '@codemirror/theme-one-dark';
 import { vim } from '@replit/codemirror-vim';
+
+// ── Virdant color scheme ───────────────────────────────────
+// Syntax colors from the virdant.nvim colorscheme
+// (projects/virdant-workspace/virdant.nvim, itself matching the
+// virdant.org syntax CSS); editor chrome reuses the site palette
+// from style.css.
+const virdantHighlight = HighlightStyle.define([
+  { tag: t.keyword, color: '#556B2F' },              // keywords: dark olive green
+  { tag: t.comment, color: '#8f95a1', fontStyle: 'italic' }, // comments: light grey
+  { tag: t.operator, color: '#8B6E47' },             // operators: brown
+  { tag: t.punctuation, color: '#8B6E47' },          // punctuation: brown
+  { tag: t.bracket, color: '#8B6E47' },
+  { tag: t.number, color: '#C65D3B' },               // numbers: burnt orange
+  { tag: t.bool, color: '#C65D3B' },                 // booleans: burnt orange
+  { tag: t.string, color: '#AE604F' },               // strings: reddish brown
+  { tag: t.variableName, color: '#AE604F' },         // variables: reddish brown
+  { tag: t.typeName, color: '#B83A34' },             // types: rust/terracotta
+  { tag: t.self, color: '#AE604F', fontWeight: 'bold' }, // `it`: bold reddish brown
+]);
+
+const virdantTheme = EditorView.theme({
+  '&': { color: '#d7dae0', backgroundColor: '#191b20' },
+  '.cm-content': { caretColor: '#4fb583' },
+  '&.cm-focused .cm-cursor': { borderLeftColor: '#4fb583' },
+  '&.cm-focused .cm-selectionBackground, ::selection':
+    { backgroundColor: '#3a4150' },
+  '&.cm-selectionBackground, ::selection': { backgroundColor: '#31353f' },
+  '.cm-gutters': {
+    backgroundColor: '#191b20', color: '#8f95a1', border: 'none',
+  },
+  '.cm-activeLine': { backgroundColor: '#21242b' },
+  '.cm-activeLineGutter': { backgroundColor: '#21242b' },
+}, { dark: true });
 
 // ── DOM handles ──────────────────────────────────────────────
 
@@ -285,7 +321,8 @@ function baseExtensions() {
     indentOnInput(),
     indentUnit.of('    '),
     bracketMatching(),
-    oneDark,
+    virdantTheme,
+    syntaxHighlighting(virdantHighlight),
     virdantLanguage,
     virdantLinter,
     vimCompartment.of(keymapExtensions()),
