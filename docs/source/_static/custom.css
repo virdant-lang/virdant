@@ -929,3 +929,41 @@ footer .virdant-footer-meta {
   margin-top: 0;
   margin-bottom: 0;
 }
+
+/* ----- "Try" buttons (.. try:: from try_ext.py) -----
+   Green pill buttons that open the Try dock on a seeded project
+   (virtry.load — see trydock-boot.js).  Palette mirrors the
+   trydock pill: Virdant green on white, green-on-dark at night. */
+.try-button {
+  display: inline-block;
+  padding: 8px 22px;
+  border: 1px solid #2E7D32;
+  border-radius: 999px;
+  background: #2E7D32;
+  color: #ffffff;
+  font-family: "Nunito", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+  transition: box-shadow 0.15s ease, transform 0.15s ease, filter 0.15s ease;
+}
+
+.try-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
+}
+
+.try-button:active {
+  transform: translateY(0);
+  filter: none;
+}
+
+[data-theme="dark"] .try-button {
+  background: #4fb583;
+  border-color: #4fb583;
+  color: #191b20;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}

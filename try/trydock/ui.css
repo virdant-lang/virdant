@@ -105,6 +105,33 @@
 
 .trydock-root .td-btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
 
+/* Run button tri-state: the three labels are stacked in one grid
+   cell, so the button always occupies the widest label's width and
+   the toolbar never reflows when the state changes. */
+.trydock-root #td-run {
+  display: inline-grid;
+  grid-template-columns: auto;
+  justify-items: center;
+}
+.trydock-root #td-run .td-runlabel {
+  grid-column: 1;
+  grid-row: 1;
+  visibility: hidden;
+}
+.trydock-root #td-run .td-runlabel.active { visibility: visible; }
+/* Checking: yellow (same warning color as the status LED). */
+.trydock-root #td-run.checking {
+  background: var(--td-warning);
+  border-color: var(--td-warning);
+  color: #191b20;
+}
+/* Syntax errors: red. */
+.trydock-root #td-run.error {
+  background: var(--td-danger);
+  border-color: var(--td-danger);
+  color: #ffffff;
+}
+
 .trydock-root .td-led {
   width: 9px;
   height: 9px;
@@ -115,6 +142,12 @@
 .trydock-root .td-led.ok { background: var(--td-accent); }
 .trydock-root .td-led.error { background: var(--td-danger); }
 .trydock-root .td-led.warn { background: var(--td-warning); }
+/* A re-check is in flight: yellow, flashing at a steady rate
+   (same pulse as "starting…"). */
+.trydock-root .td-led.checking {
+  background: var(--td-warning);
+  animation: trydock-pulse 1.2s ease-in-out infinite;
+}
 .trydock-root .td-led.busy {
   background: var(--td-info);
   animation: trydock-pulse 1.2s ease-in-out infinite;
@@ -140,6 +173,7 @@
 .trydock-root .td-status { color: var(--td-muted); white-space: nowrap; }
 .trydock-root .td-status.error { color: var(--td-danger); }
 .trydock-root .td-status.ok { color: var(--td-accent); }
+.trydock-root .td-status.checking { color: var(--td-warning); }
 
 .trydock-root .td-fps {
   color: var(--td-muted);
@@ -320,8 +354,22 @@
 .trydock-root .td-body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(320px, 55%) 1fr;
+  /* The editor column's width is driven by --td-editor-w (set by the
+     split drag handle; the fallback is the un-dragged default). */
+  grid-template-columns: var(--td-editor-w, minmax(320px, 55%)) 7px 1fr;
   min-height: 0;
+}
+
+/* Drag strip between the editor and the output panes.  The editor
+   column's border-right remains the visible divider; the strip is
+   invisible until hovered/dragged. */
+.trydock-root .td-vsplit {
+  cursor: col-resize;
+  z-index: 5;
+}
+.trydock-root .td-vsplit:hover,
+.trydock-root .td-vsplit:active {
+  background: var(--td-accent-dim, #2c5c45);
 }
 
 .trydock-root .td-editor-col {
@@ -517,4 +565,5 @@
     grid-template-rows: 1fr minmax(160px, 40%);
   }
   .trydock-root .td-editor-col { border-right: none; border-bottom: 1px solid var(--td-border); }
+  .trydock-root .td-vsplit { display: none; }
 }

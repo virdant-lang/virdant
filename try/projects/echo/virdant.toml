@@ -1,5 +1,0 @@
-[project]
-name = "echo"
-
-[prog]
-top = "top::Top"

@@ -47,7 +47,11 @@ root.innerHTML = `
   <div id="trydock" hidden>
     <div class="td-resize" id="td-resize" title="Drag to resize"></div>
     <div class="td-toolbar">
-      <button class="td-btn primary" id="td-run" title="Run (vir run)">Run</button>
+      <button class="td-btn primary" id="td-run" title="Run (vir run)">
+        <span class="td-runlabel" data-state="run">Run</span>
+        <span class="td-runlabel" data-state="checking">Checking</span>
+        <span class="td-runlabel" data-state="error">Error</span>
+      </button>
       <button class="td-btn danger" id="td-stop" title="Stop the simulation" hidden>Stop</button>
       <span class="td-led" id="td-led"></span>
       <span class="td-status" id="td-status">idle</span>
@@ -71,6 +75,7 @@ root.innerHTML = `
         <div class="td-filetabs" id="td-filetabs"></div>
         <div class="td-editorhost" id="td-editorhost"></div>
       </div>
+      <div class="td-vsplit" id="td-vsplit" title="Drag to resize"></div>
       <div class="td-right">
         <div class="td-tabs">
           <button class="td-tab active" id="td-tab-console">Console</button>
@@ -128,6 +133,15 @@ root.innerHTML = `
   </div>
 `;
 document.body.appendChild(root);
+
+// Keep dock keystrokes away from the theme's global key handlers:
+// Sphinx's doctools.js hijacks '/' (search focus) and arrow keys
+// (page navigation) for any non-INPUT target — including a focused
+// CodeMirror editor (contenteditable div).  Bubble-phase on the dock
+// root: the editor and terminal see every key first, and the theme's
+// document-level handlers never do.  (The dock's own Escape handler
+// is window-capture and unaffected.)
+root.addEventListener('keydown', (e) => e.stopPropagation());
 
 const $ = (id) => root.querySelector(`#${id}`);
 const dock = $('trydock');
@@ -315,6 +329,17 @@ const view = new EditorView({ parent: editorHost });
 
 function onEditorUpdate(update) {
   if (!update.docChanged) return;
+  // A user-driven change (typing, paste, undo, …) means a re-check is
+  // coming: show "checking..." immediately, before the debounced
+  // dispatch even happens.  Programmatic changes (applySync's
+  // setState) carry no userEvent and don't count.
+  if (update.transactions.some((tr) =>
+    tr.isUserEvent('input') || tr.isUserEvent('delete') ||
+    tr.isUserEvent('undo') || tr.isUserEvent('redo'))) {
+    checking = true;
+    updateStatus();
+    updateRunButton();
+  }
   const f = activeFile();
   if (!f) return;
   f.text = update.state.doc.toString();
@@ -323,11 +348,24 @@ function onEditorUpdate(update) {
 }
 
 // Debounced edit forwarding: the worker stores the text and re-checks.
+// lastSentText tracks what was last dispatched per file name: when the
+// debounced dispatch turns out to be a no-op (the user typed and
+// undid within one debounce window), the worker dedups the edit and
+// no check will run — so the "checking..." state is revoked instead
+// of hanging until a diagnostics that never comes.
 let editTimer = 0;
+const lastSentText = new Map();
 function scheduleEdit(file, text) {
   clearTimeout(editTimer);
   editTimer = setTimeout(() => {
-    port.postMessage({ type: 'edit', file, text });
+    if (lastSentText.get(file) !== text) {
+      lastSentText.set(file, text);
+      port.postMessage({ type: 'edit', file, text });
+    } else {
+      checking = false;
+      updateStatus();
+      updateRunButton();
+    }
   }, 150);
 }
 
@@ -338,6 +376,7 @@ let currentIdx = 0;
 let running = false;
 let starting = false;
 let checked = false;
+let checking = false;   // a re-check is in flight (yellow "checking...")
 
 const project = () => projects[currentIdx];
 const files = () => project()?.files ?? [];
@@ -425,6 +464,12 @@ function applySync(s) {
     files: p.files.map((f) => ({ name: f.name, text: f.text, state: null })),
   }));
   currentIdx = s.currentIdx;
+  // The worker's texts are the baseline now: equal texts dispatched
+  // later are no-ops (see scheduleEdit).
+  lastSentText.clear();
+  for (const p of s.projects) {
+    for (const f of p.files) lastSentText.set(f.name, f.text);
+  }
   running = s.running;
   starting = s.starting;
   checked = s.checked;
@@ -469,10 +514,18 @@ function applySync(s) {
         currentIdx: saved.currentIdx | 0,
         log,
       });
-      return;
+      return; // pendingLoad (if any) waits for the restore's sync
     }
   }
   saveSession();
+
+  // A virtry.load() request parked before the mirror existed: now the
+  // project list is known, switch and reset.
+  if (pendingLoad != null) {
+    const name = pendingLoad;
+    pendingLoad = null;
+    performLoad(name);
+  }
 }
 
 // ── File tabs ───────────────────────────────────────────────
@@ -710,9 +763,22 @@ term.onData((data) => {
 // ── Run / Stop ──────────────────────────────────────────────
 
 function updateRunButton() {
-  runBtn.disabled = hasErrors || running || starting;
+  runBtn.disabled = (hasErrors && !checking) || running || starting;
   runBtn.hidden = running;
   stopBtn.hidden = !running;
+  // Tri-state label: green Run / yellow Checking / red Error — with
+  // the SAME priority as the status label: an in-flight check wins
+  // over stale error state, so the button and the label always read
+  // the same state (editing a file that already has errors must show
+  // yellow "checking...", not the stale red "Error").  All three
+  // spans are stacked in one grid cell, so the button keeps the
+  // widest label's width and never reflows the toolbar.
+  const state = checking ? 'checking' : (hasErrors ? 'error' : 'run');
+  for (const el of runBtn.querySelectorAll('.td-runlabel')) {
+    el.classList.toggle('active', el.dataset.state === state);
+  }
+  runBtn.classList.toggle('checking', checking);
+  runBtn.classList.toggle('error', hasErrors && !checking);
 }
 
 function updateStatus() {
@@ -725,6 +791,12 @@ function updateStatus() {
     // Green, flashing very quickly (signals a live simulation).
     led.classList.add('run');
     statusEl.textContent = 'running';
+  } else if (checking) {
+    // A re-check is in flight (e.g. the user just edited): yellow,
+    // flashing at a steady rate, until the result arrives.
+    led.classList.add('checking');
+    statusEl.classList.add('checking');
+    statusEl.textContent = 'checking...';
   } else if (!checked) {
     statusEl.textContent = 'idle';
   } else {
@@ -835,17 +907,73 @@ confirmModal.addEventListener('click', (e) => {
   if (e.target === confirmModal) closeConfirm();
 });
 
+// Reset the current project unconditionally: stops a running
+// simulation and has the worker restore the example sources, clear
+// the console and re-check.  The Reset button wraps this in a
+// confirmation; programmatic callers (virtry.load) go through
+// directly.
+function resetProjectNow() {
+  stopRun();
+  port.postMessage({ type: 'resetProject' });
+}
+
 $('td-reset').addEventListener('click', () => {
   const name = project()?.name;
   if (!name) return;
   openConfirm(
     `Reset "${name}" to the example sources? Unsaved edits will be lost.`,
-    () => {
-      stopRun();
-      port.postMessage({ type: 'resetProject' });
-    },
+    resetProjectNow,
   );
 });
+
+// ── virtry.load(project): programmatic open + load + reset ───
+//
+// Docs pages call `virtry.load('counter')` (global defined in
+// trydock-boot.js) to open the dock on a specific seeded project and
+// reset it unconditionally.  The dock has no project switcher of its
+// own; the SharedWorker hosts all seeded projects, so loading is a
+// `selectProject` (which makes the worker broadcast a fresh sync)
+// followed by an unconditional reset.  The request may arrive before
+// the session mirror exists (bundle just loaded), so it parks in
+// `pendingLoad` and is consumed once a sync provides the project
+// list.  If that sync leads to a localStorage `restore` (pristine
+// worker), consumption waits for the restore's follow-up sync so the
+// switch cannot be overridden by the restored session.
+
+let pendingLoad = null; // project name, or null
+
+function performLoad(name) {
+  // Single atomic request: the worker finds-or-appends the seed
+  // project by name (the session mirror here may be a restored
+  // session that dropped projects — or not have arrived yet), selects
+  // it and resets it.  Unknown names are logged by the worker into
+  // the dock console.
+  port.postMessage({ type: 'loadProject', name, reset: true });
+}
+
+function loadProject(name) {
+  if (!opened || projects.length === 0) {
+    pendingLoad = String(name ?? '');
+    openDock(); // also posts `hello`; the sync triggers consumption
+    return;
+  }
+  openDock(); // reopens a manually closed dock (no-op if already open)
+  performLoad(name);
+}
+
+// virtry.list(): the seeded project names.  Always asked from the
+// worker (the seeds live there): the live session mirror may be a
+// restored session that has dropped projects, while "all projects"
+// means all seeds.  Replies arrive per port in request order, so a
+// FIFO resolver queue pairs them up.
+const listResolvers = [];
+
+function listProjects() {
+  return new Promise((resolve) => {
+    listResolvers.push(resolve);
+    port.postMessage({ type: 'listProjects' });
+  });
+}
 
 runBtn.addEventListener('click', startRun);
 stopBtn.addEventListener('click', stopRun);
@@ -869,8 +997,11 @@ function updateFps(cycles) {
 
 port.onmessage = (e) => {
   const m = e.data;
+  try {
   switch (m.type) {
     case 'sync':
+      checking = false; // worker state is authoritative; a new check (if
+                        // any) announces itself with its own `checking`
       applySync(m);
       if (running) {
         runStartWall = performance.now();
@@ -879,7 +1010,19 @@ port.onmessage = (e) => {
       }
       updateStatus();
       break;
+    case 'checking':
+      checking = true;
+      updateStatus();
+      updateRunButton();
+      break;
+    case 'checkAborted':
+      // The check could not run; keep showing the previous result.
+      checking = false;
+      updateStatus();
+      updateRunButton();
+      break;
     case 'diagnostics':
+      checking = false;
       lastDiagnostics = m.diagnostics;
       lastOk = m.ok;
       checked = true;
@@ -947,6 +1090,11 @@ port.onmessage = (e) => {
       updateStatus();
       switchTab('console');
       break;
+    case 'projectsList': {
+      const resolve = listResolvers.shift();
+      if (resolve) resolve(Array.isArray(m.names) ? m.names.map(String) : []);
+      break;
+    }
     case 'runBlocked':
       starting = false;
       running = false;
@@ -954,6 +1102,12 @@ port.onmessage = (e) => {
       updateStatus();
       switchTab('diagnostics');
       break;
+  }
+  } catch (err) {
+    // One bad message must not wedge the dock's message pump (an
+    // exception here would otherwise skip the rest of this message
+    // and look like a stuck session).
+    console.error('trydock: message handler failed for', m.type, err);
   }
 };
 
@@ -972,6 +1126,7 @@ function openDock() {
     port.postMessage({ type: 'hello' });
   }
   try { sessionStorage.setItem(OPEN_KEY, '1'); } catch { /* storage unavailable */ }
+  syncPageScroller();
   fitTerminal();
   view.focus();
 }
@@ -980,7 +1135,84 @@ function closeDock() {
   dock.hidden = true;
   pill.hidden = false;
   try { sessionStorage.removeItem(OPEN_KEY); } catch { /* storage unavailable */ }
+  syncPageScroller();
   saveSession();
+}
+
+// The dock is position:fixed, so it would otherwise just cover the
+// bottom of the page — including the main scrollbar, which cannot be
+// shortened while the document is the scroller.  While the dock is
+// open, hand scrolling over to the theme's .wy-grid-for-nav, sized to
+// end exactly at the dock's top edge: the main scrollbar then stops
+// above the dock and the page's last lines remain reachable (and the
+// handover follows the drag handle).  vcd.js listens for scroll events
+// in the document's capture phase, so its waveform repositioning keeps
+// working with the new scroller.
+//
+// Handover defeats the browser's own scroll restoration on
+// reload/back-forward (the root becomes unscrollable before the
+// restore applies), so the position is parked in sessionStorage on
+// pagehide and restored here for those navigation types only — fresh
+// navigations still start at the top.
+
+const SCROLL_KEY = 'virdant-trydock:scrolly';
+
+function parkPageScroll() {
+  const grid = document.querySelector('.wy-grid-for-nav');
+  const y = (grid && !dock.hidden) ? grid.scrollTop : window.scrollY;
+  try { sessionStorage.setItem(SCROLL_KEY, String(Math.round(y))); } catch { /* storage unavailable */ }
+}
+window.addEventListener('pagehide', parkPageScroll);
+
+function restoreScrollY() {
+  let y = window.scrollY;
+  try {
+    const nav = performance.getEntriesByType('navigation')[0]?.type;
+    const saved = sessionStorage.getItem(SCROLL_KEY);
+    const n = saved === null ? NaN : parseInt(saved, 10);
+    if (Number.isFinite(n) && n >= 0 && (nav === 'reload' || nav === 'back_forward')) y = n;
+  } catch { /* storage unavailable */ }
+  return y;
+}
+
+let pageScrollerOwned = false;
+
+function syncPageScroller() {
+  const grid = document.querySelector('.wy-grid-for-nav');
+  if (!grid) return; // unknown layout: the dock overlays the page as before
+  const side = document.querySelector('.wy-side-scroll'); // ToC scroller
+  const h = dock.hidden ? 0 : dock.getBoundingClientRect().height;
+  const hpx = `${Math.round(h)}px`;
+  if (h > 0) {
+    const taking = !pageScrollerOwned;
+    pageScrollerOwned = true;
+    grid.style.height = `calc(100% - ${hpx})`;
+    grid.style.overflowY = 'auto';
+    grid.style.overflowX = 'hidden'; // matches the theme's root overflow-x
+    if (taking) grid.scrollTop = restoreScrollY();
+    // The ToC sidebar is position:fixed (outside the grid), so give its
+    // own scroller the same treatment: it then ends above the dock too.
+    // The theme also pads .wy-nav-side by 2em below the scroller (space
+    // for the RTD version badge, absent here); drop it while open so the
+    // ToC runs right down to the dock's top edge instead of leaving a
+    // dead band that reads as a clipped bottom margin.
+    if (side) {
+      side.style.height = `calc(100% - ${hpx})`;
+      side.parentElement.style.paddingBottom = '0';
+    }
+  } else {
+    if (!pageScrollerOwned) return; // never owned: don't touch the page
+    pageScrollerOwned = false;
+    const y = grid.scrollTop;
+    grid.style.height = '';
+    grid.style.overflowY = '';
+    grid.style.overflowX = '';
+    if (side) {
+      side.style.height = '';
+      side.parentElement.style.paddingBottom = '';
+    }
+    window.scrollTo(0, y);
+  }
 }
 
 function toggleDock() {
@@ -996,10 +1228,14 @@ $('td-close').addEventListener('click', closeDock);
 // the bundle owns the pill.
 pill.classList.remove('trydock-loading');
 
-// A click that loaded this bundle already meant "open".
+// A click that loaded this bundle already meant "open".  A parked
+// virtry.load() request additionally names the project to load.
 if (window.__trydockBootOpen) {
   delete window.__trydockBootOpen;
+  const bootProject = window.__trydockBootProject;
+  delete window.__trydockBootProject;
   openDock();
+  if (bootProject) loadProject(bootProject);
 }
 
 // Escape closes the Settings modal but deliberately does not close
@@ -1025,6 +1261,7 @@ function clampDockHeight(px) {
 
 function applyDockHeight(px) {
   dock.style.height = `${clampDockHeight(px)}px`;
+  syncPageScroller();
 }
 
 // Restore the remembered height (applies whether or not the dock is
@@ -1052,5 +1289,68 @@ resizeHandle.addEventListener('mousedown', (e) => {
   window.addEventListener('mouseup', onUp);
 });
 
+// Keep the scroller sized to the dock if the viewport changes size
+// while open (the dock's height is a fixed px once restored/dragged,
+// but keep the two consistent anyway).
+window.addEventListener('resize', syncPageScroller);
+
+// ── Editor | output split: drag the vertical divider ────────
+
+const SPLIT_KEY = 'virdant-trydock:split';
+const SPLIT_MIN_PX = 320; // matches the editor column's CSS minimum
+const SPLIT_MAX_FRAC = 0.75; // keep some output pane even on wide docks
+
+const editorCol = root.querySelector('.td-editor-col');
+
+function applySplit(px) {
+  const w = dock.clientWidth;
+  if (w <= 0) return; // dock hidden or stacked: nothing to measure against
+  const clamped = Math.round(Math.min(w * SPLIT_MAX_FRAC, Math.max(SPLIT_MIN_PX, px)));
+  dock.style.setProperty('--td-editor-w', `${clamped}px`);
+}
+
+// Restore the remembered split (the style survives hidden toggling).
+try {
+  const savedSplit = parseInt(localStorage.getItem(SPLIT_KEY), 10);
+  if (Number.isFinite(savedSplit) && savedSplit > 0) applySplit(savedSplit);
+} catch { /* storage unavailable */ }
+
+// Re-clamp if the viewport changes size while a split is remembered.
+window.addEventListener('resize', () => {
+  try {
+    const savedSplit = parseInt(localStorage.getItem(SPLIT_KEY), 10);
+    if (Number.isFinite(savedSplit) && savedSplit > 0) applySplit(savedSplit);
+  } catch { /* storage unavailable */ }
+});
+
+const vsplitHandle = $('td-vsplit');
+vsplitHandle.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startW = editorCol.getBoundingClientRect().width;
+  const onMove = (ev) => {
+    applySplit(startW + (ev.clientX - startX));
+    fitTerminal();
+  };
+  const onUp = () => {
+    try { localStorage.setItem(SPLIT_KEY, String(Math.round(editorCol.getBoundingClientRect().width))); } catch { /* storage unavailable */ }
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+  };
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+});
+
 // Expose a tiny handle for debugging / future integrations.
-window.__trydock = { open: openDock, close: closeDock, toggle: toggleDock };
+// (The public entry point for pages is `virtry.load(project)` /
+// `virtry.list()`, defined in trydock-boot.js; they delegate here.)
+window.__trydock = { open: openDock, close: closeDock, toggle: toggleDock, loadProject, listProjects };
+
+// virtry.list() calls made before this bundle loaded: hand their
+// resolvers over now (the worker connection exists, so the reply
+// works even with the dock closed).
+if (Array.isArray(window.__trydockBootListWaiters)) {
+  const waiters = window.__trydockBootListWaiters;
+  delete window.__trydockBootListWaiters;
+  for (const resolve of waiters) listProjects().then(resolve);
+}

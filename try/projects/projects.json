@@ -1,4 +1,4 @@
 {
-  "//": "Display order of the seed projects in the demo's project dropdown. Projects not listed here are appended after the listed ones, alphabetically.",
-  "order": ["hello", "echo", "riscv"]
+  "//": "Display order of the seed projects in the demo's project dropdown. Projects not listed here are appended after the listed ones, alphabetically. Each directory is a symlink into docs/source/guide/.",
+  "order": ["passthrough", "buffer", "halfadder", "pwm", "popcount", "counter", "shifter", "alu", "shiftreg", "gcd", "hello", "echo", "spiflash", "fifo", "fulladder", "incrementer"]
 }

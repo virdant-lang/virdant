@@ -418,6 +418,11 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     }
 
     for entry in entries {
+        // Symlinked directories are never followed: a symlinked test
+        // directory is already discovered at its real location.
+        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+            continue;
+        }
         let path = entry.path();
         if !path.is_dir() || has_test_toml {
             continue;

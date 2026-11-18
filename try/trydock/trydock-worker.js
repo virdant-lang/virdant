@@ -18,6 +18,10 @@
 //     {type:'hello'}                          handshake; reply is `sync`
 //     {type:'edit', file, text}               update one file, re-check
 //     {type:'selectProject', index}
+//     {type:'loadProject', name, reset}       find-or-append the seed
+//                                             project by name, select
+//                                             it, optionally reset it
+//     {type:'listProjects'}                   reply: {type:'projectsList', names}
 //     {type:'run', top?, fpsNoCap?}           check, then start the sim
 //     {type:'config', fpsNoCap}               mid-run settings update
 //     {type:'input', bytes:Uint8Array}        UART rx bytes
@@ -25,7 +29,10 @@
 //     {type:'resetProject'}                   restore seed files
 //   worker → dock(s):
 //     {type:'sync', ...session snapshot}      on hello (that port only)
+//     {type:'projectsList', names}            reply to listProjects (that port only)
 //     {type:'diagnostics', diagnostics, ok, checked}
+//     {type:'checking'}                       a re-check just started
+//     {type:'checkAborted'}                   check could not run (wasm)
 //     {type:'console', buf:ArrayBuffer}       UART tx / worker notices
 //     {type:'created', clockHz}
 //     {type:'progress', cycles}
@@ -202,12 +209,18 @@ function scheduleCheck(delay = 400) {
 }
 
 async function runCheck() {
+  // Tell every dock a check is running: they show a "checking..."
+  // status until the matching diagnostics arrive.
+  broadcast({ type: 'checking' });
   await ensureWasm();
   let res;
   try {
     res = JSON.parse(wasmCheck(buildPayload()));
   } catch (e) {
     logLine(`\u26a0 wasm check failed: ${e}`);
+    // No new diagnostics are coming — release the docks' "checking..."
+    // status (they keep showing the previous result).
+    broadcast({ type: 'checkAborted' });
     return null;
   }
   session.diagnostics = res.diagnostics;
@@ -358,7 +371,60 @@ self.onconnect = (e) => {
             stopRun();
           }
           session.currentIdx = idx;
+          // The session is now deliberately driven (a dock chose a
+          // project): no longer pristine, or a dock holding a stale
+          // saved session would keep pushing it back via `restore`
+          // and override the switch.
+          session.dirty = true;
+          // Every dock re-syncs, and the new project needs its own
+          // check: file names repeat across projects (top.vir
+          // everywhere), so the old diagnostics would mislabel.
+          broadcast(syncSnapshot());
+          scheduleCheck(0);
         }
+        break;
+      }
+      case 'listProjects':
+        // The seeded list, not the live session: a restored session
+        // may have dropped projects, but "all projects" means all
+        // seeds.  Reply on this port only (no broadcast needed).
+        port.postMessage({ type: 'projectsList', names: seedSpecs.map((s) => s.name) });
+        break;
+      case 'loadProject': {
+        // Programmatic project load (virtry.load).  Looks the name up
+        // in the seeds — not the live session: a restored session may
+        // have dropped projects, and the dock-side mirror may not even
+        // exist yet.  A missing seed project is appended to the
+        // session; an unknown name just logs (the dock's request is
+        // atomic, so nothing else — e.g. a stray reset — happens).
+        const name = String(m.name ?? '');
+        const spec = seedSpecs.find((s) => s.name === name);
+        if (!spec) {
+          logLine(`\u26a0 virtry.load: no project "${name}"`);
+          break;
+        }
+        if (session.running || session.starting) stopRun();
+        let idx = session.projects.findIndex((p) => p.name === name);
+        if (idx < 0) {
+          session.projects.push({
+            name: spec.name,
+            top: spec.top,
+            files: spec.files.map((f) => ({ name: f.name, text: f.text })),
+            activeIdx: 0,
+          });
+          idx = session.projects.length - 1;
+        }
+        session.currentIdx = idx;
+        session.dirty = true;
+        if (m.reset) {
+          // Unconditional reset: seed files, clean console, re-check.
+          project().files = spec.files.map((f) => ({ name: f.name, text: f.text }));
+          project().activeIdx = 0;
+          clearLog();
+          broadcast({ type: 'consoleReset' });
+        }
+        broadcast(syncSnapshot());
+        scheduleCheck(0);
         break;
       }
       case 'edit': {
@@ -424,6 +490,10 @@ self.onconnect = (e) => {
         // Stops a running simulation first; then re-syncs every dock
         // and re-checks.
         if (session.running) stopRun();
+        // Deliberate action: the session stays non-pristine even
+        // though the files now match the seeds, or a dock holding a
+        // saved pre-reset session would push it back via `restore`.
+        session.dirty = true;
         const spec = seedSpecs.find((s) => s.name === project().name);
         if (!spec) break;
         project().files = spec.files.map((f) => ({ name: f.name, text: f.text }));

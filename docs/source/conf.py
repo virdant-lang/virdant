@@ -7,6 +7,7 @@ import verilog_ext
 import grammar_ext
 import vcd_ext
 import svg_ext
+import try_ext
 import sphinx_rtd_theme
 from sphinx.highlighting import lexers
 
@@ -36,6 +37,7 @@ extensions = [
     "sphinx_rtd_theme",
     "virdant_ext",
     "tooltip_ext",
+    "try_ext",
     "vcd_ext",
     "svg_ext",
     "sphinxext.opengraph",

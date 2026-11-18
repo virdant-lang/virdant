@@ -8,6 +8,10 @@ In this next example, we will demonstrate how to use registers, the stateful com
     :caption: buffer.vir
     :language: virdant
 
+.. try::
+    :project: buffer
+    :label: Try Buffer
+
 In this example, we declare four components:
 `clock` `inp` `out` grouped together, and also `buffer` a bit below.
 Finally, we have two drivers.

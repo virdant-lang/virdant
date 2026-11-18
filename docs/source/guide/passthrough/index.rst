@@ -9,6 +9,10 @@ Let's start by see how to define a module in Virdant.
     :caption: passthrough.vir
     :language: virdant
 
+.. try::
+    :project: passthrough
+    :label: Try Passthrough
+
 
 Modules are declared using the `mod` keyword, followed by the name of the module.
 
