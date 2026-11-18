@@ -428,6 +428,10 @@ self.onconnect = (e) => {
         if (!spec) break;
         project().files = spec.files.map((f) => ({ name: f.name, text: f.text }));
         project().activeIdx = 0;
+        // A reset also starts from a clean console (like Start does):
+        // clear the log and tell every dock to reset its terminal.
+        clearLog();
+        broadcast({ type: 'consoleReset' });
         broadcast(syncSnapshot());
         scheduleCheck(0);
         break;
