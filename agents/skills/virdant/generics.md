@@ -161,7 +161,7 @@ The same checks apply at module and socket instantiation sites, and the
 messages use the package-qualified name:
 
 ```virdant
-client socket p of Pipe          // Pipe is generic
+forward socket p of Pipe          // Pipe is generic
 mod f of Keep                    // Keep is generic
 ```
 

@@ -104,7 +104,7 @@ public surface covers:
 - module port types (`incoming`, `outgoing`, `bus`)
 - struct field types
 - union variant payload types and enum variant payload types
-- socket `cosi`/`soci` channel types
+- socket `outgoing`/`incoming` channel types
 - platform port types
 
 A leak is an error at the offending type's span:

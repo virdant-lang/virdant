@@ -112,8 +112,8 @@ If `vir check` fails, find the message in `./diagnostics.md` for cause and fix.
   `zext`/`sext`, `+.`/`-.`, `all`/`trunc`, `?` holes, casts, `tap`.
 * `./modules.md` — mod definitions, instantiation, it-blocks, `pub`
   visibility, imports, ext mods with `@parameter`.
-* `./sockets.md` — client/server sockets, cosi/soci, `:=:`, generic
-  sockets, channel `dependson`.
+* `./sockets.md` — forward/reverse sockets, outgoing/incoming channels,
+  `:=:`, generic sockets, channel `dependson`.
 * `./generics.md` — `[T : Type]` / `Nat` parameters on all definition
   forms, type arguments, mono modules.
 * `./dependson.md` — combinational-dependency declarations on `outgoing`

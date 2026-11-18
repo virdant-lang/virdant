@@ -8,17 +8,15 @@ They are analogous to SystemVerilog interfaces or Chisel bundles.
 Define a socket with the `socket` keyword.
 Inside, declare channels with two direction keywords:
 
-- `cosi` — Client-Out, Server-In.
-  The client (requesting side) drives this signal.
+- `outgoing` — driven by the forward (requesting) side.
   Equivalent to a "request" direction.
-- `soci` — Server-Out, Client-In.
-  The server (responding side) drives this signal.
+- `incoming` — driven by the reverse (responding) side.
   Equivalent to a "response" direction.
 
 ```virdant
 socket Mem {
-    cosi addr : Word[16]
-    soci data : Word[8]
+    outgoing addr : Word[16]
+    incoming data : Word[8]
 }
 ```
 
@@ -29,20 +27,20 @@ just like module and type names.
 
 Add a socket as a module port with the `socket` keyword and a direction:
 
-- `server socket` — the module implements the server role.
-  The cosi channels appear as *incoming* signals and soci channels as
+- `reverse socket` — the module implements the reverse role.
+  The outgoing channels appear as *incoming* signals and incoming channels as
   *outgoing* signals.
-- `client socket` — the module implements the client role.
-  The cosi channels appear as *outgoing* signals and soci channels as
+- `forward socket` — the module implements the forward role.
+  The outgoing channels appear as *outgoing* signals and incoming channels as
   *incoming* signals.
 
 ```virdant
 mod Core {
-    client socket mem of Mem
+    forward socket mem of Mem
 }
 
 mod Memory {
-    server socket mem of Mem
+    reverse socket mem of Mem
 }
 ```
 
@@ -77,7 +75,7 @@ You can attach a driver block to a socket declaration to drive or read
 its channels via `it`.
 
 ```virdant
-server socket inp of Pipe {
+reverse socket inp of Pipe {
     it.ready := match out_data {
         with @Valid(dontcare) => true
         with @Invalid() => !is_full
@@ -96,13 +94,13 @@ This pattern is especially useful for sockets with handshaking logic
 
 ## `unused` with socket members
 
-When a module drives only some channels of a socket (e.g., a server that
+When a module drives only some channels of a socket (e.g., a reverse that
 ignores `addr`), suppress warnings with `unused` on the socket or on
 individual members:
 
 ```virdant
 mod Memory {
-    server socket mem of Mem {
+    reverse socket mem of Mem {
         it.data := 10
     }
     unused mem.addr
@@ -113,7 +111,7 @@ Or inside a socket driver block:
 
 ```virdant
 mod Core {
-    client socket mem of Mem {
+    forward socket mem of Mem {
         it.addr := 8
         unused it.data
     }
@@ -130,8 +128,8 @@ port name:
 
 ```virdant
 mod Top {
-    server socket host of TlUl
-    client socket dev of TlUl
+    reverse socket host of TlUl
+    forward socket dev of TlUl
 }
 ```
 
@@ -147,8 +145,8 @@ scope in the channel types of the body:
 
 ```virdant
 socket Bus[T : Type] {
-    cosi req : T
-    soci rsp : T
+    outgoing req : T
+    incoming rsp : T
 }
 ```
 
@@ -158,7 +156,7 @@ name, in declaration order:
 ```virdant
 mod Master {
     incoming d : Word[8]
-    client socket busif of Bus[Word[8]]
+    forward socket busif of Bus[Word[8]]
         where it.req dependson d {
         it.req := d
     }
@@ -166,7 +164,7 @@ mod Master {
 }
 
 mod Slave {
-    server socket busif of Bus[Word[8]] {
+    reverse socket busif of Bus[Word[8]] {
         it.rsp := it.req
     }
 }
@@ -174,10 +172,10 @@ mod Slave {
 
 - Channel types are the definition's channel types with the arguments
   substituted: `busif.req` and `busif.rsp` are `Word[8]` above.
-- The builtin `Pipe[T]` is a generic socket: `client socket p of Pipe[Word[8]]`.
+- The builtin `Pipe[T]` is a generic socket: `forward socket p of Pipe[Word[8]]`.
   Omitting the arguments is an error:
   `Type builtin::Pipe takes 1 type argument, but 0 were given`
-- A `Type` parameter given a number (`client socket busif of Bus[8]`) reports
+- A `Type` parameter given a number (`forward socket busif of Bus[8]`) reports
   `Type argument mismatch: parameter T of Bus expects a type, but found a Nat literal`
 - Multiple parameters are allowed and can differ per channel
   (`Bus[A : Type, B : Type]` with a wide request and narrow response).
@@ -193,19 +191,19 @@ mod Slave {
 
 ```virdant
 socket Link[T : Type] {
-    cosi data : T
-    soci ready : Bit
+    outgoing data : T
+    incoming ready : Bit
 }
 
 mod Client {
-    client socket pipe of Link[Word[8]] {
+    forward socket pipe of Link[Word[8]] {
         it.data := 7w8
         unused it.ready
     }
 }
 
 mod Server {
-    server socket pipe of Link[Word[9]] {
+    reverse socket pipe of Link[Word[9]] {
         it.ready := true
     }
     unused pipe.data
@@ -234,7 +232,7 @@ compose with the arguments of the enclosing module's instantiation:
 ```virdant
 mod Master[W : Type] {
     incoming d : W
-    client socket busif of Bus[W]
+    forward socket busif of Bus[W]
         where it.req dependson d {
         it.req := d
     }
@@ -242,7 +240,7 @@ mod Master[W : Type] {
 }
 
 mod Slave[W : Type] {
-    server socket busif of Bus[W] {
+    reverse socket busif of Bus[W] {
         it.rsp := it.req
     }
 }
@@ -275,21 +273,21 @@ opposite direction word of the same socket:
 
 ```virdant
 socket Wishbone {
-    cosi cyc : Bit
-    cosi stb : Bit
-    soci ack : Bit dependson cyc, stb
+    outgoing cyc : Bit
+    outgoing stb : Bit
+    incoming ack : Bit dependson cyc, stb
 }
 ```
 
 - The list applies when the socket is instantiated in the channel's
-  **driving** role: `client` for `cosi` channels, `server` for `soci`
+  **driving** role: `forward` for `outgoing` channels, `reverse` for `incoming`
   channels. It places the same obligation on the containing module as
   if the `dependson` were declared on the resulting port: the module's
   drive on that channel may combinationally depend on its reads of the
   listed channels.
-- In the **receiving** role the list is inert: a `soci` list says
-  nothing about a `client` instantiation, a `cosi` list says nothing
-  about a `server` instantiation.
+- In the **receiving** role the list is inert: a `incoming` list says
+  nothing about a `forward` instantiation, a `outgoing` list says nothing
+  about a `reverse` instantiation.
 - Socket-derived obligations are **exempt from the unused-`dependson`
   warning** when the drive does not actually exercise the list: bus
   protocols legitimately vary their latency, so the declared potential
@@ -302,12 +300,12 @@ socket Wishbone {
 
   ```virdant
   mod PassThrough {
-      client socket out of Pipe[Word[8]]
+      forward socket out of Pipe[Word[8]]
           where it.data dependson inp.data {
           it.data := inp.data
       }
 
-      server socket inp of Pipe[Word[8]]
+      reverse socket inp of Pipe[Word[8]]
           where it.ready dependson out.ready {
           it.ready := out.ready
       }

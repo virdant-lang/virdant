@@ -88,8 +88,8 @@ mod MatchLoop {
     cannot change in the same cycle ```
   * ``` `dependson` is not allowed on `X`: `bus` is tristate; ... not yet supported ```
   * ``` `dependson` is not allowed on `X`: `incoming` ports may not declare `dependson` ```
-* Socket channel lists: a `cosi` channel may only `dependson` `soci` channels
-  of the same socket, and vice versa:
+* Socket channel lists: a channel may only `dependson` channels of the
+  opposite direction word of the same socket, and vice versa:
   ``a `cosi` channel may only `dependson` channels of the opposite direction word``
 * `where` clauses on socket instance declarations (the moddef-local way to
   declare a driven channel's dependency on other sockets' channels or plain
@@ -138,9 +138,9 @@ mod MatchLoop {
 * `Wrong driver type for X` — `<=` is only for `reg`/`outgoing reg`;
   `:=` for everything else.
 * `Driver for sink X` — you drove a *source*: a submodule's `incoming` port
-  from the parent, or the wrong socket side (a `client` drives `cosi`, a
-  `server` drives `soci`). Set submodule inputs inside the instance's `it`
-  block instead: `it.inp := ...`.
+  from the parent, or the wrong socket side (a socket instance's driven
+  channels are sources, its receiving channels are sinks). Set submodule
+  inputs inside the instance's `it` block instead: `it.inp := ...`.
 * `Missing on clause for reg X` — with zero or two-or-more `Clock` components
   a `reg` needs an explicit `on` clause. With exactly one Clock the clause is
   optional (see the ``Redundant `on` clause`` warning below).

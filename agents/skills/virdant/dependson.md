@@ -119,19 +119,19 @@ socket definitions and roles).
 
 ```virdant
 socket Wishbone {
-    cosi cyc : Bit
-    cosi stb : Bit
-    soci ack : Bit dependson cyc, stb
+    outgoing cyc : Bit
+    outgoing stb : Bit
+    incoming ack : Bit dependson cyc, stb
 }
 ```
 
-- A list on a `cosi` channel applies when the socket is instantiated
-  as a `client`; a list on a `soci` channel applies as a `server`.
+- A list on a `outgoing` channel applies when the socket is instantiated
+  as a `forward`; a list on a `incoming` channel applies as a `reverse`.
 - The obligation places the same requirement on the containing module
   as if the `dependson` were declared on the resulting port.
 - In the receiving role the list is inert.
 - Entries must be channels of the same socket with the opposite
-  direction word (`cosi` depends only on `soci`, and vice versa).
+  direction word (`outgoing` depends only on `incoming`, and vice versa).
 - Socket-derived obligations are exempt from the unused warning (a
   protocol such as Wishbone legitimately varies its latency).
 
@@ -144,13 +144,13 @@ port — attach a `where` clause to the socket instance declaration:
 
 ```virdant
 mod PassThrough {
-    client socket out of Pipe[Word[8]]
+    forward socket out of Pipe[Word[8]]
         where it.data dependson inp.data
     {
         it.data := inp.data
     }
 
-    server socket inp of Pipe[Word[8]]
+    reverse socket inp of Pipe[Word[8]]
         where it.ready dependson out.ready
     {
         it.ready := out.ready
@@ -168,7 +168,7 @@ Rules:
 - The clause may be written before or after the socket's `{ ... }`
   driver block.
 - The **carrier** must be a *driven* channel of the attached socket
-  instance (`client` + `cosi`, or `server` + `soci`).  Naming a
+  instance (`forward` + `outgoing`, or `reverse` + `incoming`).  Naming a
   receiving channel is an error (`DependsonBadCarrier`), as is naming
   another socket instance, a channel that does not exist, or the same
   channel in two clauses.

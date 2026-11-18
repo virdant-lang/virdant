@@ -120,9 +120,9 @@ mod Light {
 ## Handshake: `Valid[T]` payloads over `Pipe[T]`
 
 * Use the builtin `Valid[T]` enum: `@Valid(d)` to offer data, `@Invalid()` when idle.
-* Use the builtin `Pipe[T]` socket: the producer (client side) drives `data`,
-  the consumer (server side) drives `ready`.
-* Connect a client socket to a server socket with `:=:` (see `./sockets.md`).
+* Use the builtin `Pipe[T]` socket: the producer (forward side) drives `data`,
+  the consumer (reverse side) drives `ready`.
+* Connect a forward socket to a reverse socket with `:=:` (see `./sockets.md`).
 * The "fires" idiom: a transfer fires when the payload is `@Valid` AND the peer
   is ready.  Use `@Valid(dontcare)` when the payload value is irrelevant.
 * Gate `ready` on available capacity; advance bookkeeping counters only in
@@ -134,7 +134,7 @@ mod Light {
 mod Client[W : Type] {
     incoming d : W
 
-    client socket pipe of Pipe[W]
+    forward socket pipe of Pipe[W]
         where it.data dependson d
     {
         it.data := @Valid(d)
@@ -145,7 +145,7 @@ mod Client[W : Type] {
 }
 
 mod Server[W : Type] {
-    server socket pipe of Pipe[W] {
+    reverse socket pipe of Pipe[W] {
         it.ready := true
     }
 
@@ -176,11 +176,11 @@ mod Connected {
 mod SkidBuffer {
     incoming clock : Clock
 
-    server socket inp of Pipe[Word[8]] {
+    reverse socket inp of Pipe[Word[8]] {
         it.ready := count != 2
     }
 
-    client socket out of Pipe[Word[8]] {
+    forward socket out of Pipe[Word[8]] {
         it.data := out_data
     }
 
@@ -267,13 +267,13 @@ mod SkidBuffer {
 //! backpressure back.
 
 mod PassThrough {
-    client socket out of Pipe[Word[8]]
+    forward socket out of Pipe[Word[8]]
         where it.data dependson inp.data
     {
         it.data := inp.data
     }
 
-    server socket inp of Pipe[Word[8]]
+    reverse socket inp of Pipe[Word[8]]
         where it.ready dependson out.ready
     {
         it.ready := out.ready
@@ -599,11 +599,11 @@ component `width`, or a module `Socket`, is a compile error:
 
 | | | | | | |
 | --- | --- | --- | --- | --- | --- |
-| `builtin` | `bus` | `client` | `cosi` | `default` | `dependson` |
-| `dontcare` | `dyn` | `else` | `enum` | `export` | `ext` |
-| `false` | `fn` | `for` | `if` | `import` | `incoming` |
+| `async` | `builtin` | `bus` | `default` | `dependson` | `dontcare` |
+| `dyn` | `else` | `enum` | `export` | `ext` | `false` |
+| `fn` | `for` | `forward` | `if` | `incoming` | `import` |
 | `initial` | `it` | `let` | `match` | `memory` | `mod` |
 | `net` | `of` | `on` | `outgoing` | `platform` | `pub` |
-| `reg` | `server` | `soci` | `socket` | `submod` | `struct` |
-| `tap` | `true` | `type` | `union` | `unused` | `when` |
-| `where` | `width` | `wire` | `with` | | |
+| `reg` | `reverse` | `socket` | `submod` | `struct` | `tap` |
+| `true` | `type` | `union` | `unused` | `when` | `where` |
+| `width` | `wire` | `with` | | | |
