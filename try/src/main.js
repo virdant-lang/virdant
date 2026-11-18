@@ -31,6 +31,18 @@ const projectVirs = import.meta.glob('../projects/*/src/*.vir', {
   eager: true,
 });
 
+// Display order for the seed projects, from projects/projects.json.
+// Projects not listed are appended after the listed ones (alphabetically).
+import projectOrderSpec from '../projects/projects.json';
+const projectOrder =
+  Array.isArray(projectOrderSpec?.order) && projectOrderSpec.order.every((n) => typeof n === 'string')
+    ? projectOrderSpec.order
+    : [];
+function orderKey(name) {
+  const i = projectOrder.indexOf(name);
+  return i === -1 ? projectOrder.length : i;
+}
+
 // Extract a string-valued `key = "value"` line from a toml file.
 function tomlString(text, key) {
   const m = text.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, 'm'));
@@ -54,7 +66,8 @@ const seedSpecs = Object.entries(projectTomls)
     };
   })
   .filter((spec) => spec.files.length > 0)
-  .sort((a, b) => a.name.localeCompare(b.name));
+  .sort((a, b) =>
+    (orderKey(a.name) - orderKey(b.name)) || a.name.localeCompare(b.name));
 
 import { virdantLanguage } from './vir-language.js';
 

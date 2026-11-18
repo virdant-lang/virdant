@@ -48,7 +48,7 @@ it), and `npm`.
 - **Projects**: the selector at the top of the file sidebar switches
   between projects (seeded from `projects/`: `hello` — the `Hello,
   world!` starter — `echo` — a UART echo server — and `riscv` — the
-  RISC-V machine); `+` creates a project, `✕` deletes
+  RISC-V machine; `projects/projects.json` lists their display order, `+` creates a project, `✕` deletes
   the current one.  Each project keeps its own files, open file, and
   top module; state is session-only and rebuilt from the seeds on load.
   The keymap choice (Default/Vim) is remembered across visits.

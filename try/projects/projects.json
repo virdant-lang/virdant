@@ -1,0 +1,4 @@
+{
+  "//": "Display order of the seed projects in the demo's project dropdown. Projects not listed here are appended after the listed ones, alphabetically.",
+  "order": ["hello", "echo", "riscv"]
+}
