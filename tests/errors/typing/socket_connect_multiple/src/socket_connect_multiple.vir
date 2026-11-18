@@ -9,19 +9,19 @@ socket Qux {
 }
 
 mod Src {
-    client socket qux of Qux
+    forward socket qux of Qux
 }
 
 mod Src2 {
-    client socket qux of Qux
+    forward socket qux of Qux
 }
 
 mod Sink {
-    server socket qux of Qux
+    reverse socket qux of Qux
 }
 
 mod Sink2 {
-    server socket qux of Qux
+    reverse socket qux of Qux
 }
 
 pub mod Top {

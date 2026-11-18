@@ -514,17 +514,17 @@ Sockets provide a way to group related ports and connect them as a unit.
 .. code-block:: grammar
 
     ModDefStmtSocket :=
-        DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
-        | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        DocString? Annotations "forward" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        | DocString? Annotations "reverse" "socket" Ident "of" Ofness GenericsParams? ItBlock?
 
 .. code-block:: virdant
 
-    client socket mem of Mem {
+    forward socket mem of Mem {
         it.addr := 0
         unused it.data
     }
 
-A socket instance must specify its role: either `client` or `server`.
+A socket instance must specify its role: either `forward` or `reverse`.
 The role determines the direction of the individual ports within the socket.
 
 For more details on sockets, see :doc:`sockets`.
@@ -741,8 +741,8 @@ invalid placement precisely:
   an error.
 
 Socket channels may declare `dependson` as well (see :doc:`sockets`).
-A list on a `cosi` channel applies when the socket is instantiated as
-a `client`, and a list on a `soci` channel as a `server`; it places
+A list on an `outgoing` channel applies when the socket is instantiated as
+a `forward`, and a list on an `incoming` channel as a `reverse`; it places
 the same obligation on the containing module as if the `dependson` were
 declared on the resulting port.  In the receiving role the list is
 inert, and socket-derived obligations are exempt from the unused
@@ -751,9 +751,9 @@ warning (a protocol such as Wishbone legitimately varies its latency):
 .. code-block:: virdant
 
     socket Wishbone {
-        cosi cyc : Bit
-        cosi stb : Bit
-        soci ack : Bit dependson cyc, stb
+        outgoing cyc : Bit
+        outgoing stb : Bit
+        incoming ack : Bit dependson cyc, stb
     }
 
 The `where` Clause on Socket Instances
@@ -777,13 +777,13 @@ clause to the socket instance declaration:
 .. code-block:: virdant
 
     mod PassThrough {
-        client socket out of Pipe[Word[8]]
+        forward socket out of Pipe[Word[8]]
             where it.data dependson inp.data
         {
             it.data := inp.data
         }
 
-        server socket inp of Pipe[Word[8]]
+        reverse socket inp of Pipe[Word[8]]
             where it.ready dependson out.ready
         {
             it.ready := out.ready
@@ -798,7 +798,7 @@ driver blocks); spelling the carrier as `<SOCKET>.<CHANNEL>` instead of
 `it.<CHANNEL>` parses but warns.
 
 * The **carrier** must be a *driven* channel of the attached socket
-  instance (`client` + `cosi`, or `server` + `soci`).  Naming a
+  instance (`forward` + `outgoing`, or `reverse` + `incoming`).  Naming a
   receiving channel, another socket instance, a nonexistent channel, or
   the same channel in two clauses is an error.
 * Each **entry** must resolve to an incoming component of the module: a

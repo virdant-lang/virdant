@@ -492,10 +492,15 @@ fn format_vir_text(input: &str) -> String {
         // then `where it.data dependson inp.data`), any line ending
         // in `dependson` with the entry list on the next line, and
         // consecutive `where` clauses of one socket declaration.
+        // (`client`/`forward` and `server`/`reverse` are alternative
+        // spellings of the socket role keywords.)
         if let LineKind::Other(s) = &kind {
             if s.ends_with("dependson")
                 || s.starts_with("where ")
-                || ((s.starts_with("client socket") || s.starts_with("server socket"))
+                || ((s.starts_with("client socket")
+                    || s.starts_with("server socket")
+                    || s.starts_with("forward socket")
+                    || s.starts_with("reverse socket"))
                     && !s.contains("where"))
             {
                 let next_nonblank = lines[line_idx + 1..].iter().find(|l| !l.trim().is_empty());

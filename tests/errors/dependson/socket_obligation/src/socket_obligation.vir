@@ -7,12 +7,12 @@
 //
 // CHECK: `s.ack` could combinationally depend on `s.req` but does not declare it; add `s.req` to `s.ack`'s `dependson`
 socket Chan {
-    cosi req : Word[8]
-    soci ack : Word[8]
+    outgoing req : Word[8]
+    incoming ack : Word[8]
 }
 
 pub mod Server {
-    server socket s of Chan {
+    reverse socket s of Chan {
         it.ack := it.req + 1w8
     }
 }

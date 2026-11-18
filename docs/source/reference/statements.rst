@@ -224,17 +224,17 @@ scope, either defined in the same package or imported from another package.
 
 Socket Instance Declarations
 ----------------------------
-Socket instances declare either a client or server role for a socket type.
+Socket instances declare either a forward or reverse role for a socket type.
 
 .. code-block:: grammar
 
     ModDefStmtSocket :=
-        DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
-        | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        DocString? Annotations "forward" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        | DocString? Annotations "reverse" "socket" Ident "of" Ofness GenericsParams? ItBlock?
 
 .. code-block:: virdant
 
-    client socket mem of Mem
+    forward socket mem of Mem
     unused mem.data
     mem.addr := 0
 
@@ -493,7 +493,7 @@ This suppresses compiler warnings about unused components or ports.
 .. code-block:: virdant
 
     mod Core {
-        client socket mem of Mem
+        forward socket mem of Mem
         unused mem.data           // data output is intentionally unused
         mem.addr := 0
     }

@@ -28,16 +28,16 @@ import virt
 //> Input side: the producer drives `data`; the splitter's `ready` may
 //> combinationally depend on the offered payload (same-cycle accept).
 socket InPipe[T : Type] {
-    cosi data  : Valid[T]
-    soci ready : Bit dependson data
+    outgoing data  : Valid[T]
+    incoming ready : Bit dependson data
 }
 
 //> Output side: the splitter's `data` presentation may combinationally
 //> depend on the readiness it receives back (same-cycle forward); the
 //> consumer's `ready` drive is its own business.
 socket OutPipe[T : Type] {
-    cosi data  : Valid[T] dependson ready
-    soci ready : Bit
+    outgoing data  : Valid[T] dependson ready
+    incoming ready : Bit
 }
 
 //> Demuxes one `Pipe` input stream to two output streams by a header
@@ -51,14 +51,14 @@ socket OutPipe[T : Type] {
 //> `ready`.
 mod StreamSplitter {
     //> Upstream input stream.  The header bit routes each item.
-    server socket inp of InPipe[Word[8]]
+    reverse socket inp of InPipe[Word[8]]
         where it.ready dependson out_a.ready, out_b.ready
     {
         it.ready := inp_fires
     }
 
     //> Output stream for items whose header bit is `0`.
-    client socket out_a of OutPipe[Word[7]]
+    forward socket out_a of OutPipe[Word[7]]
         where it.data dependson inp.data, out_b.ready
     {
         it.data := if {
@@ -68,7 +68,7 @@ mod StreamSplitter {
     }
 
     //> Output stream for items whose header bit is `1`.
-    client socket out_b of OutPipe[Word[7]]
+    forward socket out_b of OutPipe[Word[7]]
         where it.data dependson inp.data, out_a.ready
     {
         it.data := if {

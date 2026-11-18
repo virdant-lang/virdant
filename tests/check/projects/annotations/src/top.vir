@@ -56,10 +56,10 @@ pub enum type State {
 @parameter("chip", "ice40")
 pub socket SpiSocket {
     @parameter("master")
-    cosi data_out : Bit
+    outgoing data_out : Bit
 
     @parameter("slave")
-    soci data_in : Bit
+    incoming data_in : Bit
 }
 
 // Multi-arg annotation with trailing comma

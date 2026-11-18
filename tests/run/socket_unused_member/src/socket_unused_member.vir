@@ -12,8 +12,8 @@ import virt
 //> Socket under test: a memory-style request (`addr`, client to
 //> server) and response (`data`, server to client) pair.
 socket Mem {
-    cosi addr : Word[16]
-    soci data : Word[8]
+    outgoing addr : Word[16]
+    incoming data : Word[8]
 }
 
 //> Server that drives only some channels of its socket port: `data`
@@ -21,7 +21,7 @@ socket Mem {
 //> and suppressed with `unused mem.addr`.
 mod Memory {
     //> Server end of the socket: only the response channel is driven.
-    server socket mem of Mem {
+    reverse socket mem of Mem {
         it.data := 10w8
     }
 
@@ -47,7 +47,7 @@ mod Stim {
 
     //> Client end of the socket under test: `addr` goes out, `data`
     //> comes back.
-    client socket drv of Mem {
+    forward socket drv of Mem {
         it.addr := count
     }
 

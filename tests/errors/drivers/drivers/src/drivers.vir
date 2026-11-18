@@ -16,14 +16,14 @@ pub mod NoDrivers {
 
 // Socket used to test DriverForSink from both sides.
 socket Chan {
-    cosi req : Word[8]
-    soci ack : Bit
+    outgoing req : Word[8]
+    incoming ack : Bit
 }
 
 // A client drives cosi (req) — that is correct.
 // But it also drives soci (ack) — soci is a source for the client, not a sink.
 pub mod BadClient {
-    client socket ch of Chan
+    forward socket ch of Chan
     unused ch.ack
     ch.req := 0
     // CHECK: Driver for sink ch.ack
@@ -33,7 +33,7 @@ pub mod BadClient {
 // A server drives soci (ack) — that is correct.
 // But it also drives cosi (req) — cosi is a source for the server, not a sink.
 pub mod BadServer {
-    server socket ch of Chan
+    reverse socket ch of Chan
     unused ch.req
     ch.ack := true
     // CHECK: Driver for sink ch.req
@@ -99,13 +99,13 @@ pub mod Int {
 
 // A properly-wired client and server, used to test socket NoDrivers below.
 pub mod GoodClient {
-    client socket ch of Chan
+    forward socket ch of Chan
     unused ch.ack
     ch.req := 0
 }
 
 pub mod GoodServer {
-    server socket ch of Chan
+    reverse socket ch of Chan
     unused ch.req
     ch.ack := true
 }

@@ -9,7 +9,7 @@
 // CHECK-NOT: Unused
 pub mod Warnings {
     incoming inp : Bit
-    client socket out of Chan
+    forward socket out of Chan
         where out.req dependson inp
     {
         it.req := true
@@ -22,7 +22,7 @@ pub mod Warnings {
 // CHECK-NOT: Unused
 pub mod Justified {
     incoming inp : Bit
-    client socket out of Chan
+    forward socket out of Chan
         where it.req dependson inp
     {
         it.req := inp
@@ -35,7 +35,7 @@ pub mod Justified {
 // even though `it.ready`'s driver is a constant.
 // CHECK-NOT: Unused
 pub mod Restated {
-    server socket s of PipeChan
+    reverse socket s of PipeChan
         where it.ready dependson s.req
     {
         it.ready := true
@@ -44,13 +44,13 @@ pub mod Restated {
 }
 
 socket Chan {
-    cosi req : Bit
-    soci ready : Bit
+    outgoing req : Bit
+    incoming ready : Bit
 }
 
 socket PipeChan {
-    cosi req : Bit
-    soci ready : Bit dependson req
+    outgoing req : Bit
+    incoming ready : Bit dependson req
 }
 
 // CHECK: PASSED with

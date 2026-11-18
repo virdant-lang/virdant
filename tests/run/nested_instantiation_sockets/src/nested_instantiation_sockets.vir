@@ -23,8 +23,8 @@ import virt
 //> Request/response handshake: the client drives `req`, the server
 //> answers with `rsp`.
 socket Handshake {
-    cosi req : Word[8]
-    soci rsp : Word[8] dependson req
+    outgoing req : Word[8]
+    incoming rsp : Word[8] dependson req
 }
 
 //> Pure combinational relay between two `Handshake` sockets.
@@ -35,14 +35,14 @@ socket Handshake {
 //> between.
 mod Mid {
     //> Server side, bulk-connected to the grandparent's `top_port`.
-    server socket a of Handshake
+    reverse socket a of Handshake
         where it.rsp dependson b.rsp
     {
         it.rsp := b.rsp
     }
 
     //> Client side, bulk-connected to the grandchild's `link`.
-    client socket b of Handshake
+    forward socket b of Handshake
         where it.req dependson a.req
     {
         it.req := a.req
@@ -54,7 +54,7 @@ mod Mid {
 //> Answers each request combinationally with `req + 1`.
 mod Leaf {
     //> Server side, bulk-connected to `mid.b`.
-    server socket link of Handshake {
+    reverse socket link of Handshake {
         it.rsp := it.req + 1w8
     }
 }
@@ -66,7 +66,7 @@ mod Leaf {
 mod Grandparent {
     //> The grandparent's own socket port: the near end of the
     //> two-hop chain, fed by `Stim` and bulk-connected to `mid.a`.
-    server socket top_port of Handshake
+    reverse socket top_port of Handshake
 
     //> Grandchild, declared first so `mid`'s instantiation block can
     //> bulk-connect to it.
@@ -101,7 +101,7 @@ mod Stim {
     //> Client end of the stimulus feed; `req` goes out to the
     //> grandparent's `top_port`, `rsp` is the response coming back
     //> across both hops.
-    client socket drv of Handshake {
+    forward socket drv of Handshake {
         it.req := req
     }
 

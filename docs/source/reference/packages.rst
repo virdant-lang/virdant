@@ -140,8 +140,8 @@ whether `pub` or not: `pub` only matters at package boundaries.
 
 A `pub` item may not expose a non-`pub` item to other packages: every
 type appearing in a `pub` item's public surface (module port types,
-struct/union field types, enum variant payload types, socket `cosi`/
-`soci` types) must itself be transitively `pub`.
+struct/union field types, enum variant payload types, socket `outgoing`/
+`incoming` types) must itself be transitively `pub`.
 Referencing a type whose head is not `pub` from a `pub` item's surface
 is an error at the offending type's span.
 Generic parameters (`T` in `Word[T]`) are exempt: they are bound at the

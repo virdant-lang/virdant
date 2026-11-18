@@ -13,8 +13,8 @@ import virt
 
 //> A socket whose request and response channels are both 32 bits wide.
 socket Wide {
-    cosi req : Word[32]
-    soci rsp : Word[32] dependson req
+    outgoing req : Word[32]
+    incoming rsp : Word[32] dependson req
 }
 
 //> Echo server for the `Wide` socket.
@@ -23,7 +23,7 @@ socket Wide {
 //> channel, so the harness can check that wide data crosses the socket
 //> bit-for-bit.
 mod WideEcho {
-    server socket busif of Wide {
+    reverse socket busif of Wide {
         it.rsp := it.req
     }
 }
@@ -36,7 +36,7 @@ mod WideClient {
     //> 32-bit value presented on the request channel.
     incoming d : Word[32]
 
-    client socket busif of Wide
+    forward socket busif of Wide
         where it.req dependson d
     {
         it.req := d

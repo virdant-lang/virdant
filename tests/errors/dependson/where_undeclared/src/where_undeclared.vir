@@ -10,7 +10,7 @@
 // CHECK: `c.data` could combinationally depend on `inp` but does not declare it; add `inp` to `c.data`'s `dependson`
 pub mod Direct {
     incoming inp : Bit
-    client socket c of Chan {
+    forward socket c of Chan {
         it.data := inp
     }
     unused c.ready
@@ -18,11 +18,11 @@ pub mod Direct {
 
 // CHECK: `s.ready` could combinationally depend on `p.ready` but does not declare it; add `p.ready` to `s.ready`'s `dependson`
 pub mod CrossSocket {
-    server socket s of Chan {
+    reverse socket s of Chan {
         it.ready := p.ready
     }
 
-    client socket p of Chan {
+    forward socket p of Chan {
         it.data := true
     }
     unused s.req
@@ -60,13 +60,13 @@ pub mod ParentDeclared {
 // CHECK: No drivers for producer.c.ready
 
 socket Chan {
-    cosi data : Bit
-    soci ready : Bit
+    outgoing data : Bit
+    incoming ready : Bit
 }
 
 mod Producer {
     incoming inp : Bit
-    client socket c of Chan
+    forward socket c of Chan
         where it.data dependson inp
     {
         it.data := inp

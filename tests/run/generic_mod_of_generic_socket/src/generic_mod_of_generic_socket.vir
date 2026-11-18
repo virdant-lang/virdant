@@ -11,8 +11,8 @@ import virt
 //> A generic request/response channel: the socket itself is generic,
 //> parameterized by the payload type `T`.
 socket Chan[T : Type] {
-    cosi req : T
-    soci rsp : T dependson req
+    outgoing req : T
+    incoming rsp : T dependson req
 }
 
 //> A generic module with a client socket port of the generic socket
@@ -20,7 +20,7 @@ socket Chan[T : Type] {
 //> combinationally from `d`.
 mod Producer[W : Type] {
     incoming d : W
-    client socket link of Chan[W]
+    forward socket link of Chan[W]
         where it.req dependson d
     {
         it.req := d
@@ -32,7 +32,7 @@ mod Producer[W : Type] {
 //> `Chan[W]`, generic in the same parameter `W`.  It echoes `req`
 //> straight back on `rsp`.
 mod Echo[W : Type] {
-    server socket link of Chan[W] {
+    reverse socket link of Chan[W] {
         it.rsp := it.req
     }
 }

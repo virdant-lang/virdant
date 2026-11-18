@@ -33,12 +33,12 @@ mod SkidBuffer {
     incoming clock : Clock
 
     //> Upstream handshake.  Accepts until both slots are full.
-    server socket inp of Pipe[Word[8]] {
+    reverse socket inp of Pipe[Word[8]] {
         it.ready := count != 2
     }
 
     //> Downstream handshake.  Presents the head while `count != 0`.
-    client socket out of Pipe[Word[8]] {
+    forward socket out of Pipe[Word[8]] {
         it.data := out_data
     }
 

@@ -22,13 +22,13 @@ import virt
 //> forwarding) and `inp.ready` may combinationally depend on
 //> `out.ready` (backpressure); both are declared with `where` clauses.
 mod PassThrough {
-    client socket out of Pipe[Word[8]]
+    forward socket out of Pipe[Word[8]]
         where it.data dependson inp.data
     {
         it.data := inp.data
     }
 
-    server socket inp of Pipe[Word[8]]
+    reverse socket inp of Pipe[Word[8]]
         where it.ready dependson out.ready
     {
         it.ready := out.ready

@@ -322,15 +322,27 @@ SocketDef: AstNodeId = {
     },
 }
 
+/// Alternative spellings: in socket definitions, `cosi` may be
+/// written `outgoing`, and `soci` may be written `incoming`.
+CosiKw: () = {
+    "cosi" => (),
+    "outgoing" => (),
+}
+
+SociKw: () = {
+    "soci" => (),
+    "incoming" => (),
+}
+
 SocketDefStmt: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "cosi" <name:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> CosiKw <name:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <rr:@R> => {
         let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Cosi, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "soci" <name:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> SociKw <name:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <rr:@R> => {
         let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Soci, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 };
@@ -711,8 +723,20 @@ ItBlock: AstNodeId = {
     }
 }
 
+/// Alternative spellings: `client` may be written `forward`, and
+/// `server` may be written `reverse`.
+ClientKw: () = {
+    "client" => (),
+    "forward" => (),
+}
+
+ServerKw: () = {
+    "server" => (),
+    "reverse" => (),
+}
+
 ModDefStmtSocket: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "client" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> ClientKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Client, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
@@ -722,7 +746,7 @@ ModDefStmtSocket: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "server" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> ServerKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Server, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
@@ -735,7 +759,7 @@ ModDefStmtSocket: AstNodeId = {
     // A `where` clause may also precede the driver block: it reads
     // better before the `{ ... }` it annotates, and the two are
     // unambiguous (`where` starts a clause, `{` starts a block).
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "client" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> ClientKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Client, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
@@ -745,7 +769,7 @@ ModDefStmtSocket: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "server" "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> ServerKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Server, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
@@ -1562,6 +1586,8 @@ extern {
         "socket" => Token::KwSocket,
         "client" => Token::KwClient,
         "server" => Token::KwServer,
+        "forward" => Token::KwForward,
+        "reverse" => Token::KwReverse,
         "cosi" => Token::KwCosi,
         "soci" => Token::KwSoci,
         "if" => Token::KwIf,

@@ -18,8 +18,8 @@ import virt
 //>
 //> The client drives `req`, the server answers with `rsp`.
 socket Link {
-    cosi req : Word[8]
-    soci rsp : Word[8]
+    outgoing req : Word[8]
+    incoming rsp : Word[8]
 }
 
 //> Client side of the socket: owns its own registers and checks the
@@ -49,7 +49,7 @@ mod Client {
 
     //> Client end of the link.  The request is a registered value,
     //> not a combinational function of `stim`.
-    client socket link of Link {
+    forward socket link of Link {
         it.req := req_reg
     }
 
@@ -148,7 +148,7 @@ mod Server {
 
     //> Server end of the link.  The response is a registered value,
     //> not a combinational function of the incoming request.
-    server socket link of Link {
+    reverse socket link of Link {
         it.rsp := rsp_reg
     }
 

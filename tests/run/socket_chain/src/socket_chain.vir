@@ -15,14 +15,14 @@ import virt
 
 //> Request/response link used by both hops of the chain.
 socket Link {
-    cosi req : Word[8]
-    soci resp : Word[8] dependson req
+    outgoing req : Word[8]
+    incoming resp : Word[8] dependson req
 }
 
 //> Top of the chain: server role.  Answers every request by
 //> XOR-ing the request payload with `0xA5`.
 mod Responder {
-    server socket link of Link {
+    reverse socket link of Link {
         it.resp := it.req ^ 0xA5
     }
 }
@@ -33,14 +33,14 @@ mod Responder {
 //> transform, so a correct round trip proves both hops carried data.
 mod Middleman {
     //> Faces the upstream server: relays requests with `^ 0x0F`.
-    client socket up of Link
+    forward socket up of Link
         where it.req dependson down.req
     {
         it.req := down.req ^ 0x0F
     }
 
     //> Faces the downstream client: relays responses with `^ 0xF0`.
-    server socket down of Link
+    reverse socket down of Link
         where it.resp dependson up.resp
     {
         it.resp := up.resp ^ 0xF0
@@ -55,7 +55,7 @@ mod Requester {
     //> Primary clock.
     incoming clock : Clock
 
-    client socket link of Link {
+    forward socket link of Link {
         it.req := vec
     }
 

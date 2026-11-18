@@ -26,7 +26,7 @@ mod Keep[T : Type] {
 pub mod Top2 {
     outgoing out : Bit
     out := false
-    client socket p of Pipe {
+    forward socket p of Pipe {
         it.data := ?
     }
 

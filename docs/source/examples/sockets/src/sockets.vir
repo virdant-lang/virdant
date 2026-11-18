@@ -1,10 +1,10 @@
 socket Mem {
-    cosi addr : Word[16]
-    soci data : Word[8]
+    outgoing addr : Word[16]
+    incoming data : Word[8]
 }
 
 mod Core {
-    client socket mem of Mem
+    forward socket mem of Mem
     // mem.addr := ...
 
     mem.addr := 0
@@ -12,7 +12,7 @@ mod Core {
 }
 
 mod Memory {
-    server socket mem of Mem
+    reverse socket mem of Mem
     // mem.data := ...
     mem.data := 0
     unused mem.addr

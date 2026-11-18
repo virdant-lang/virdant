@@ -18,15 +18,15 @@ import virt
 //> carry independent types `A` and `B`, so a socket instance can be
 //> asymmetric (wide request, narrow response) or the reverse.
 socket Bus[A : Type, B : Type] {
-    cosi req : A
-    soci rsp : B dependson req
+    outgoing req : A
+    incoming rsp : B dependson req
 }
 
 //> Client side of the wide-request instantiation: drives an 8-bit
 //> request and ignores the 4-bit response.
 mod Req8to4 {
     incoming d : Word[8]
-    client socket busif of Bus[Word[8], Word[4]]
+    forward socket busif of Bus[Word[8], Word[4]]
         where it.req dependson d
     {
         it.req := d
@@ -37,7 +37,7 @@ mod Req8to4 {
 //> Server side of the wide-request instantiation: answers an 8-bit
 //> request with its low nibble on the 4-bit response channel.
 mod Rsp8to4 {
-    server socket busif of Bus[Word[8], Word[4]] {
+    reverse socket busif of Bus[Word[8], Word[4]] {
         it.rsp := it.req[4..0]
     }
 }
@@ -46,7 +46,7 @@ mod Rsp8to4 {
 //> request and ignores the 8-bit response.
 mod Req4to8 {
     incoming d : Word[4]
-    client socket busif of Bus[Word[4], Word[8]]
+    forward socket busif of Bus[Word[4], Word[8]]
         where it.req dependson d
     {
         it.req := d
@@ -57,7 +57,7 @@ mod Req4to8 {
 //> Server side of the narrow-request instantiation: answers a 4-bit
 //> request with its zero-extended value on the 8-bit response channel.
 mod Rsp4to8 {
-    server socket busif of Bus[Word[4], Word[8]] {
+    reverse socket busif of Bus[Word[4], Word[8]] {
         it.rsp := zext(it.req)
     }
 }

@@ -6,20 +6,20 @@ mod Top {
 }
 
 mod Core {
-    client socket mem of Mem {
+    forward socket mem of Mem {
         it.addr := 8
         unused it.data
     }
 }
 
 mod Memory {
-    server socket mem of Mem {
+    reverse socket mem of Mem {
         it.data := 10
     }
     unused mem.addr
 }
 
 socket Mem {
-    cosi addr : Word[16]
-    soci data : Word[8]
+    outgoing addr : Word[16]
+    incoming data : Word[8]
 }

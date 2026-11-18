@@ -36,8 +36,8 @@ struct type Resp {
 
 //> Socket with struct-typed channels in both directions.
 socket Chan {
-    cosi req : Req
-    soci resp : Resp dependson req
+    outgoing req : Req
+    incoming resp : Resp dependson req
 }
 
 //> Server endpoint: reads the request's fields, responds field-wise.
@@ -48,7 +48,7 @@ mod Server {
     //> Server side of the struct-channel socket.  The response is
     //> computed from the incoming request's fields: `sum` is the
     //> 5-bit sum of `a` and `b`, `eq` their equality.
-    server socket chan of Chan {
+    reverse socket chan of Chan {
         it.resp := ${
             sum = word(false, it.req->a) + word(false, it.req->b),
             eq = it.req->a == it.req->b,
@@ -75,7 +75,7 @@ mod Stim {
     //> Client side of the struct-channel socket.  The request struct
     //> register is driven out whole; its value steps through the four
     //> vectors below, one per cycle.
-    client socket chan of Chan {
+    forward socket chan of Chan {
         it.req := req
     }
 

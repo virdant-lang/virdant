@@ -14,8 +14,8 @@ import virt
 //> Handshake channel carrying a union-typed (`Valid[Word[8]]`)
 //> payload from client to server, with a one-bit ready back-channel.
 socket Handshake {
-    cosi data : Valid[Word[8]]
-    soci ready : Bit
+    outgoing data : Valid[Word[8]]
+    incoming ready : Bit
 }
 
 //> Client side: drives the union-typed channel from `d` and ignores
@@ -23,7 +23,7 @@ socket Handshake {
 mod Sender {
     incoming d : Valid[Word[8]]
 
-    client socket hs of Handshake
+    forward socket hs of Handshake
         where it.data dependson d
     {
         it.data := d
@@ -36,7 +36,7 @@ mod Sender {
 mod Receiver {
     incoming clock : Clock
 
-    server socket hs of Handshake {
+    reverse socket hs of Handshake {
         it.ready := true
     }
 

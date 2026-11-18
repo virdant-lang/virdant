@@ -6,18 +6,18 @@
 //
 // CHECK: Cycle in the `dependson` relation: bar.sock.do -> foo.sock.do -> foo.sock.di -> bar.sock.di
 socket Sock {
-    cosi do : Bit dependson di
-    soci di : Bit dependson do
+    outgoing do : Bit dependson di
+    incoming di : Bit dependson do
 }
 
 mod Foo {
-    client socket sock of Sock {
+    forward socket sock of Sock {
         it.do := it.di
     }
 }
 
 mod Bar {
-    server socket sock of Sock {
+    reverse socket sock of Sock {
         it.di := it.do
     }
 }

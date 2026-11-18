@@ -23,9 +23,9 @@ pub enum type PubEnum {
 }
 
 pub socket PubChan {
-    cosi req : Priv
+    outgoing req : Priv
     // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubChan` must be transitively pub
-    soci rsp : Word[8]
+    incoming rsp : Word[8]
 }
 
 pub mod PubMod {

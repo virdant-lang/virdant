@@ -23,8 +23,8 @@ pub enum type State {
 pub builtin type Id {}
 
 pub socket Chan {
-    cosi req : Word[8]
-    soci rsp : Word[8]
+    outgoing req : Word[8]
+    incoming rsp : Word[8]
 }
 
 struct type Hidden {
@@ -56,7 +56,7 @@ pub mod Top[W : Type] {
     hidden := ${ x = inp }
     unused hidden
 
-    client socket c of Chan
+    forward socket c of Chan
         where it.req dependson inp
     {
         it.req := h.out

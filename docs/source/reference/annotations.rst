@@ -66,10 +66,10 @@ Annotatable declarations include:
 * Union type definitions and their variants (with params)
 * Enum type definitions and their variants
 * Builtin type definitions
-* Socket definitions and their channels (:vir:`cosi` / :vir:`soci`)
+* Socket definitions and their channels (:vir:`outgoing` / :vir:`incoming`)
 * Component declarations (:vir:`incoming`, :vir:`outgoing`, :vir:`wire`, :vir:`reg`)
 * Module instances (:vir:`mod` ... :vir:`of` ...)
-* Socket instances (:vir:`client` :vir:`socket` / :vir:`server` :vir:`socket`)
+* Socket instances (:vir:`forward` :vir:`socket` / :vir:`reverse` :vir:`socket`)
 * Struct type fields
 * Union variant parameters (:vir:`Param`)
 
@@ -89,7 +89,7 @@ The grammar shows :vir:`Annotations` as a non-terminal in all of these productio
     EnumDefStmt := DocString? Annotations Ident "=" Expr
     BuiltinDef := DocString? Annotations "pub"? "builtin" "type" Ident ...
     SocketDef := DocString? Annotations "pub"? "socket" Ident "{" ...
-    SocketDefStmt := DocString? Annotations ("cosi"|"soci") Ident ":" Type
+    SocketDefStmt := DocString? Annotations ("outgoing"|"incoming") Ident ":" Type
     Param := DocString? Annotations Ident ":" Type
 
     ModDefStmtComponent :=
@@ -97,7 +97,7 @@ The grammar shows :vir:`Annotations` as a non-terminal in all of these productio
     ModDefStmtInstance :=
         DocString? Annotations "mod" Ident "of" ...
     ModDefStmtSocket :=
-        DocString? Annotations ("client"|"server") "socket" ...
+        DocString? Annotations ("forward"|"reverse") "socket" ...
 
 
 .. _parameter-annotations:

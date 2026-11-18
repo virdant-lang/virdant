@@ -74,9 +74,17 @@ BuiltinDef := DocString? Annotations "pub"? "builtin" "type" Ident Generics? "{"
 
 SocketDef := DocString? Annotations "pub"? "builtin"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
+CosiKw :=
+      "cosi"
+    | "outgoing"
+
+SociKw :=
+      "soci"
+    | "incoming"
+
 SocketDefStmt :=
-      DocString? Annotations "cosi" Ident ":" Type DependsonList?
-    | DocString? Annotations "soci" Ident ":" Type DependsonList?
+      DocString? Annotations CosiKw Ident ":" Type DependsonList?
+    | DocString? Annotations SociKw Ident ":" Type DependsonList?
 
 DependsonList := "dependson" DependsonPathList
 
@@ -146,11 +154,19 @@ ModDefStmtInstance := DocString? Annotations "mod" Ident "of" Ofness GenericsPar
 
 ItBlock := ModDefStmtBlock
 
+ClientKw :=
+      "client"
+    | "forward"
+
+ServerKw :=
+      "server"
+    | "reverse"
+
 ModDefStmtSocket :=
-      DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause?
-    | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause?
-    | DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock
-    | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock
+      DocString? Annotations ClientKw "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause?
+    | DocString? Annotations ServerKw "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause?
+    | DocString? Annotations ClientKw "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock
+    | DocString? Annotations ServerKw "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock
 
 WhereClause := WhereClauseList
 
@@ -444,6 +460,7 @@ Tokens:
   "ext"
   "false"
   "for"
+  "forward"
   "if"
   "import"
   "incoming"
@@ -460,6 +477,7 @@ Tokens:
   "platform"
   "pub"
   "reg"
+  "reverse"
   "server"
   "soci"
   "socket"

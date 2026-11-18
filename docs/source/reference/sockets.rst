@@ -16,31 +16,30 @@ with their types and directions.
         DocString? Annotations "pub"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
     SocketDefStmt :=
-        DocString? Annotations "cosi" Ident ":" Type
-        | DocString? Annotations "soci" Ident ":" Type
+        DocString? Annotations "outgoing" Ident ":" Type
+        | DocString? Annotations "incoming" Ident ":" Type
 
 .. code-block:: virdant
 
     socket Mem {
-        cosi addr : Word[16]
-        soci data : Word[8]
+        outgoing addr : Word[16]
+        incoming data : Word[8]
     }
 
 The direction keywords have the following meanings, from the perspective of a
-client socket instance:
+forward socket instance:
 
-`cosi`
-    **C**\ lient-**O**\ ut, **S**\ erver-**I**\ n.
-    For a client instance, this port is an output.
-    For a server instance, this port is an input.
+`outgoing`
+    For a forward instance, this port is an output.
+    For a reverse instance, this port is an input.
 
-`soci`
-    **S**\ erver-**O**\ ut, **C**\ lient-**I**\ n.
-    For a client instance, this port is an input.
-    For a server instance, this port is an output.
+`incoming`
+    For a forward instance, this port is an input.
+    For a reverse instance, this port is an output.
 
-Thus `cosi` ports are driven by the client and received by the server,
-while `soci` ports are driven by the server and received by the client.
+Thus `outgoing` ports are driven by the forward side and received by the
+reverse side, while `incoming` ports are driven by the reverse side and
+received by the forward side.
 
 
 Generic Socket Definitions
@@ -55,8 +54,8 @@ types of the body:
 .. code-block:: virdant
 
     socket Bus[T : Type] {
-        cosi req : T
-        soci rsp : T
+        outgoing req : T
+        incoming rsp : T
     }
 
 Both channels of `Bus` have type `T`.
@@ -68,31 +67,31 @@ actual types (see `Type Arguments`_ below).
 Socket Instances
 ----------------
 Socket instances are declared inside module bodies.
-Each instance must specify its role: `client` or `server`.
+Each instance must specify its role: `forward` or `reverse`.
 
 .. code-block:: grammar
 
     ModDefStmtSocket :=
-        DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
-        | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        DocString? Annotations "forward" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        | DocString? Annotations "reverse" "socket" Ident "of" Ofness GenericsParams? ItBlock?
 
 .. code-block:: virdant
 
     mod Core {
-        client socket mem of Mem
+        forward socket mem of Mem
         unused mem.data
         mem.addr := 0
     }
 
     mod Memory {
-        server socket mem of Mem
+        reverse socket mem of Mem
         unused mem.addr
         mem.data := 10
     }
 
-A client socket instance uses `cosi` ports as outputs (driven by the client)
-and `soci` ports as inputs (received by the client).
-A server socket instance reverses these directions.
+A forward socket instance uses `outgoing` ports as outputs (driven by the
+forward side) and `incoming` ports as inputs (received by the forward side).
+A reverse socket instance reverses these directions.
 
 
 Type Arguments
@@ -106,14 +105,14 @@ parameters:
 
     mod Master {
         incoming d : Word[8]
-        client socket bus of Bus[Word[8]] {
+        forward socket bus of Bus[Word[8]] {
             it.req := d
         }
         unused bus.rsp
     }
 
     mod Slave {
-        server socket bus of Bus[Word[8]] {
+        reverse socket bus of Bus[Word[8]] {
             it.rsp := it.req
         }
     }
@@ -130,14 +129,14 @@ Instantiating the builtin `Pipe` with no arguments:
 
 .. code-block:: virdant
 
-    client socket p of Pipe
+    forward socket p of Pipe
 
 reports ``Type builtin::Pipe takes 1 type argument, but 0 were given``.
 Instantiating `Bus` at a number:
 
 .. code-block:: virdant
 
-    client socket bus of Bus[8]
+    forward socket bus of Bus[8]
 
 reports ``Type argument mismatch: parameter T of Bus expects a type, but
 found a Nat literal``.
@@ -145,7 +144,7 @@ found a Nat literal``.
 
 Bidirectional Connections
 -------------------------
-A pair of socket instances (one client, one server) may be connected
+A pair of socket instances (one forward, one reverse) may be connected
 bidirectionally using the `:=:` operator.
 This connects every port in the socket at once, with the appropriate
 direction for each instance.
@@ -189,14 +188,14 @@ compose with the arguments of the enclosing module instances:
 
     mod Master[W : Type] {
         incoming d : W
-        client socket bus of Bus[W] {
+        forward socket bus of Bus[W] {
             it.req := d
         }
         unused bus.rsp
     }
 
     mod Slave[W : Type] {
-        server socket bus of Bus[W] {
+        reverse socket bus of Bus[W] {
             it.rsp := it.req
         }
     }
@@ -267,14 +266,14 @@ socket and then instantiated by any module that speaks that protocol.
 .. code-block:: virdant
 
     socket TileLinkUL {
-        cosi a_address  : Word[32]
-        cosi a_opcode   : Word[3]
-        cosi a_size     : Word[2]
-        cosi a_data     : Word[32]
-        cosi a_mask     : Word[4]
-        soci d_data     : Word[32]
-        soci d_opcode   : Word[3]
-        soci d_size     : Word[2]
+        outgoing a_address  : Word[32]
+        outgoing a_opcode   : Word[3]
+        outgoing a_size     : Word[2]
+        outgoing a_data     : Word[32]
+        outgoing a_mask     : Word[4]
+        incoming d_data     : Word[32]
+        incoming d_opcode   : Word[3]
+        incoming d_size     : Word[2]
     }
 
 By defining the interface as a socket, the compiler can verify that all
@@ -290,22 +289,22 @@ handshake channel.
 .. code-block:: virdant
 
     pub socket Pipe[T : Type] {
-        cosi data  : Valid[T]
-        soci ready : Bit
+        outgoing data  : Valid[T]
+        incoming ready : Bit
     }
 
 The two ports form a handshake pair:
 
-* :vir:`cosi data : Valid[T]` --- the payload.
+* :vir:`outgoing data : Valid[T]` --- the payload.
   :vir:`@Valid(v)` carries a value `v` of type `T`, while :vir:`@Invalid()`
   marks the pipe as empty.
-  The client drives `data` and the server receives it.
+  The forward side drives `data` and the reverse side receives it.
 
-* :vir:`soci ready : Bit` --- readiness.
-  The server drives `ready` and the client receives it.
+* :vir:`incoming ready : Bit` --- readiness.
+  The reverse side drives `ready` and the forward side receives it.
 
-A :vir:`client socket` instance of :vir:`Pipe[T]` therefore drives
-:vir:`data` and reads :vir:`ready`, while a :vir:`server socket` instance
+A :vir:`forward socket` instance of :vir:`Pipe[T]` therefore drives
+:vir:`data` and reads :vir:`ready`, while a :vir:`reverse socket` instance
 reads :vir:`data` and drives :vir:`ready`.
 
 Like any generic socket, :vir:`Pipe[T]` is instantiated with explicit type
@@ -331,7 +330,7 @@ consumer asserts readiness, and a top module connects the two with
         // The payload the producer pushes into the pipe.
         incoming d : Word[8]
 
-        client socket pipe of Pipe[Word[8]] {
+        forward socket pipe of Pipe[Word[8]] {
             it.data := @Valid(d)
         }
 
@@ -342,7 +341,7 @@ consumer asserts readiness, and a top module connects the two with
 
     // A consumer: asserts readiness and forwards the received payload.
     mod Consumer {
-        server socket pipe of Pipe[Word[8]] {
+        reverse socket pipe of Pipe[Word[8]] {
             it.ready := true
         }
 
@@ -391,13 +390,13 @@ opposite direction word of the same socket:
 .. code-block:: virdant
 
     socket Wishbone {
-        cosi cyc : Bit
-        cosi stb : Bit
-        soci ack : Bit dependson cyc, stb
+        outgoing cyc : Bit
+        outgoing stb : Bit
+        incoming ack : Bit dependson cyc, stb
     }
 
-When the socket is instantiated in the channel's driving role (`client`
-for `cosi` channels, `server` for `soci` channels), the list places the
+When the socket is instantiated in the channel's driving role (`forward`
+for `outgoing` channels, `reverse` for `incoming` channels), the list places the
 same obligation on the containing module as if the `dependson` were
 declared on the resulting port: the module's drive on that channel may
 combinationally depend on its reads of the listed channels.  In the
@@ -420,13 +419,13 @@ sockets' channels or on plain `incoming` ports are declared with
 .. code-block:: virdant
 
     mod PassThrough {
-        client socket out of Pipe[Word[8]]
+        forward socket out of Pipe[Word[8]]
             where it.data dependson inp.data
         {
             it.data := inp.data
         }
 
-        server socket inp of Pipe[Word[8]]
+        reverse socket inp of Pipe[Word[8]]
             where it.ready dependson out.ready
         {
             it.ready := out.ready

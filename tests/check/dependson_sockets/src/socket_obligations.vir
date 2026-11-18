@@ -8,21 +8,21 @@
 // The server's acknowledgement may combinationally depend on its
 // reads of the request channel.
 socket Respond {
-    cosi req : Bit
-    soci ack : Bit dependson req
+    outgoing req : Bit
+    incoming ack : Bit dependson req
 }
 
 // The client's request may combinationally depend on its reads of the
 // response channel.
 socket Wish {
-    cosi req : Bit dependson ack
-    soci ack : Bit
+    outgoing req : Bit dependson ack
+    incoming ack : Bit
 }
 
 // The server obligation is satisfied: `it.ack` really does depend on
 // `it.req`.
 mod Server {
-    server socket s of Respond {
+    reverse socket s of Respond {
         it.ack := it.req
     }
 }
@@ -31,7 +31,7 @@ mod Server {
 // actually read `ack` today: socket obligations are exempt from the
 // unused warning ( Wishbone and TL support arbitrary delays).
 mod Client {
-    client socket c of Wish {
+    forward socket c of Wish {
         it.req := true
     }
     unused c.ack
@@ -41,7 +41,7 @@ mod Client {
 // list says nothing about a `client` instantiation, and `Wish`'s
 // `cosi req` list says nothing about a `server` instantiation.
 mod InertServer {
-    server socket w of Wish {
+    reverse socket w of Wish {
         it.ack := true
     }
     unused w.req

@@ -12,8 +12,8 @@
 // CHECK: `dependson` is not allowed on `c.req`: names socket `c`, but this `where` clause is attached to socket instance `e`
 // CHECK: `dependson` is not allowed on `it.ready`: declares the same channel in more than one `where` clause
 socket Chan {
-    cosi req : Bit
-    soci ready : Bit
+    outgoing req : Bit
+    incoming ready : Bit
 }
 
 pub mod CarrierChecks {
@@ -24,7 +24,7 @@ pub mod CarrierChecks {
     // Carrier on a receiving channel: a `client` socket drives `cosi`,
     // not `soci`.  The second clause is well-formed, so the module
     // still declares the dependency its driver actually has.
-    client socket c of Chan
+    forward socket c of Chan
         where it.ready dependson some_in
         where it.req dependson some_in
     {
@@ -35,14 +35,14 @@ pub mod CarrierChecks {
     // Entries: a driven channel of another socket instance, an
     // `outgoing` port, and an unresolvable name.  `some_in` is legal
     // (a plain `incoming` port) and declares the real dependency.
-    server socket s of Chan
+    reverse socket s of Chan
         where it.ready dependson d.req, out_port, nowhere, some_in
     {
         it.ready := some_in
     }
     unused s.req
 
-    client socket d of Chan
+    forward socket d of Chan
         where it.req dependson some_in
     {
         it.req := some_in
@@ -51,7 +51,7 @@ pub mod CarrierChecks {
 
     // Carrier naming a different socket instance than the clause is
     // attached to.  The second clause is well-formed.
-    client socket e of Chan
+    forward socket e of Chan
         where c.req dependson some_in
         where it.req dependson some_in
     {
@@ -60,7 +60,7 @@ pub mod CarrierChecks {
     unused e.ready
 
     // The same channel declared in two clauses of one socket.
-    server socket f of Chan
+    reverse socket f of Chan
         where it.ready dependson some_in
         where it.ready dependson f.req
     {

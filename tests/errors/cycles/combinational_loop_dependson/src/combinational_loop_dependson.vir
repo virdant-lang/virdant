@@ -71,13 +71,13 @@ mod LoopC {
 // CHECK: `c.req` could combinationally depend on `s.req` but does not declare it
 // CHECK: `s.ack` could combinationally depend on `c.ack` but does not declare it
 socket PingPong {
-    cosi req : Bit dependson ack
-    soci ack : Bit dependson req
+    outgoing req : Bit dependson ack
+    incoming ack : Bit dependson req
 }
 
 pub mod SocketLoop {
-    client socket c of PingPong
-    server socket s of PingPong
+    forward socket c of PingPong
+    reverse socket s of PingPong
 
     // The link alone drives every channel; the cycle comes purely
     // from the two `dependson` lists in `PingPong`.

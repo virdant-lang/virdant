@@ -1,28 +1,28 @@
 socket Chan {
-    cosi data  : Bit
-    soci ready : Bit dependson data
+    outgoing data  : Bit
+    incoming ready : Bit dependson data
 }
 
 socket Two {
-    cosi data  : Bit
-    cosi tag   : Bit
-    soci ready : Bit
+    outgoing data  : Bit
+    outgoing tag   : Bit
+    incoming ready : Bit
 }
 
 mod Messy {
-    client socket out of Chan
+    forward socket out of Chan
         where it.data dependson inp.data
     {
         it.data  := inp.data
     }
-    client socket pair of Two
+    forward socket pair of Two
         where it.data dependson inp.data
         where it.tag dependson inp.data
     {
         it.data  := inp.data
         it.tag   := inp.data
     }
-    server socket inp of Chan
+    reverse socket inp of Chan
     {
         it.ready := out.ready
     }

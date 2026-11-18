@@ -6,19 +6,19 @@
 // error, reported in terms of the instance's mono socket identity.
 
 socket Link[T : Type] {
-    cosi data : T
-    soci ready : Bit
+    outgoing data : T
+    incoming ready : Bit
 }
 
 mod Client {
-    client socket pipe of Link[Word[8]] {
+    forward socket pipe of Link[Word[8]] {
         it.data := 7w8
         unused it.ready
     }
 }
 
 mod Server {
-    server socket pipe of Link[Word[8]] {
+    reverse socket pipe of Link[Word[8]] {
         it.ready := true
         unused it.data
     }

@@ -194,21 +194,18 @@ named ports with directions.
         DocString? Annotations "pub"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
     SocketDefStmt :=
-        DocString? Annotations "cosi" Ident ":" Type
-        | DocString? Annotations "soci" Ident ":" Type
+        DocString? Annotations "outgoing" Ident ":" Type
+        | DocString? Annotations "incoming" Ident ":" Type
 
 .. code-block:: virdant
 
     socket Mem {
-        cosi addr : Word[16]
-        soci data : Word[8]
+        outgoing addr : Word[16]
+        incoming data : Word[8]
     }
 
-`cosi` stands for "client-out, server-in".
-`soci` stands for "server-out, client-in".
-
-For a client socket instance, `cosi` ports are outputs and `soci` ports
-are inputs.
-For a server socket instance, the directions are reversed.
+For a `forward` socket instance, `outgoing` ports are outputs and
+`incoming` ports are inputs.
+For a `reverse` socket instance, the directions are reversed.
 
 For more details on sockets, see :doc:`sockets`.

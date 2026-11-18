@@ -16,20 +16,20 @@ import virt
 //> Request/response socket: the client drives `req`, the server
 //> answers with `rsp`.
 socket Link {
-    cosi req : Word[8]
-    soci rsp : Word[8] dependson req
+    outgoing req : Word[8]
+    incoming rsp : Word[8] dependson req
 }
 
 //> First peer: answers every request with `req + 1`.
 mod PeerPlusOne {
-    server socket link of Link {
+    reverse socket link of Link {
         it.rsp := it.req + 1w8
     }
 }
 
 //> Second peer: answers every request with `req + 2`.
 mod PeerPlusTwo {
-    server socket link of Link {
+    reverse socket link of Link {
         it.rsp := it.req + 2w8
     }
 }
@@ -51,12 +51,12 @@ mod Stim {
     }
 
     //> First of the two same-type sockets; wired to `peer_a`.
-    client socket inp of Link {
+    forward socket inp of Link {
         it.req := req_a
     }
 
     //> Second of the two same-type sockets; wired to `peer_b`.
-    client socket out of Link {
+    forward socket out of Link {
         it.req := req_b
     }
 

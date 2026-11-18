@@ -7,11 +7,11 @@ socket Empty {
 }
 
 mod Left {
-    client socket peer of Empty
+    forward socket peer of Empty
 }
 
 mod Right {
-    server socket peer of Empty
+    reverse socket peer of Empty
 }
 
 pub mod Top {

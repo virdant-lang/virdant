@@ -28,9 +28,9 @@ import virt
 //> answers by toggling `ack` once per sampled transfer.  The link is
 //> idle exactly when `req == ack`.
 socket TwoPhase {
-    cosi req  : Bit
-    cosi data : Word[8]
-    soci ack  : Bit
+    outgoing req  : Bit
+    outgoing data : Word[8]
+    incoming ack  : Bit
 }
 
 //> Producer side of the 2-phase handshake.
@@ -44,7 +44,7 @@ mod Producer {
 
     //> Outgoing 2-phase link.  Request and payload are gated low
     //> until warm-up has settled.
-    client socket link of TwoPhase {
+    forward socket link of TwoPhase {
         it.req := mux(ready, nonce, false)
         it.data := mux(ready, tx_data, 0)
     }
@@ -142,7 +142,7 @@ mod Consumer {
     incoming clock : Clock
 
     //> Incoming 2-phase link.
-    server socket link of TwoPhase {
+    reverse socket link of TwoPhase {
         it.ack := ack
     }
 

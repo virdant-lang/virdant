@@ -59,12 +59,12 @@ pub mod ThroughObligation {
 }
 
 socket ReqPipe {
-    cosi req : Bit dependson rsp
-    soci rsp : Bit
+    outgoing req : Bit dependson rsp
+    incoming rsp : Bit
 }
 
 mod ObligChild {
-    client socket c of ReqPipe {
+    forward socket c of ReqPipe {
         it.req := it.rsp
     }
 }

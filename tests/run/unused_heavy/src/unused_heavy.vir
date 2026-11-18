@@ -16,10 +16,10 @@ import virt
 //> and `sel`) and two server-to-client response channels (`rsp` and
 //> `aux`), so that each side has a channel to ignore.
 socket Bus {
-    cosi addr : Word[8]
-    cosi sel : Bit
-    soci rsp : Word[8] dependson addr
-    soci aux : Word[4] dependson addr
+    outgoing addr : Word[8]
+    outgoing sel : Bit
+    incoming rsp : Word[8] dependson addr
+    incoming aux : Word[4] dependson addr
 }
 
 //> Server side of the socket under test: answers `addr` with a
@@ -28,7 +28,7 @@ socket Bus {
 //> `unused link.sel`.
 mod Peer {
     //> Server end of the socket: both response channels are driven.
-    server socket link of Bus {
+    reverse socket link of Bus {
         it.rsp := rsp
         it.aux := addr_low
     }
@@ -93,7 +93,7 @@ mod Stim {
     //> Client end of the socket under test: both request channels go
     //> out, `rsp` comes back and is checked, `aux` is ignored with
     //> `unused it.aux` inside the driver block.
-    client socket link of Bus {
+    forward socket link of Bus {
         it.addr := addr
         it.sel := sel
         unused it.aux

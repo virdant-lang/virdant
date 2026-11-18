@@ -38,6 +38,6 @@ pub builtin mod Sync {
 }
 
 pub builtin socket Pipe[T : Type] {
-    cosi data : Valid[T]
-    soci ready : Bit dependson data
+    outgoing data : Valid[T]
+    incoming ready : Bit dependson data
 }

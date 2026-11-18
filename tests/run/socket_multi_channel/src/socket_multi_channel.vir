@@ -5,17 +5,17 @@ import virt
 //> carries its own stream so that swapping any two of the four wires
 //> breaks at least one check.
 socket Quad {
-    cosi req_a : Word[8]
-    cosi req_b : Word[8]
-    soci rsp_a : Word[8] dependson req_a
-    soci rsp_b : Word[8] dependson req_b
+    outgoing req_a : Word[8]
+    outgoing req_b : Word[8]
+    incoming rsp_a : Word[8] dependson req_a
+    incoming rsp_b : Word[8] dependson req_b
 }
 
 //> Server side: answers each request channel with a channel-distinct
 //> transform (`+1` on `req_a`, `+2` on `req_b`) so the two responses
 //> are never interchangeable.
 mod QuadServer {
-    server socket link of Quad {
+    reverse socket link of Quad {
         it.rsp_a := it.req_a + 1w8
         it.rsp_b := it.req_b + 2w8
     }
@@ -39,7 +39,7 @@ mod Stim {
 
     //> Client end of the socket under test: `req_a` and `req_b` go out,
     //> `rsp_a` and `rsp_b` come back.
-    client socket drv of Quad {
+    forward socket drv of Quad {
         it.req_a := req_a
         it.req_b := req_b
     }

@@ -5,13 +5,13 @@
 //
 
 socket Bus[T : Type] {
-    cosi req : T
-    soci rsp : T dependson req
+    outgoing req : T
+    incoming rsp : T dependson req
 }
 
 mod Master[W : Type] {
     incoming d : W
-    client socket busif of Bus[W]
+    forward socket busif of Bus[W]
         where it.req dependson d
     {
         it.req := d
@@ -20,7 +20,7 @@ mod Master[W : Type] {
 }
 
 mod Slave[W : Type] {
-    server socket busif of Bus[W] {
+    reverse socket busif of Bus[W] {
         it.rsp := it.req
     }
 }

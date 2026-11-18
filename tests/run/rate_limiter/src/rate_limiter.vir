@@ -32,7 +32,7 @@ mod RateLimiter {
 
     //> Outgoing handshake.  Valid during the first cycle of each
     //> 4-cycle window.
-    client socket out of Pipe[Word[8]]
+    forward socket out of Pipe[Word[8]]
         where it.data dependson enable
     {
         it.data := if {
