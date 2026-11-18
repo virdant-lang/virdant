@@ -15,7 +15,10 @@
 //     {type:'stop'}
 //   worker → main:
 //     {type:'created', clockHz}
-//     {type:'output', buf:ArrayBuffer}          (UART tx bytes)
+//     {type:'output', buf:ArrayBuffer}          (UART tx bytes;
+//                                             debug-port output is
+//                                             ANSI-colored and flows
+//                                             through the same channel)
 //     {type:'progress', cycles}                 (throttled)
 //     {type:'finished', exitCode, cycles}
 //     {type:'stopped', cycles}
@@ -64,6 +67,15 @@ function adapt(nCycles, ms) {
 function postOutput() {
   const bytes = vm.take_output();
   if (bytes.length) postMessage({ type: 'output', buf: bytes.buffer }, [bytes.buffer]);
+  // Debug output (virt::Virt `debug` port, vir run's stderr): same
+  // console as the UART stream, pre-wrapped in ANSI truecolor so it
+  // reads as a distinct channel.
+  const debug = vm.take_debug_output();
+  if (debug.length) {
+    const wrapped = new TextEncoder().encode(
+      '\x1b[38;2;97;175;239m' + new TextDecoder().decode(debug) + '\x1b[39m');
+    postMessage({ type: 'output', buf: wrapped.buffer }, [wrapped.buffer]);
+  }
 }
 
 // Progress is only needed for the fps readout; throttle so the paced

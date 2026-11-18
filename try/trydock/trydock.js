@@ -91,11 +91,11 @@ root.innerHTML = `
 
   <div id="td-confirmmodal" hidden>
     <div class="td-confirmbox">
-      <h2>Reset to the example?</h2>
+      <h2 id="td-confirm-title">Reset to the example?</h2>
       <p id="td-confirm-msg"></p>
       <div class="td-confirmbuttons">
-        <button class="td-btn" id="td-confirm-cancel">Cancel</button>
         <button class="td-btn danger" id="td-confirm-ok">Reset</button>
+        <button class="td-btn" id="td-confirm-cancel">Cancel</button>
       </div>
     </div>
   </div>
@@ -578,10 +578,20 @@ function applySync(s) {
     performLoad(name);
   }
 
-  // virtry.goto_source() requests parked the same way (consumed after
-  // a pending load, so a load+goto sequence lands in the right
-  // place).  Rejections are the callers' own promise rejections —
-  // nothing extra to log here.
+  // open_snippet flows parked before the mirror existed: run them now
+  // (the mirror is fresh, so each proceeds straight to its
+  // confirm/goto logic).
+  const parkedSnippets = pendingSnippets;
+  pendingSnippets = [];
+  for (const entry of parkedSnippets) {
+    openSnippet(entry.projectName, entry.gotoTarget).then(entry.resolve);
+  }
+
+  // The continuation of a confirmed load (open_snippet's goto) is
+  // driven by the worker's explicit 'projectLoaded' ack — NOT by the
+  // next `sync`: hello-replies and other docks' switches broadcast
+  // syncs too, and one arriving in between would run the goto against
+  // a stale mirror.
   const parkedGotos = pendingGotos;
   pendingGotos = [];
   for (const entry of parkedGotos) {
@@ -977,21 +987,33 @@ settingsModal.addEventListener('click', (e) => {
 // for when the user has broken the example while trying things out.
 // The worker re-syncs every dock and re-checks afterwards.
 let confirmAction = null;
+let confirmCancel = null; // runs when the dialog closes without OK
 
-function openConfirm(msg, action) {
+function openConfirm(msg, action, { title = 'Reset to the example?', okLabel = 'Reset', onCancel = null } = {}) {
+  $('td-confirm-title').textContent = title;
+  $('td-confirm-ok').textContent = okLabel;
   $('td-confirm-msg').textContent = msg;
   confirmAction = action;
+  confirmCancel = onCancel;
   confirmModal.hidden = false;
 }
 
 function closeConfirm() {
+  // Cancel / backdrop / Esc — anything but the OK path (which
+  // consumes the callbacks first, see below).
+  const cancelled = confirmAction != null || confirmCancel != null;
+  const onCancel = confirmCancel;
   confirmModal.hidden = true;
   confirmAction = null;
+  confirmCancel = null;
+  if (cancelled && onCancel) onCancel();
 }
 
 $('td-confirm-cancel').addEventListener('click', closeConfirm);
 $('td-confirm-ok').addEventListener('click', () => {
   const action = confirmAction;
+  confirmAction = null; // consume both callbacks: this is the OK path
+  confirmCancel = null;
   closeConfirm();
   if (action) action();
 });
@@ -1009,14 +1031,19 @@ function resetProjectNow() {
   port.postMessage({ type: 'resetProject' });
 }
 
-$('td-reset').addEventListener('click', () => {
+$('td-reset').addEventListener('click', openResetConfirm);
+
+// The reset prompt, exposed as an API: virtry button clicks in the
+// docs (goto_source failures) open it too — the session's sources no
+// longer match the snippet the button stands for.
+function openResetConfirm() {
   const name = project()?.name;
   if (!name) return;
   openConfirm(
     `Reset "${name}" to the example sources? Unsaved edits will be lost.`,
     resetProjectNow,
   );
-});
+}
 
 // ── virtry.load(project): programmatic open + load + reset ───
 //
@@ -1059,6 +1086,14 @@ function loadProject(name) {
 // means all seeds.  Replies arrive per port in request order, so a
 // FIFO resolver queue pairs them up.
 const listResolvers = [];
+const sessionStateResolvers = []; // FIFO pairing for `sessionState` replies
+
+function querySessionState() {
+  return new Promise((resolve) => {
+    sessionStateResolvers.push(resolve);
+    port.postMessage({ type: 'sessionState' });
+  });
+}
 
 function listProjects() {
   return new Promise((resolve) => {
@@ -1178,6 +1213,77 @@ function findSource(target) {
     });
   }
   return performFind(t);
+}
+
+// ── virtry.open_snippet(project, target): docs snippet buttons ──
+//
+// literalinclude'd .vir blocks (try_ext.py) carry both the seed
+// project the snippet belongs to and a `<FILE>.vir:<LINE>` target.
+// The flow, per button:
+//
+//   already on that project → goto_source; if THAT fails (the
+//     session's files diverged from the example), offer the Reset
+//     prompt — exactly like the dock's Reset button;
+//   on any other project → confirm first (switching loses unsaved
+//     edits), then virtry.load (load + reset) and the goto.  An
+//     untouched session (no edits, not running) skips the prompt:
+//     switching loses nothing, so it just loads.
+//
+// Resolves true when the jump landed; false when the user cancelled
+// a prompt or the goto failed (the failure paths surface as popups,
+// not exceptions).  A request parked before the mirror exists is
+// consumed by the first sync, like the other virtry flows.
+
+let pendingSnippets = []; // parked open_snippet requests (see applySync)
+let pendingLoadThen = null; // {andThen} after a confirmed loadProject
+
+function currentProject() {
+  return project()?.name ?? null;
+}
+
+async function openSnippet(projectName, target) {
+  projectName = String(projectName ?? '');
+  const gotoTarget = String(target ?? '').trim();
+  if (!projectName || !gotoTarget) return false;
+  if (!opened || projects.length === 0) {
+    // Mirror not there yet: open the dock (the `hello` triggers the
+    // sync) and run the flow once the file list is known.
+    openDock();
+    await new Promise((resolve) =>
+      pendingSnippets.push({ projectName, gotoTarget, resolve }));
+  }
+  if (project()?.name !== projectName) {
+    // Ask the worker whether the current project's sources are still
+    // byte-identical to the example (and nothing is running): an
+    // untouched session loses nothing by switching, so the prompt is
+    // skipped and the project just loads.  A live query, not a flag:
+    // the session's `dirty` flag stays set after any programmatic
+    // load/reset even though the content matches again.
+    const st = await querySessionState();
+    const pristine = st.seedMatch && !st.running && !st.starting;
+    const confirmed = pristine || await new Promise((resolve) => {
+      openConfirm(
+        `Load "${projectName}" into the Try dock? Unsaved edits to "${project()?.name ?? '?'}" will be lost.`,
+        () => resolve(true),
+        { title: `Load the "${projectName}" example?`, okLabel: 'Load', onCancel: () => resolve(false) },
+      );
+    });
+    if (!confirmed) return false;
+    await new Promise((resolve) => {
+      pendingLoadThen = { andThen: resolve };
+      performLoad(projectName);
+    });
+  }
+  try {
+    await performGoto(gotoTarget);
+    return true;
+  } catch {
+    // Right project, but the snippet's file/line isn't in the
+    // session: offer the Reset prompt (as if the Reset button had
+    // been clicked).
+    openResetConfirm();
+    return false;
+  }
 }
 
 runBtn.addEventListener('click', startRun);
@@ -1300,12 +1406,25 @@ port.onmessage = (e) => {
       if (resolve) resolve(Array.isArray(m.names) ? m.names.map(String) : []);
       break;
     }
+    case 'sessionState': {
+      const resolve = sessionStateResolvers.shift();
+      if (resolve) resolve(m);
+      break;
+    }
     case 'located': {
       // Reply to a goto_source FQN lookup (paired FIFO, per port).
       const entry = gotoResolvers.shift();
       if (!entry) break;
       if (m.ok) entry.resolve(m);
       else entry.reject(new Error(String(m.message ?? 'virtry.goto_source: not found')));
+      break;
+    }
+    case 'projectLoaded': {
+      // Explicit ack for the open_snippet continuation (after the
+      // load's sync has been applied).
+      const t = pendingLoadThen;
+      pendingLoadThen = null;
+      if (t?.andThen) t.andThen();
       break;
     }
     case 'runBlocked':
@@ -1579,7 +1698,7 @@ vsplitHandle.addEventListener('mousedown', (e) => {
 // Expose a tiny handle for debugging / future integrations.
 // (The public entry point for pages is `virtry.load(project)` /
 // `virtry.list()`, defined in trydock-boot.js; they delegate here.)
-window.__trydock = { open: openDock, close: closeDock, toggle: toggleDock, loadProject, listProjects, gotoSource, findSource };
+window.__trydock = { open: openDock, close: closeDock, toggle: toggleDock, loadProject, listProjects, gotoSource, findSource, currentProject, openSnippet, resetConfirm: openResetConfirm };
 
 // virtry.list() calls made before this bundle loaded: hand their
 // resolvers over now (the worker connection exists, so the reply
@@ -1609,5 +1728,15 @@ if (Array.isArray(window.__trydockBootFindQueue)) {
   delete window.__trydockBootFindQueue;
   for (const entry of queue) {
     findSource(entry.target).then(entry.resolve);
+  }
+}
+
+// virtry.open_snippet() calls parked the same way (resolve-only: the
+// flow surfaces failures as popups, not exceptions).
+if (Array.isArray(window.__trydockBootSnippetQueue)) {
+  const queue = window.__trydockBootSnippetQueue;
+  delete window.__trydockBootSnippetQueue;
+  for (const entry of queue) {
+    openSnippet(entry.project, entry.target).then(entry.resolve);
   }
 }

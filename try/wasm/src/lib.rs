@@ -276,6 +276,10 @@ impl VirtVm {
         let tx = port(&sim, virt::PORT_TX)?;
         let rx = port(&sim, virt::PORT_RX)?;
         let exit = port(&sim, virt::PORT_EXIT)?;
+        // `debug` is optional: the platform declares it with a
+        // `default @Invalid()`, so designs written before it need not
+        // declare it.  When absent, the board just ignores it.
+        let debug = sim.try_resolve(format!("top.{}", virt::PORT_DEBUG).as_bytes());
         let spi_ck = port(&sim, virt::PORT_SPI_CK)?;
         let spi_cs = port(&sim, virt::PORT_SPI_CS)?;
         let spi_mosi = port(&sim, virt::PORT_SPI_MOSI)?;
@@ -309,15 +313,29 @@ impl VirtVm {
             flash_stepper.step(sim);
         }));
 
+        // The design is settled at time 0 (Sim::new applied `initial`s
+        // and propagated them), so if `debug` reads `@Valid(ch)` before
+        // the first clock edge, emit that character too — it would
+        // otherwise never be sampled, since the per-cycle logic only
+        // sees post-edge values.  (Mirrors `vir run`.)
+        if let Some(debug) = debug {
+            if let Some(ch) = virt::decode_debug(&sim, &sim.get(debug)) {
+                shared.debug_push(ch);
+            }
+        }
+
         let per_cycle = std::cell::RefCell::new(virt::PerCycle {
             tx,
             rx,
             exit,
+            debug,
             // Fixed baud: ten nominal bit periods are not needed —
             // the TX decoder validates frames against clock_hz / BAUD.
             uart_tx: virt::UartTx::new(virt::baud_timing(clock_hz, virt::BAUD)),
             uart_rx: virt::UartRx::new(&virt::baud_timing(clock_hz, virt::BAUD)),
             prev_exit: None,
+            prev_debug: None,
+            debug_valid_char: None,
             cycle_count: 0,
             shared: shared.clone(),
         });
@@ -360,6 +378,13 @@ impl VirtVm {
     /// Drain the UART TX output (design → console), as raw bytes.
     pub fn take_output(&mut self) -> Vec<u8> {
         std::mem::take(&mut *self.shared.tx_out.borrow_mut())
+    }
+
+    /// Drain the `debug`-port output (design → console), as raw
+    /// bytes.  The caller renders it distinctly from the UART stream
+    /// (the web demo colors it); see `vir run`'s stderr stream.
+    pub fn take_debug_output(&mut self) -> Vec<u8> {
+        std::mem::take(&mut *self.shared.debug_out.borrow_mut())
     }
 
     /// Queue bytes to transmit into the design's `rx` line

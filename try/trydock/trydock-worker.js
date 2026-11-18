@@ -21,7 +21,11 @@
 //     {type:'loadProject', name, reset}       find-or-append the seed
 //                                             project by name, select
 //                                             it, optionally reset it
+//                                             (acks 'projectLoaded' on
+//                                             that port)
 //     {type:'listProjects'}                   reply: {type:'projectsList', names}
+//     {type:'sessionState'}                   reply: {type:'sessionState',
+//                                             seedMatch, running, starting}
 //     {type:'locate', target}                 resolve an FQN to its
 //                                             definition span; reply:
 //                                             {type:'located', ok, ...}
@@ -53,6 +57,7 @@
 // the worker's lifetime is deliberately out of scope (see PLAN.md).
 
 import init, { check as wasmCheck, locate as wasmLocate, VirtVm } from '../src/wasm/virdant_try.js';
+// (take_debug_output is pulled off the VirtVm instance directly.)
 
 // ── Seed projects (same rules as the SPA's main.js) ─────────
 
@@ -236,6 +241,22 @@ async function runCheck() {
   return res;
 }
 
+// ── Session state query (virtry.open_snippet) ───────────────
+//
+// Reports, LIVE at decision time, whether the current project's
+// sources are byte-identical to the seeded example (and whether a
+// simulation is running).  The session's `dirty` flag alone is not
+// usable for this: a programmatic load/reset marks it dirty even
+// though the content still matches the example — the prompt may only
+// be skipped when switching would truly lose nothing.
+
+function seedFilesMatch(p) {
+  const spec = seedSpecs.find((s) => s.name === p.name);
+  if (!spec) return false;
+  return spec.files.length === p.files.length &&
+    spec.files.every((f, i) => p.files[i].name === f.name && p.files[i].text === f.text);
+}
+
 // ── FQN → definition location (virtry.goto_source) ──────────
 //
 // The wasm `locate` export rebuilds a Db from the current project's
@@ -274,11 +295,27 @@ function adapt(nCycles, ms) {
   chunkCycles = BigInt(Math.min(MAX_CHUNK, Math.max(MIN_CHUNK, target)));
 }
 
+// Debug output (virt::Virt `debug` port) is rendered on the same
+// console as the UART stream, but pre-wrapped in ANSI truecolor so it
+// reads as a distinct channel (vir run prints it to stderr).
+const DEBUG_COLOR = '\x1b[38;2;97;175;239m'; // #61afef blue
+const DEBUG_RESET = '\x1b[39m';
+
+function wrapDebug(bytes) {
+  return encoder.encode(DEBUG_COLOR + new TextDecoder().decode(bytes) + DEBUG_RESET);
+}
+
 function postOutput() {
   const bytes = vm.take_output();
   if (bytes.length) {
     appendLog(bytes);
     broadcast({ type: 'console', buf: bytes.buffer });
+  }
+  const debug = vm.take_debug_output();
+  if (debug.length) {
+    const wrapped = wrapDebug(debug);
+    appendLog(wrapped);
+    broadcast({ type: 'console', buf: wrapped.buffer });
   }
 }
 
@@ -403,6 +440,16 @@ self.onconnect = (e) => {
         }
         break;
       }
+      case 'sessionState':
+        // Live snapshot for the snippet-button flow (that port only;
+        // FIFO-paired like the other per-port replies).
+        port.postMessage({
+          type: 'sessionState',
+          seedMatch: seedFilesMatch(project()),
+          running: session.running,
+          starting: session.starting,
+        });
+        break;
       case 'listProjects':
         // The seeded list, not the live session: a restored session
         // may have dropped projects, but "all projects" means all
@@ -440,6 +487,9 @@ self.onconnect = (e) => {
         const spec = seedSpecs.find((s) => s.name === name);
         if (!spec) {
           logLine(`\u26a0 virtry.load: no project "${name}"`);
+          // Ack anyway: a waiting open_snippet continuation must not
+          // hang on a load that will never come.
+          port.postMessage({ type: 'projectLoaded', name, ok: false });
           break;
         }
         if (session.running || session.starting) stopRun();
@@ -464,6 +514,14 @@ self.onconnect = (e) => {
         }
         broadcast(syncSnapshot());
         scheduleCheck(0);
+        // Ack on the requesting port AFTER the sync broadcast: the
+        // open_snippet continuation (its goto) then runs against a
+        // mirror that already reflects the load.  (The continuation
+        // must not be driven by the next `sync` message — hello
+        // replies and other docks' project switches broadcast syncs
+        // too, and one of those arriving in between would consume the
+        // continuation against a stale mirror.)
+        port.postMessage({ type: 'projectLoaded', name, ok: true });
         break;
       }
       case 'edit': {
@@ -555,7 +613,10 @@ function stopRun() {
   session.running = false;
   const cycles = Number(vm.cycles());
   postOutput();
-  logLine(`\u2500\u2500 stopped after ${cycles} cycles \u2500\u2500`);
+  // Leading newline: in raw-input mode Ctrl+C writes `^C` without a
+  // line break, so the banner would otherwise land on the same line
+  // (the playground's console already does this).
+  logLine(`\n\u2500\u2500 stopped after ${cycles} cycles \u2500\u2500`);
   broadcast({ type: 'stopped', cycles });
   vm = null;
 }

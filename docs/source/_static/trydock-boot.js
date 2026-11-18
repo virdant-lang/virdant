@@ -103,9 +103,26 @@
 
   // .. try:: buttons (try_ext.py): delegated click → virtry.load —
   // the buttons carry the project name in data-virtry-project.
+  // Snippet buttons (literalinclude) carry that attribute too, but
+  // they run the load-or-goto flow instead — loading must never fire
+  // before their confirm dialog is answered.
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-virtry-project]');
-    if (el && window.virtry) virtry.load(el.getAttribute('data-virtry-project'));
+    if (el && !el.hasAttribute('data-virtry-goto') && window.virtry) {
+      virtry.load(el.getAttribute('data-virtry-project'));
+    }
+  });
+
+  // literalinclude'd .vir code blocks (try_ext.py pins the snippet's
+  // project, included file and its first :lines: number on the
+  // button): delegated click → the load-or-goto flow (open_snippet).
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-virtry-goto]');
+    if (!el || !window.virtry) return;
+    window.virtry.open_snippet(
+      el.getAttribute('data-virtry-project'),
+      el.getAttribute('data-virtry-goto'),
+    );
   });
 
   // Reopen the dock automatically when navigating (per-tab flag; the
@@ -192,6 +209,37 @@
         }
         const p = new Promise((resolve) => {
           (window.__trydockBootFindQueue ??= []).push({
+            target: String(target ?? ''),
+            resolve,
+          });
+        });
+        tryLoad();
+        return p;
+      },
+
+      // `virtry.current_project()`: the name of the project the dock
+      // currently shows (or null when the dock has no session in this
+      // page — the bundle isn't loaded yet).  Synchronous.
+      current_project: function () {
+        if (window.__trydock && typeof window.__trydock.currentProject === 'function') {
+          return window.__trydock.currentProject();
+        }
+        return null;
+      },
+
+      // `virtry.open_snippet(project, target)`: the flow behind the
+      // literalinclude Try buttons — goto the target when the dock is
+      // already on that project (offering the Reset prompt if the
+      // session's sources diverged), otherwise confirm and
+      // virtry.load() it first.  Resolves true when the jump landed,
+      // false on cancellation/failure (those surface as popups).
+      open_snippet: function (project, target) {
+        if (window.__trydock && typeof window.__trydock.openSnippet === 'function') {
+          return window.__trydock.openSnippet(project, target);
+        }
+        const p = new Promise((resolve) => {
+          (window.__trydockBootSnippetQueue ??= []).push({
+            project: String(project ?? ''),
             target: String(target ?? ''),
             resolve,
           });

@@ -4,10 +4,13 @@
 //! This is the same board logic — UART at the platform-declared
 //! clock's 115200 8N1 divisor, the
 //! 16 MiB SPI flash device (READ 0x03, auto-increment), the
-//! `exit : Valid[Word[8]]` port — with the Unix shell removed:
+//! `exit : Valid[Word[8]]` and `debug : Valid[Word[8]]` ports — with
+//! the Unix shell removed:
 //!
 //!   - UART TX output goes into a shared byte buffer (drained by JS)
 //!     instead of stdout;
+//!   - debug output goes into its own shared byte buffer (drained by
+//!     JS) instead of stderr;
 //!   - UART RX input comes out of a shared byte queue (filled by JS)
 //!     instead of a stdin reader thread;
 //!   - real-time pacing is done by the JS driver (which schedules
@@ -35,6 +38,7 @@ pub const PORT_CLOCK: &str = "clock";
 pub const PORT_TX: &str = "tx";
 pub const PORT_RX: &str = "rx";
 pub const PORT_EXIT: &str = "exit";
+pub const PORT_DEBUG: &str = "debug";
 pub const PORT_SPI_CK: &str = "spi_ck";
 pub const PORT_SPI_CS: &str = "spi_cs";
 pub const PORT_SPI_MOSI: &str = "spi_mosi";
@@ -52,7 +56,15 @@ pub struct BoardShared {
     pub cycles: Cell<u64>,
     /// The exit code requested via the `exit` port, if any.
     pub exit: Cell<Option<u8>>,
+    /// Bytes emitted via the `debug` port, drained by JS.  Capped:
+    /// a frontend that never drains it must not grow the buffer
+    /// without bound over a long run.
+    pub debug_out: RefCell<Vec<u8>>,
 }
+
+/// Upper bound on buffered debug bytes ([`BoardShared::debug_out`]);
+/// oldest bytes are dropped beyond it.
+pub const DEBUG_CAP: usize = 64 * 1024;
 
 impl BoardShared {
     pub fn new() -> Rc<BoardShared> {
@@ -61,7 +73,19 @@ impl BoardShared {
             rx_in: RefCell::new(VecDeque::new()),
             cycles: Cell::new(0),
             exit: Cell::new(None),
+            debug_out: RefCell::new(Vec::new()),
         })
+    }
+
+    /// Append one debug byte, dropping the oldest bytes beyond
+    /// [`DEBUG_CAP`].
+    pub fn debug_push(&self, byte: u8) {
+        let mut out = self.debug_out.borrow_mut();
+        if out.len() >= DEBUG_CAP {
+            let drop = out.len() - DEBUG_CAP + 1;
+            out.drain(..drop);
+        }
+        out.push(byte);
     }
 }
 
@@ -108,11 +132,23 @@ pub struct PerCycle {
     pub tx: SignalId,
     pub rx: SignalId,
     pub exit: SignalId,
+    /// The `debug` port, when the design declares one (`None` when it
+    /// does not — the platform declares it with a `default @Invalid()`,
+    /// so older designs need not).
+    pub debug: Option<SignalId>,
     pub uart_tx: UartTx,
     pub uart_rx: UartRx,
     /// Last seen `exit`-port value; `decode_exit` is a pure function
     /// of the value, so it only needs to rerun when it changes.
     pub prev_exit: Option<Value>,
+    /// Last seen `debug`-port raw value; the (allocating) decode only
+    /// reruns when it changes.
+    pub prev_debug: Option<Value>,
+    /// The decoded character while `debug` reads `@Valid(ch)` (`None`
+    /// while `@Invalid()`).  Unlike `exit`, `debug` appends on EVERY
+    /// cycle that it reads `@Valid(ch)` — while the value is unchanged
+    /// the cached character is re-appended without decoding.
+    pub debug_valid_char: Option<u8>,
     pub shared: Rc<BoardShared>,
     /// Input-queue poll cadence: like the native build (which drains
     /// stdin every 1000 cycles), touching the shared queue on every
@@ -162,9 +198,36 @@ impl PerCycle {
             self.prev_exit = Some(exit_value);
         }
 
+        // Debug output (virt::Virt `debug` port): every cycle that
+        // `debug` is `@Valid(ch)` appends `ch` to the shared buffer;
+        // JS drains it into the console.  The decode allocates, so it
+        // only reruns when the port's raw value changes; while the
+        // value is unchanged and was valid, the cached character is
+        // re-appended without decoding.
+        if let Some(debug) = self.debug {
+            let debug_value = sim.get(debug);
+            if self.prev_debug.as_ref() != Some(&debug_value) {
+                self.debug_valid_char = decode_debug(sim, &debug_value);
+                self.prev_debug = Some(debug_value);
+            }
+            if let Some(ch) = self.debug_valid_char {
+                self.shared.debug_push(ch);
+            }
+        }
+
         let cycles = self.shared.cycles.get() + 1;
         self.shared.cycles.set(cycles);
     }
+}
+
+/// Decode the `debug : Valid[Word[8]]` value into the character byte.
+pub fn decode_debug(sim: &Sim, value: &Value) -> Option<u8> {
+    let ctor = sim.decode_ctor(value)?;
+    if ctor.name != "Valid" {
+        return None;
+    }
+    let ch = ctor.payloads.first()?.to_u64();
+    Some(ch as u8)
 }
 
 /// Decode the `exit : Valid[Word[8]]` value.  The Valid slot's

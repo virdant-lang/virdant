@@ -967,3 +967,33 @@ footer .virdant-footer-meta {
   color: #191b20;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
 }
+
+/* literalinclude'd .vir code blocks: the green "Try" button pinned
+   to the upper right of the code block (see try_ext.py; the click
+   handler lives in trydock-boot.js).  It is deliberately smaller
+   than the ::try:: buttons — it badges the block it belongs to. */
+.vir-goto-wrap {
+  position: relative;
+}
+
+.vir-goto-wrap .vir-goto-btn {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  padding: 4px 16px;
+  font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  opacity: 0.85;
+}
+
+.vir-goto-wrap .vir-goto-btn:hover {
+  opacity: 1;
+}
+
+/* In blocks with a Try button, the copy quicklink sits on the same
+   top row, to the Try button's LEFT.  'Try' at 12px is ~56px wide:
+   right: 12px + ~56px + ~6px gap. */
+.vir-goto-wrap .copy-button {
+  top: 8px;
+  right: 74px;
+}
