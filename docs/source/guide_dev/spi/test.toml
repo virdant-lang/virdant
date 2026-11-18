@@ -1,3 +1,0 @@
-kind = "check"
-description = "Guide SPI example: serial peripheral interface slave."
-expect = "ok"

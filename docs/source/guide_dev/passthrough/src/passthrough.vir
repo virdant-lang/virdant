@@ -1,6 +1,0 @@
-pub mod Passthrough {
-    incoming inp : Word[8]
-    outgoing out : Word[8] dependson inp
-
-    out := inp
-}

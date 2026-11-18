@@ -1,3 +1,0 @@
-kind = "check"
-description = "Guide barrel shifter example: staged conditional shifts."
-expect = "ok"

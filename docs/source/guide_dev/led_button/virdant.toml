@@ -1,5 +1,0 @@
-[project]
-name = "led_button"
-
-[prog]
-top = "led_button::LedButton"

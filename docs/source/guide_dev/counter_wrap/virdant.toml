@@ -1,5 +1,0 @@
-[project]
-name = "counter_wrap"
-
-[prog]
-top = "counter_wrap::CounterWrap"

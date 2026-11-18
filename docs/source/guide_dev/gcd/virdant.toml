@@ -1,5 +1,0 @@
-[project]
-name = "gcd"
-
-[prog]
-top = "gcd::Gcd"

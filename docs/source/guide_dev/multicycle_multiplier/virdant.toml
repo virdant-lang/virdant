@@ -1,5 +1,0 @@
-[project]
-name = "multicycle_multiplier"
-
-[prog]
-top = "multicycle_multiplier::MulticycleMultiplier"

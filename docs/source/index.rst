@@ -8,7 +8,6 @@ The Virdant Hardware Language
 
     getting-started
     guide/index
-    guide_dev/index
     tools/index
     principles
     coding-conventions
@@ -36,4 +35,4 @@ Ready to get started?
 
 Get the Code
 ------------
-* `https://github.com/virdant-lang/virdant <https://github.com/virdant-lang/virdant>`_
+* `On Github <https://github.com/virdant-lang/virdant>`_

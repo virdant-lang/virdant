@@ -1,5 +1,0 @@
-[project]
-name = "spi"
-
-[prog]
-top = "spi::SpiController"

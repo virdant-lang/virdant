@@ -1,5 +1,0 @@
-[project]
-name = "shift_register"
-
-[prog]
-top = "shift_register::ShiftRegister"

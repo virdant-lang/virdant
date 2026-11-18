@@ -18,6 +18,3 @@ This guide will introduce Virdant through a series of examples.
     hello/index
     echo/index
     spiflash/index
-    fifo/index
-    incrementer/index
-    fulladder/index

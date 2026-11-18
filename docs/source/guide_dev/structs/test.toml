@@ -1,3 +1,0 @@
-kind = "check"
-description = "Guide structs example: a color mixer built from a struct-typed register."
-expect = "ok"

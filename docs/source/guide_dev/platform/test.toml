@@ -1,3 +1,0 @@
-kind = "check"
-description = "Guide platforms example: blinking hello on the virtual Virt board."
-expect = "ok"

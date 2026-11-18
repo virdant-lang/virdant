@@ -1,5 +1,0 @@
-[project]
-name = "rom_wishbone"
-
-[prog]
-top = "rom_wishbone::Top"

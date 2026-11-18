@@ -37,19 +37,14 @@ The Top module
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
-    :lines: 16-46
+    :lines: 6-13
 
 The two submodules are connected almost trivially:
 
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
-    :lines: 48-57
-
-.. literalinclude:: src/top.vir
-    :language: virdant
-    :dedent:
-    :lines: 59-63
+    :lines: 15-26
 
 The flash controller's byte stream feeds the UART sender directly,
 pipe to pipe.
@@ -62,7 +57,7 @@ A wire watches the stream for the `0` terminator:
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
-    :lines: 65-72
+    :lines: 28-40
 
 When the NUL shows up and the sender is ready to accept it,
 `exit` becomes `@Valid(0)` and the simulation ends.

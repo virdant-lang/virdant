@@ -1,5 +1,0 @@
-[project]
-name = "fifo"
-
-[prog]
-top = "fifo::Top"

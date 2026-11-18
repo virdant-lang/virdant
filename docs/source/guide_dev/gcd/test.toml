@@ -1,3 +1,0 @@
-kind = "check"
-description = "Guide union types: Euclid's GCD with a payload-carrying state machine."
-expect = "ok"
