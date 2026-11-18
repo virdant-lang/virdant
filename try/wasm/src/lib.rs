@@ -257,9 +257,9 @@ impl VirtVm {
             tx,
             rx,
             exit,
-            // Idle-high gate for auto-baud: ten nominal bit periods at
-            // the platform-declared clock.
-            uart_tx: virt::UartTx::new(10 * clock_hz / virt::BAUD),
+            // Fixed baud: ten nominal bit periods are not needed —
+            // the TX decoder validates frames against clock_hz / BAUD.
+            uart_tx: virt::UartTx::new(virt::baud_timing(clock_hz, virt::BAUD)),
             uart_rx: virt::UartRx::new(&virt::baud_timing(clock_hz, virt::BAUD)),
             prev_exit: None,
             cycle_count: 0,

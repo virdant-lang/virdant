@@ -1,0 +1,144 @@
+//! Memory subsystem: Wishbone memory wrapper, memory array and CSR file.
+//!
+//! WbMem bridges a Wishbone bus to the internal Mem module.
+//! Mem is the addressable memory array (a `memory`).
+//! Csrs is the CSR register file (a `memory` with a cycle counter).
+
+import wishbone
+
+//> Wishbone-attached memory.
+//>
+//> Wraps the external `Mem` primitive behind a Wishbone client socket.
+//> Converts Wishbone transactions into `Mem` read/write operations.
+pub mod WbMem {
+    //> Global clock.
+    incoming clock : Clock
+    //> Wishbone server socket accepting transactions from a master.
+    server socket wb of wishbone::Wishbone {
+        // Acknowledge every strobe immediately (single-cycle memory).
+        it.ack := it.stb
+        // No error responses.
+        it.err := false
+    }
+
+    //> Internal memory array.
+    mod mem of Mem {
+        it.clock   := clock
+        it.addr    := wb.adr
+        it.data_in := wb.dat_wr
+        it.write   := wb.cyc && wb.stb && wb.we
+        wb.dat_rd  := it.data_out
+        it.read    := wb.cyc && wb.stb && !wb.we
+        it.sel     := wb.sel
+    }
+}
+
+//> Memory array.
+//>
+//> A flat 32-bit addressable memory: 64 KiB (16384 words) behind a
+//> combinational read port and a clocked write port with byte-lane
+//> enables (`sel`). Partial writes are read-modify-write: the old word
+//> at the write address (available combinationally — a read of an
+//> address written this cycle sees the old value) is merged with
+//> `data_in` under `sel`.
+mod Mem {
+    //> Global clock.
+    incoming clock : Clock
+    //> Read/write address.
+    incoming addr : Word[32]
+    //> Data read from `addr` (zero when `read` is low).
+    outgoing data_out : Word[32] dependson addr, read {
+        it := if {
+            when read => mem[dyn word_addr]
+            else => 0
+        }
+    }
+    //> Data to write into `addr` (used when `write` is high).
+    incoming data_in : Word[32]
+    //> Write enable.
+    incoming write : Bit
+    //> Read enable.
+    incoming read : Bit
+    //> Byte-select mask (one hot per byte lane) for partial writes.
+    incoming sel : Word[4]
+
+    //> Word address: 16384 words of 4 bytes, indexed by addr[15..2].
+    wire word_addr : Word[14] {
+        it := addr[16..2]
+    }
+
+    //> Old contents at the write address, for byte-lane merge.
+    wire old_word : Word[32] {
+        it := mem[dyn word_addr]
+    }
+
+    //> The four merged byte lanes: `data_in`'s byte when `sel` selects
+    //> it, the old byte otherwise.
+    wire lane3 : Word[8] {
+        it := if { when sel[3] => data_in[32..24] else => old_word[32..24] }
+    }
+    wire lane2 : Word[8] {
+        it := if { when sel[2] => data_in[24..16] else => old_word[24..16] }
+    }
+    wire lane1 : Word[8] {
+        it := if { when sel[1] => data_in[16..8] else => old_word[16..8] }
+    }
+    wire lane0 : Word[8] {
+        it := if { when sel[0] => data_in[8..0] else => old_word[8..0] }
+    }
+
+    //> The 64 KiB memory array, zero-initialized (the CPU and the
+    //> bootloader only ever read words they wrote first, but the C
+    //> runtime reads .bss before zeroing it, so never-written words
+    //> must read 0, not simulator garbage).
+    @image("images/ram_zero.bin")
+    memory mem[16384] : Word[32] {
+        if {
+            when write {
+                it[dyn word_addr] <= word(lane3, lane2, lane1, lane0)
+            }
+        }
+    }
+}
+
+//> CSR (control and status register) file.
+//>
+//> Provides read/write access to the machine-level CSRs: a 4096-word
+//> `memory`, with the mcycle/cycle addresses (0xB00/0xC00) reading a
+//> free-running cycle counter instead of the stored word, so software
+//> can time itself (used by the Dhrystone port). Writes to those
+//> addresses land in the memory and are ignored on read. The memory is
+//> zero-initialized (e.g. mhartid at 0xF14 reads 0).
+pub mod Csrs {
+    //> Global clock.
+    incoming clock : Clock
+    //> CSR address (12-bit, see `opcode::Csr`).
+    incoming addr : Word[12]
+    //> Data read from the selected CSR.
+    outgoing data_out : Word[32] dependson addr {
+        it := if {
+            when addr == 0xB00 || addr == 0xC00 => cycle_counter
+            else => mem[dyn addr]
+        }
+    }
+    //> Data to write into the selected CSR.
+    incoming data_in : Word[32]
+    //> Write enable.
+    incoming write : Bit
+
+    //> Free-running cycle counter backing mcycle/cycle.
+    reg cycle_counter : Word[32] {
+        initial it <= 0
+        it <= it + 1w32
+    }
+
+    //> The 4096 × 32-bit CSR storage, zero-initialized.
+    @image("images/csr_zero.bin")
+    memory mem[4096] : Word[32] {
+        if {
+            when write {
+                it[dyn addr] <= data_in
+            }
+        }
+    }
+}

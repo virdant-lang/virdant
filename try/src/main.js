@@ -6,25 +6,56 @@
 // CodeMirror 6 editor (left), an Errors/Console tabbed panel
 // (right), and a Run/Stop/Settings bar (bottom).
 //
-// State (files, keymap, settings) persists in localStorage.
+// State is session-only: projects, files and settings are rebuilt from
+// the seed sources on each load (nothing is persisted).  The one
+// exception is the keymap choice, which is remembered in localStorage.
 
 import init, { check as wasmCheck } from './wasm/virdant_try.js';
 
 // SPI flash: 16 MiB device (see `wasm/src/virt.rs`); larger images are
 // truncated, matching the native `--flash`.
 const FLASH_SIZE = 16 * 1024 * 1024;
-import defaultTop from './default_top.vir?raw';
-import echoVir from './projects/echo.vir?raw';
-// Every `.vir` file under `src/projects/riscv/` becomes a file of the
-// seeded `riscv` project; add files there and they show up automatically.
-const riscvSources = import.meta.glob('./projects/riscv/*.vir', {
+// Every directory under `projects/` is a seed project, laid out like a
+// native Virdant project: a `virdant.toml` (giving the top module under
+// `[prog]`) and the `.vir` sources next to it.  Both kinds of file are
+// globbed eagerly, so adding a directory here automatically adds a
+// project to the demo.
+const projectTomls = import.meta.glob('../projects/*/virdant.toml', {
   query: '?raw',
   import: 'default',
   eager: true,
 });
-const riscvVirFiles = Object.entries(riscvSources)
-  .map(([path, text]) => ({ name: path.split('/').pop(), text }))
+const projectVirs = import.meta.glob('../projects/*/src/*.vir', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+// Extract a string-valued `key = "value"` line from a toml file.
+function tomlString(text, key) {
+  const m = text.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, 'm'));
+  return m?.[1] ?? null;
+}
+
+const seedSpecs = Object.entries(projectTomls)
+  .map(([tomlPath, tomlText]) => {
+    const dir = tomlPath.split('/')[2];
+    const files = Object.entries(projectVirs)
+      .filter(([path]) => path.split('/')[2] === dir)
+      .map(([path, text]) => ({ name: path.split('/').pop(), text }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    // Native projects keep their sources under `src/`; the demo passes
+    // just the file names to the compiler, which derives package names
+    // from the file stems.
+    return {
+      name: dir,
+      files,
+      top: tomlString(tomlText, 'top') ?? 'top::Top',
+    };
+  })
+  .filter((spec) => spec.files.length > 0)
   .sort((a, b) => a.name.localeCompare(b.name));
+
 import { virdantLanguage } from './vir-language.js';
 
 import { Terminal } from '@xterm/xterm';
@@ -93,123 +124,39 @@ const keymapSelect = $('keymap');
 const fpsReadout = $('fpsreadout');
 const errCountEl = $('errcount');
 
-// ── Persistent state ─────────────────────────────────────────
-
-const LS_PROJECTS = 'virdant-try:projects';
-const LS_CURRENT = 'virdant-try:current';
-const LS_FILES = 'virdant-try:files';
-const LS_ACTIVE = 'virdant-try:active';
-const LS_KEYMAP = 'virdant-try:keymap';
-const LS_SETTINGS = 'virdant-try:settings';
+// ── App state ────────────────────────────────────────────────
 
 const defaultSettings = { fpsNoCap: false, showFps: false };
 
-// Seed sources per well-known project name.
+// Seed sources per project directory under `projects/`.
 function seedFiles(projectName) {
-  if (projectName === 'echo') {
-    return [{ name: 'echo.vir', text: echoVir }];
-  }
-  if (projectName === 'riscv') {
-    return riscvVirFiles;
-  }
-  return [{ name: 'top.vir', text: defaultTop }];
+  return seedSpecs.find((spec) => spec.name === projectName)?.files
+    ?? seedSpecs[0]?.files ?? [];
 }
 
 function seedTop(projectName) {
-  if (projectName === 'echo') return 'echo::Top';
-  if (projectName === 'riscv') return 'top::Top';
-  return 'top::Top';
+  return seedSpecs.find((spec) => spec.name === projectName)?.top
+    ?? 'top::Top';
 }
 
 function seedProjects() {
-  return ['hello', 'echo', 'riscv'].map((name) => ({
-    name,
-    files: seedFiles(name),
+  return seedSpecs.map((spec) => ({
+    name: spec.name,
+    files: seedFiles(spec.name),
     activeIdx: 0,
-    top: seedTop(name),
+    top: seedTop(spec.name),
   }));
 }
 
-function validProject(p) {
-  return p && typeof p.name === 'string' && Array.isArray(p.files) &&
-    p.files.length > 0 &&
-    p.files.every((f) => typeof f?.name === 'string' && typeof f?.text === 'string') &&
-    typeof p.top === 'string';
-}
-
-function loadProjects() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(LS_PROJECTS));
-    if (Array.isArray(stored) && stored.length > 0 && stored.every(validProject)) {
-      // Drop any stale serialized state fields defensively.
-      for (const p of stored) {
-        p.files = p.files.map((f) => ({ name: f.name, text: f.text }));
-        p.activeIdx = Math.min(Math.max(0, p.activeIdx || 0), p.files.length - 1);
-      }
-      // Add seed projects that didn't exist when this browser's state
-      // was saved (e.g. `riscv`), leaving user-modified projects alone.
-      for (const seed of seedProjects()) {
-        if (!stored.some((p) => p.name === seed.name)) {
-          stored.push(seed);
-        }
-      }
-      return stored;
-    }
-  } catch { /* fall through to migration */ }
-
-  // Migrate the pre-projects single-project layout (LS_FILES/LS_ACTIVE
-  // plus the old settings' top field) into a project named "hello".
-  const projects = seedProjects();
-  try {
-    const stored = JSON.parse(localStorage.getItem(LS_FILES));
-    if (Array.isArray(stored) && stored.length > 0 &&
-        stored.every((f) => typeof f?.name === 'string' && typeof f?.text === 'string')) {
-      projects[0].files = stored;
-      const storedActive = parseInt(localStorage.getItem(LS_ACTIVE), 10);
-      if (Number.isInteger(storedActive) && storedActive >= 0 && storedActive < stored.length) {
-        projects[0].activeIdx = storedActive;
-      }
-      try {
-        const oldSettings = JSON.parse(localStorage.getItem(LS_SETTINGS));
-        if (typeof oldSettings?.top === 'string' && oldSettings.top) {
-          projects[0].top = oldSettings.top;
-        }
-      } catch { /* ignore */ }
-    }
-  } catch { /* ignore */ }
-  return projects;
-}
-
-function saveProjects() {
-  // Serialize only the durable fields: file records also carry
-  // live EditorState objects, which must never reach storage.
-  localStorage.setItem(LS_PROJECTS, JSON.stringify(
-    projects.map((p) => ({
-      name: p.name,
-      top: p.top,
-      activeIdx: p.activeIdx,
-      files: p.files.map((f) => ({ name: f.name, text: f.text })),
-    }))));
-  localStorage.setItem(LS_CURRENT, String(currentIdx));
-}
-function saveKeymap() { localStorage.setItem(LS_KEYMAP, keymap); }
-function saveSettings() { localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); }
-
 // ── Mutable app state ────────────────────────────────────────
 
-const projects = loadProjects();
-let currentIdx = Math.min(
-  Math.max(0, parseInt(localStorage.getItem(LS_CURRENT), 10) || 0),
-  projects.length - 1);
+const projects = seedProjects();
+let currentIdx = 0;
 // `files`/`activeIdx` mirror the current project (rebound on switch).
 let files = projects[currentIdx].files;
 let activeIdx = Math.min(projects[currentIdx].activeIdx, files.length - 1);
-let keymap = localStorage.getItem(LS_KEYMAP) === 'vim' ? 'vim' : 'default';
+let keymap = localStorage.getItem('virdant-try:keymap') === 'vim' ? 'vim' : 'default';
 let settings = { ...defaultSettings };
-try {
-  const stored = JSON.parse(localStorage.getItem(LS_SETTINGS));
-  if (stored && typeof stored === 'object') settings = { ...settings, ...stored };
-} catch { /* fall back to defaults */ }
 // Compartment generation: bumped when the keymap toggles; a stored
 // per-file state older than the current generation is rebuilt (its
 // doc and selection are kept; its undo history is not).
@@ -231,8 +178,7 @@ let runCycles = 0;
 let decoder = new TextDecoder('utf8');
 
 // Flash image to preload at the next Run: `{ name, bytes: Uint8Array }`
-// or null.  Session-only (not persisted to localStorage — flash images
-// can be up to 16 MiB).
+// or null.  Session-only (flash images can be up to 16 MiB).
 let flashImage = null;
 
 const fileStem = (name) => name.replace(/\.vir$/, '');
@@ -346,7 +292,6 @@ const view = new EditorView({
 function onEditorUpdate(update) {
   if (update.docChanged) {
     files[activeIdx].text = update.state.doc.toString();
-    saveProjects();
     scheduleCheck();
   }
 }
@@ -356,9 +301,10 @@ function switchToFile(idx) {
   files[activeIdx].state = view.state;
   activeIdx = idx;
   const f = files[activeIdx];
-  if (f.gen !== compartmentGen) {
+  if (f.state && f.gen !== compartmentGen) {
     // Rebuild with the current compartment values (keymap changed
-    // since this file's state was stored).
+    // since this file's state was stored).  A file never opened yet
+    // (no stored state) is simply created fresh by `ensureState`.
     const old = f.state;
     f.state = EditorState.create({
       doc: old.doc,
@@ -370,7 +316,6 @@ function switchToFile(idx) {
   view.setState(ensureState(f));
   projects[currentIdx].activeIdx = idx;
   renderFileList();
-  saveProjects();
   view.dispatch({ effects: refreshLint.of(null) });
   view.focus();
 }
@@ -427,7 +372,6 @@ function removeFile(idx) {
   }
   view.setState(ensureState(f));
   renderFileList();
-  saveProjects();
   runCheckSoon();
 }
 
@@ -463,7 +407,6 @@ function switchProject(idx) {
   view.setState(ensureState(f));
   renderProjectSelect();
   renderFileList();
-  saveProjects();
   view.dispatch({ effects: refreshLint.of(null) });
   runCheckSoon();
   view.focus();
@@ -498,7 +441,6 @@ function removeProject() {
   view.setState(ensureState(f));
   renderProjectSelect();
   renderFileList();
-  saveProjects();
   runCheckSoon();
   view.focus();
 }
@@ -935,7 +877,7 @@ stopBtn.addEventListener('click', stopRun);
 keymapSelect.value = keymap;
 keymapSelect.addEventListener('change', () => {
   keymap = keymapSelect.value;
-  saveKeymap();
+  localStorage.setItem('virdant-try:keymap', keymap);
   compartmentGen += 1;
   // The active view reconfigures in place (history preserved); other
   // files' stored states are rebuilt lazily on switch.
@@ -973,8 +915,6 @@ function closeSettings() {
   settings.showFps = $('set-showfps').checked;
   settings.localEcho = $('set-localecho').checked;
   if (running && simWorker) simWorker.postMessage({ type: 'config', fpsNoCap: settings.fpsNoCap });
-  saveProjects();
-  saveSettings();
   settingsModal.hidden = true;
 }
 
@@ -996,7 +936,6 @@ $('set-reset').addEventListener('click', () => {
   for (const f of files) { f.state = null; f.gen = compartmentGen; }
   view.setState(ensureState(files[0]));
   renderFileList();
-  saveProjects();
   runCheckSoon();
   settingsModal.hidden = true;
 });
@@ -1137,20 +1076,12 @@ window.addEventListener('drop', (e) => e.preventDefault());
 
 // ── Splitter (drag to resize the IDE / console split) ──────
 
-const LS_SPLIT = 'virdant-try:split';
 const splitter = $('splitter');
 const appEl = $('app');
-
-// Restore the last width (a percentage like "56").
-const savedSplit = parseFloat(localStorage.getItem(LS_SPLIT));
-if (Number.isFinite(savedSplit)) {
-  appEl.style.setProperty('--left-width', `${savedSplit}%`);
-}
 
 function setSplitPct(pct) {
   const clamped = Math.min(75, Math.max(20, pct));
   appEl.style.setProperty('--left-width', `${clamped}%`);
-  localStorage.setItem(LS_SPLIT, String(clamped));
 }
 
 splitter.addEventListener('mousedown', (e) => {

@@ -1,8 +1,8 @@
-//> RISC-V opcode, ALU opcode, CPU stage, CSR, and system instruction definitions.
-//>
-//> This package defines the core enumerated types used throughout the CPU:
-//> instruction opcodes, ALU operations, pipeline stages, CSR addresses,
-//> and system-call/exception mnemonics.
+//! RISC-V opcode, ALU opcode, CPU stage, CSR, and system instruction definitions.
+//!
+//! This package defines the core enumerated types used throughout the CPU:
+//! instruction opcodes, ALU operations, pipeline stages, CSR addresses,
+//! and system-call/exception mnemonics.
 
 //> RISC-V 7-bit primary opcodes.
 //>
@@ -94,7 +94,7 @@ pub enum type CpuStage {
 //> RISC-V machine-level CSR addresses.
 //>
 //> Only the CSRs actually referenced by the core are listed.
-enum type Csr {
+pub enum type Csr {
     //> Machine status register.
     MStatus   = 0x300w12
     //> Machine ISA register.

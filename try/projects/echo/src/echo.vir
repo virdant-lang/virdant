@@ -21,7 +21,6 @@ pub mod Top for virt::Virt {
     mod sender of UartSender
 
     unused spi_miso
-    unused sender.ready
 
     tx := sender.uart_tx
     exit := @Invalid()
@@ -38,10 +37,10 @@ pub mod Top for virt::Virt {
     // long idle period (its auto-baud gate), so rapid echoes would
     // all be dropped; the banner frame confirms the design's bit
     // period once, and every later frame is accepted.
-    reg boot : Word[7] on clock {
+    reg boot : Word[7] {
         initial it <= 0
-        when {
-            case boot != 100 {
+        if {
+            when it != 100 {
                 it <= it + 1
             }
         }
@@ -57,11 +56,11 @@ pub mod Top for virt::Virt {
     // the board's auto-baud decoder measure the bit period and close
     // the frame cleanly; a constant byte (e.g. `0x00`) would leave
     // the frame open and swallow the echoes that follow.
-    reg held : Word[8] on clock {
+    reg held : Word[8] {
         initial it <= 0x0d
     }
 
-    reg held_valid : Bit on clock {
+    reg held_valid : Bit {
         initial it <= true
         it <= mux(release, false, it)
     }
@@ -78,8 +77,8 @@ pub mod Top for virt::Virt {
         it := held_valid && boot_done && sender.ready
     }
 
-    when {
-        case capture {
+    if {
+        when capture {
             held <= receiver.data
         }
     }
@@ -128,25 +127,25 @@ mod UartSender {
     // carries the number of cycles (`pulse`) remaining before the next
     // transition; counting down from 8 to 0 gives the 9-cycle bit
     // period.
-    reg state : UartState on clock {
+    reg state : UartState {
         initial it <= @Idle()
         it <= match it : UartState {
-            case @Idle() when {
-                case data_valid => @Start(8)
+            with @Idle() if {
+                when data_valid => @Start(8)
                 else => @Idle()
             }
-            case @Start(pulse) when {
-                case pulse == 0 => @Data(0, 8)
+            with @Start(pulse) if {
+                when pulse == 0 => @Data(0, 8)
                 else => @Start(pulse - 1)
             }
-            case @Data(bit, pulse) when {
-                case pulse > 0 => @Data(bit, pulse - 1)
-                case bit == 7 => @Stop(8)
+            with @Data(bit, pulse) if {
+                when pulse > 0 => @Data(bit, pulse - 1)
+                when bit == 7 => @Stop(8)
                 else => @Data(bit + 1, 8)
             }
-            case @Stop(pulse) when {
-                case pulse == 0 && data_valid => @Start(8)
-                case pulse == 0 => @Idle()
+            with @Stop(pulse) if {
+                when pulse == 0 && data_valid => @Start(8)
+                when pulse == 0 => @Idle()
                 else => @Stop(pulse - 1)
             }
         }
@@ -156,8 +155,8 @@ mod UartSender {
     // its final stop-bit cycle, and a byte is being offered.
     wire accepting : Bit {
         it := match state : UartState {
-            case @Idle() => true
-            case @Stop(pulse) => pulse == 0
+            with @Idle() => true
+            with @Stop(pulse) => pulse == 0
             else => false
         }
     }
@@ -166,9 +165,9 @@ mod UartSender {
     // reads from the snapshot, so `data` may change while sending.
     // (During `@Stop(0)` the line reads high regardless, so the
     // snapshot cannot disturb the byte in flight.)
-    reg latched_data : Word[8] on clock {
-        when {
-            case accepting && data_valid {
+    reg latched_data : Word[8] {
+        if {
+            when accepting && data_valid {
                 it <= data
             }
         }
@@ -178,10 +177,10 @@ mod UartSender {
     // bits LSB first, high stop bit, and high while idle.
     wire tx_level : Bit {
         it := match state : UartState {
-            case @Idle() => true
-            case @Start(pulse) => false
-            case @Data(bit, pulse) => latched_data[dyn bit]
-            case @Stop(pulse) => true
+            with @Idle() => true
+            with @Start(pulse) => false
+            with @Data(bit, pulse) => latched_data[dyn bit]
+            with @Stop(pulse) => true
         }
     }
 }
@@ -219,12 +218,12 @@ mod UartReceiver {
     // clock edge its rx drive and this register's capture collide,
     // and the register reads the post-edge value -- with the second
     // stage the racy capture still yields the correct level.)
-    reg rx_sync1 : Bit on clock {
+    reg rx_sync1 : Bit {
         initial it <= true
         it <= rx
     }
 
-    reg rx_sync2 : Bit on clock {
+    reg rx_sync2 : Bit {
         initial it <= true
         it <= rx_sync1
     }
@@ -236,24 +235,24 @@ mod UartReceiver {
     // too.  The seventh data bit is sampled during `@Data(6, 0)`, so
     // only a short `Stop` state remains before the byte is handed
     // over -- back-to-back bytes leave no idle gap to catch up in.
-    reg state : RxState on clock {
+    reg state : RxState {
         initial it <= @Idle()
         it <= match it : RxState {
-            case @Idle() when {
-                case !rx_sync1 && rx_sync2 => @Start(12)
+            with @Idle() if {
+                when !rx_sync1 && rx_sync2 => @Start(12)
                 else => @Idle()
             }
-            case @Start(pulse) when {
-                case pulse == 0 => @Data(0, 8)
+            with @Start(pulse) if {
+                when pulse == 0 => @Data(0, 8)
                 else => @Start(pulse - 1)
             }
-            case @Data(bit, pulse) when {
-                case pulse > 0 => @Data(bit, pulse - 1)
-                case bit == 6 => @Stop(4)
+            with @Data(bit, pulse) if {
+                when pulse > 0 => @Data(bit, pulse - 1)
+                when bit == 6 => @Stop(4)
                 else => @Data(bit + 1, 8)
             }
-            case @Stop(pulse) when {
-                case pulse == 0 => @Idle()
+            with @Stop(pulse) if {
+                when pulse == 0 => @Idle()
                 else => @Stop(pulse - 1)
             }
         }
@@ -266,8 +265,8 @@ mod UartReceiver {
     // not filter (they match every payload).
     wire sampling : Bit {
         it := match state : RxState {
-            case @Start(pulse) => pulse == 0
-            case @Data(bit, pulse) => pulse == 0
+            with @Start(pulse) => pulse == 0
+            with @Data(bit, pulse) => pulse == 0
             else => false
         }
     }
@@ -276,10 +275,10 @@ mod UartReceiver {
     // Bits arrive LSB first, so after eight samples the first bit
     // has shifted down into bit 0.  (NOTE: `it[8..1]` is bits 7 down
     // to 1 -- Virdant bit slices are top-exclusive, unlike Verilog's.)
-    reg latched_data : Word[8] on clock {
+    reg latched_data : Word[8] {
         initial it <= 0
-        when {
-            case sampling {
+        if {
+            when sampling {
                 it <= word(rx, it[8..1])
             }
         }
@@ -289,7 +288,7 @@ mod UartReceiver {
     // complete; `data` is stable by then.
     wire delivering : Bit {
         it := match state : RxState {
-            case @Stop(pulse) => pulse == 0
+            with @Stop(pulse) => pulse == 0
             else => false
         }
     }

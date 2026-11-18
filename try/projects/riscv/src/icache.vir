@@ -1,0 +1,366 @@
+//! Direct-mapped instruction cache.
+//!
+//! Sits between the Wishbone crossbar and the SPI flash controller.
+//! Reads from the flash window are served from a small register
+//! cache: 16 lines of one 32-bit word each, indexed by address bits
+//! [5..2] and tagged by bits [24..5] (a 64-byte footprint per set).
+//!
+//! On a hit, the request is acknowledged combinationally in the
+//! grant cycle -- the same latency as the on-chip RAM.  On a miss,
+//! the word is fetched from the SPI flash, written into the line on
+//! the flash's acknowledge edge, and acknowledged on that same
+//! cycle.  Writes are passed straight through to the flash
+//! controller, preserving the old behaviour: the flash controller
+//! errors on writes and acknowledges them once its spurious read
+//! completes.
+
+import wishbone
+
+//> One cache line: a validity bit, an address tag, and one data word.
+struct type Line {
+    valid : Bit
+    tag   : Word[20]
+    data  : Word[32]
+}
+
+//> Cache controller FSM state.
+enum type State {
+    //> Serving requests from the core side.
+    Idle = 1w2
+    //> Filling a line from the SPI flash.
+    Fill = 2
+}
+
+pub mod ICache {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    //> Server socket facing the Wishbone crossbar (the CPU side).
+    //>
+    //> Read hits are acknowledged immediately; read misses are
+    //> acknowledged on the flash's acknowledge cycle (`#Fill`).
+    //> Write requests are passed through and acknowledged when the
+    //> flash controller's spurious read completes.
+    server socket core of wishbone::Wishbone
+        where it.ack dependson spi.ack
+        where it.err dependson spi.err
+        where it.dat_rd dependson spi.dat_rd
+    {
+        it.ack    := match state {
+            with #Idle =>
+                (it.cyc && it.stb && !it.we && hit)
+            || (it.cyc && it.stb && it.we && spi.ack)
+            with #Fill  => spi.ack
+        }
+        it.err    := spi.err
+        it.dat_rd := match state {
+            with #Idle => mux(hit, sel_line->data, 0w32)
+            with #Fill => spi.dat_rd
+        }
+    }
+
+    //> Client socket facing the SPI flash controller.
+    //>
+    //> Driven only for write pass-throughs (`#Idle`) and line fills
+    //> (`#Fill`); the flash never sees cache hits.
+    client socket spi of wishbone::Wishbone
+        where it.cyc dependson core.cyc, core.stb, core.we
+        where it.stb dependson core.cyc, core.stb, core.we
+        where it.we dependson core.we
+        where it.adr dependson core.adr
+        where it.sel dependson core.sel
+        where it.dat_wr dependson core.dat_wr
+    {
+        it.cyc    := spi_req
+        it.stb    := spi_req
+        it.we     := match state {
+            with #Idle => core.we
+            with #Fill => false
+        }
+        it.adr    := match state {
+            with #Idle => core.adr
+            with #Fill => pend_addr
+        }
+        it.sel    := core.sel
+        it.dat_wr := core.dat_wr
+    }
+
+    //> Flash word address latched when a miss is detected.
+    //>
+    //> The core holds its address stable while stalled, but latching
+    //> makes the fill independent of the live bus.
+    reg pend_addr : Word[32] {
+        if {
+            when miss_req {
+                it <= core.adr
+            }
+        }
+    }
+
+    //> Line index selected by the latched fill address.
+    wire pend_index : Word[4] {
+        it := pend_addr[6..2]
+    }
+    //> Tag of the latched fill address.
+    wire pend_tag : Word[20] {
+        it := pend_addr[25..5]
+    }
+
+    //> Whether a filled line is committed on this clock edge.
+    wire fill_write : Bit {
+        it := state == #Fill && spi.ack
+    }
+
+    // ─── Line array ──────────────────────────────────────────────────
+    reg line0 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 0 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line1 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 1 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line2 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 2 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line3 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 3 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line4 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 4 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line5 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 5 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line6 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 6 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line7 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 7 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line8 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 8 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line9 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 9 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line10 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 10 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line11 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 11 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line12 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 12 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line13 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 13 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line14 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 14 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    reg line15 : Line {
+        if {
+            when reset {
+                it <= ${ valid = false, tag = 0w20, data = 0w32 }
+            }
+            when fill_write && pend_index == 15 {
+                it <= ${ valid = true, tag = pend_tag, data = spi.dat_rd }
+            }
+        }
+    }
+
+    // ─── Read path ───────────────────────────────────────────────────
+    //> Line index selected by the current core address.
+    wire index : Word[4] {
+        it := core.adr[6..2]
+    }
+    //> Tag of the current core address.
+    wire req_tag : Word[20] {
+        it := core.adr[25..5]
+    }
+
+    //> The line selected by the current core address.
+    wire sel_line : Line {
+        it := match index {
+            with 0  => line0
+            with 1  => line1
+            with 2  => line2
+            with 3  => line3
+            with 4  => line4
+            with 5  => line5
+            with 6  => line6
+            with 7  => line7
+            with 8  => line8
+            with 9  => line9
+            with 10 => line10
+            with 11 => line11
+            with 12 => line12
+            with 13 => line13
+            with 14 => line14
+            with 15 => line15
+        }
+    }
+
+    //> Whether the selected line holds the requested word.
+    wire hit : Bit {
+        it := sel_line->valid && sel_line->tag == req_tag
+    }
+
+    //> A pending read request that missed the cache.
+    wire miss_req : Bit {
+        it := state == #Idle && core.cyc && core.stb && !core.we && !hit
+    }
+
+    //> Whether the flash is being asked for a transaction.
+    wire spi_req : Bit {
+        it := match state {
+            with #Idle => core.cyc && core.stb && core.we
+            with #Fill => true
+        }
+    }
+
+    //> Cache controller FSM.
+    //>
+    //> Transitions: Idle -> Fill -> Idle.  `Idle` serves hits (and
+    //> passes writes through); `Fill` waits for the SPI flash to
+    //> deliver the missed word.
+    reg state : State {
+        initial it <= #Idle
+        if {
+            when reset {
+                it <= #Idle
+            }
+            else match it {
+                with #Idle if {
+                    when miss_req {
+                        it <= #Fill
+                    }
+                }
+                with #Fill if {
+                    when spi.ack {
+                        it <= #Idle
+                    }
+                }
+            }
+        }
+    }
+}

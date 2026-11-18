@@ -1,4 +1,4 @@
-# Virdant Web Demo
+# Virdant Playground
 
 A client-side-only web demo of Virdant: a multi-file IDE-style editor
 with live error checking and the `virt::Virt` board simulator
@@ -26,8 +26,12 @@ anywhere — the built output under `dist/` is fully static.
   header).
 - `src/wasm/` — wasm-bindgen output (generated; do not edit).
 - `src/vir-language.js` — a small Virdant syntax-highlighting mode.
-- `src/default_top.vir` — copy of `assets/new/src/top.vir`, the
-  starting file.
+- `projects/` — the seed projects, one directory each, laid out like
+  native Virdant projects (`virdant.toml`, sources under `src/`,
+  `.gitignore`): `hello` (the `Hello, world!` starter), `echo` (a UART
+  echo server), and `riscv` (the RISC-V machine).  A project's
+  `virdant.toml` `[prog] top` entry selects its top module; adding a
+  new project directory here automatically adds it to the demo.
 
 ## Building and serving
 
@@ -42,13 +46,15 @@ it), and `npm`.
 ## Using the demo
 
 - **Projects**: the selector at the top of the file sidebar switches
-  between projects (seeded with `hello` — the `Hello, world!` starter —
-  and `echo` — a UART echo server); `+` creates a project, `✕` deletes
+  between projects (seeded from `projects/`: `hello` — the `Hello,
+  world!` starter — `echo` — a UART echo server — and `riscv` — the
+  RISC-V machine); `+` creates a project, `✕` deletes
   the current one.  Each project keeps its own files, open file, and
-  top module; everything persists in `localStorage`.
+  top module; state is session-only and rebuilt from the seeds on load.
+  The keymap choice (Default/Vim) is remembered across visits.
 - **Files**: add/remove files below the project selector.  Everything
-  (projects, contents, open file, keymap, settings) persists in
-  `localStorage`; Settings has a "Reset files to default" button for
+  (projects, contents, open file, settings) is session-only;
+  Settings has a "Reset files to default" button for
   the current project.
 - **Errors tab**: live diagnostics (debounced re-check on every edit)
   with click-to-jump.  The Run button is greyed out while there are

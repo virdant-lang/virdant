@@ -1,0 +1,97 @@
+//! Instruction decode module.
+//!
+//! Decodes a 32-bit RISC-V instruction into opcode, register indices,
+//! function fields, and the immediate value (sign-extended or zero-extended
+//! as appropriate for each instruction format).
+
+import opcode
+
+pub mod IDecode {
+    //> The 32-bit instruction word fetched from memory.
+    incoming instr : Word[32]
+
+    //> Destination register
+    outgoing rd : Word[5] dependson instr {
+        it := instr[12..7]
+    }
+    //> First source register
+    outgoing rs1 : Word[5] dependson instr {
+        it := instr[20..15]
+    }
+    //> Second source register
+    outgoing rs2 : Word[5] dependson instr {
+        it := instr[25..20]
+    }
+
+    //> 3-bit function selector
+    outgoing funct3 : Word[3] dependson instr {
+        it := instr[15..12]
+    }
+    //> 7-bit function selector
+    outgoing funct7 : Word[7] dependson instr {
+        it := instr[32..25]
+    }
+    //> 12-bit function selector for CSR / SYSTEM instructions (`instr[31:20]`).
+    outgoing funct12 : Word[12] dependson instr {
+        it := instr[32..20]
+    }
+
+    //> Decoded immediate value, sign- or zero-extended to 32 bits.
+    //>
+    //> Format depends on the opcode (I-type, S-type, B-type, J-type, U-type).
+    outgoing imm : Word[32] dependson instr {
+        it := match opcode {
+            with #OP_IMM => sext(instr[32..20])
+            with #JALR   => sext(instr[32..20])
+            with #LOAD   => sext(instr[32..20])
+            with #LUI    => word(instr[32..12], 0w12)
+            with #AUIPC  => word(instr[32..12], 0w12)
+            with #STORE  => sext(word(instr[32..25], instr[12..7]))
+            with #BRANCH => sext(word(instr[31], instr[7], instr[31..25], instr[12..8], 0w1))
+            with #JAL    => sext(word(instr[31], instr[20..12], instr[20], instr[31..21], 0w1))
+            with #SYSTEM => sext(instr[20..15]) // CSR immediate field
+            else         => 0w32
+        }
+    }
+
+    wire opcode_bits : Word[7] {
+        it := instr[7..0]
+    }
+
+    //> Decoded 7-bit primary opcode (`instr[6:0]`).
+    outgoing wire opcode : opcode::Opcode dependson instr {
+        it := match opcode_bits {
+            with 99 => #BRANCH
+            with 103 => #JALR
+            with 111 => #JAL
+            with 19 => #OP_IMM
+            with 51 => #OP
+            with 55 => #LUI
+            with 3 => #LOAD
+            with 115 => #SYSTEM
+            with 35 => #STORE
+            with 23 => #AUIPC
+            with 15 => #FENCE
+            else => #SYSTEM
+        }
+    }
+
+    //> Whether the opcode is illegal (not a recognized RISC-V primary opcode).
+    //> Unused — kept for documentation / future exception support.
+    outgoing illegal_opcode : Bit dependson instr {
+        it := match opcode_bits {
+            with 99 => false
+            with 103 => false
+            with 111 => false
+            with 19 => false
+            with 51 => false
+            with 55 => false
+            with 3 => false
+            with 115 => false
+            with 35 => false
+            with 23 => false
+            with 15 => false
+            else => true
+        }
+    }
+}

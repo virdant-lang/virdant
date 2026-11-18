@@ -1,18 +1,18 @@
-//> NS8520 UART placeholder.
-//>
-//> Register map (each at a 3-bit offset from the base address):
-//>   reg_rbr_thr = 0x0   — Receiver buffer / Transmitter hold
-//>   reg_ier     = 0x1   — Interrupt enable
-//>   reg_iir_fcr = 0x2   — Interrupt ID / FIFO control
-//>   reg_lcr     = 0x3   — Line control
-//>   reg_mcr     = 0x4   — Modem control
-//>   reg_lsr     = 0x5   — Line status
-//>   reg_msr     = 0x6   — Modem status
-//>   reg_scr     = 0x7   — Scratch
-//>
-//> This module is a stub; all outputs are tied to false.
+//! NS8520 UART placeholder.
+//!
+//! Register map (each at a 3-bit offset from the base address):
+//!   reg_rbr_thr = 0x0   — Receiver buffer / Transmitter hold
+//!   reg_ier     = 0x1   — Interrupt enable
+//!   reg_iir_fcr = 0x2   — Interrupt ID / FIFO control
+//!   reg_lcr     = 0x3   — Line control
+//!   reg_mcr     = 0x4   — Modem control
+//!   reg_lsr     = 0x5   — Line status
+//!   reg_msr     = 0x6   — Modem status
+//!   reg_scr     = 0x7   — Scratch
+//!
+//! This module is a stub; all outputs are tied to false.
 
-mod Ns8520 {
+pub mod Ns8520 {
     //> A-channel valid (TileLink-style request valid).
     incoming a_valid : Bit
     //> A-channel ready (request ready).

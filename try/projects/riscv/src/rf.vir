@@ -1,0 +1,51 @@
+//> Register file.
+//>
+//> A 32-entry × 32-bit register file with one write port (rd) and two
+//> read ports (rs1, rs2). Register x0 is hardwired to zero.
+//>
+//> The storage is a Virdant `memory`: one clocked write port and two
+//> asynchronous read ports. Words never written read as unspecified,
+//> so the register file is initialized to all zeros by an image (the
+//> ABI does not require it, but tests and crt0s read registers that
+//> were only ever reset).
+pub mod Rf {
+    //> Global clock.
+    incoming clock : Clock
+
+    //> Write destination register index (0–31).
+    incoming rd : Word[5]
+    //> First source register index (0–31).
+    incoming rs1 : Word[5]
+    //> Second source register index (0–31).
+    incoming rs2 : Word[5]
+
+    //> Data to write into `rd`.
+    incoming rd_in : Word[32]
+    //> Write-enable strobe: when high, `rd_in` is written into `rd` on the clock edge.
+    incoming write : Bit
+
+    //> Data read from `rs1` (zero if rs1 == 0).
+    outgoing rs1_out : Word[32] dependson rs1 {
+        it := if {
+            when rs1 == 0 => 0
+            else => regs[dyn rs1]
+        }
+    }
+    //> Data read from `rs2` (zero if rs2 == 0).
+    outgoing rs2_out : Word[32] dependson rs2 {
+        it := if {
+            when rs2 == 0 => 0
+            else => regs[dyn rs2]
+        }
+    }
+
+    //> The 32 × 32-bit register array, zero-initialized.
+    @image("images/rf_zero.bin")
+    memory regs[32] : Word[32] {
+        if {
+            when write && rd != 0 {
+                it[dyn rd] <= rd_in
+            }
+        }
+    }
+}

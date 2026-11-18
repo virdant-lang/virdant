@@ -1,0 +1,431 @@
+//! Top-level SoC wrapper.
+//!
+//! Targets the `virt::Virt` virtual FPGA (1 MHz, Verilator-simulated via
+//! the `virt` tool).  Instantiates the CPU core, a Wishbone-attached RAM,
+//! a UART, and an SPI flash controller, connected via a Wishbone address
+//! decoder with the following memory map:
+//!
+//!   0x2000_0000  SPI
+//!   0x4000_0000  UART
+//!   0x8000_0000  RAM
+//!
+//! The platform-facing `Top` declares only the `virt::Virt` ports; the
+//! socket bridging lives in `Soc`, since a `for`-moddef's own socket
+//! channels would otherwise count as ports in the platform port match.
+
+import cpu
+import icache
+import mem
+import spi
+import uart
+import virt
+import wishbone
+
+//> SoC: CPU + ICache + RAM + UART + SPI flash behind a Wishbone mux.
+//>
+//> Bridges the children's socket channels to plain ports: the cosi
+//> channels (driven by the children) are forwarded to the outgoing pins,
+//> and the soci channels are driven from the incoming pins.
+mod Soc {
+    incoming clock : Clock {
+        cpu.clock := it
+        mem.clock := it
+        uart_dev.clock := it
+        spi_flash.clock := it
+    }
+
+    incoming rx : Bit
+    incoming spi_miso : Bit
+
+    outgoing tx : Bit { it := uart_dev.uart.tx }
+    outgoing spi_ck : Bit { it := spi_flash.spi.clk }
+    outgoing spi_cs : Bit { it := spi_flash.spi.cs }
+    outgoing spi_mosi : Bit { it := spi_flash.spi.do }
+
+    //> Whether the CPU has halted on EBREAK (a clean test-exit, not a
+    //> fault).
+    wire cpu_breaked : Bit {
+        it := match cpu.halt {
+            with @Valid(halt) match halt {
+                with #Breaked => true
+                else => false
+            }
+            with @Invalid => false
+        }
+    }
+
+    //> Exit request: fires when an error report finishes printing (the
+    //> message's NUL terminator was reached and `error_report.halt`
+    //> latched high — exit code 1), or when the CPU breaks on EBREAK
+    //> (the riscv-tests convention: `a7=93; a0=<code>; ecall`, where
+    //> a0 is the exit code, 0 = success).
+    //>
+    //> NOTE: the fault report path deliberately does not require
+    //> cpu.halt to still be asserted: the CPU keeps running while the
+    //> message prints, so cpu.halt deasserts long before
+    //> error_report.halt rises.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when error_report.halt => @Valid(1)
+            when cpu_breaked => @Valid(cpu.return_code[8..0])
+            else => @Invalid()
+        }
+    }
+
+    // Drive the children's soci (slave-to-master) channels from the
+    // incoming platform pins.
+    uart_dev.uart.rx := rx
+    spi_flash.spi.di := spi_miso
+
+    //> Power-on reset: held high for the first 2^16 cycles (~66 ms at
+    //> 1 MHz) while the design settles, then released forever.
+    reg reset_counter : Word[16] {
+        initial it <= 0xF
+        if {
+            when it != 0 {
+                it <= it - 1w16
+            }
+        }
+    }
+    wire reset : Reset { it := reset_counter != 0x0 }
+
+    cpu.reset := reset
+    uart_dev.reset := reset
+    spi_flash.reset := reset
+
+    reg cycle : Word[32] {
+        it <= if {
+            when reset => 0w32
+            else => it + 1w32
+        }
+    }
+
+    //> CPU core instance.
+    mod cpu of cpu::Cpu
+
+    //> Wishbone address decoder.
+    //>
+    //> Routes transactions by comparing the top 3 address bits against
+    //> each slave's base:
+    //>   0x2 → SPI  (0x2000_0000)
+    //>   0x4 → UART (0x4000_0000)
+    //>   0x8 → RAM  (0x8000_0000)
+    //>
+    mod mux13 of wishbone::WbCrossbar23 {
+        it.clock := clock
+        it.reset := reset
+
+        it.client_0 :=: cpu.mem
+        it.client_1 :=: error_report.wb
+
+        it.server_0 :=: icache.core
+        it.server_1 :=: uart_dev.wb
+        it.server_2 :=: mem.wb
+    }
+
+    //> Instruction cache instance (Wishbone-attached).
+    //>
+    //> Caches words fetched from the SPI flash window between the
+    //> crossbar (server_0) and the flash controller.
+    mod icache of icache::ICache {
+        it.clock := clock
+        it.reset := reset
+        it.spi :=: spi_flash.wb
+    }
+    mod error_report of ErrorReport {
+        it.error := match cpu.halt {
+            with @Valid(halt) match halt {
+                with #Fault => @Valid(#IllegalInstruction)
+                with #Breaked => @Invalid()
+            }
+            with @Invalid => @Invalid()
+        }
+        it.clock := clock
+        it.reset := reset
+    }
+
+    //> RAM instance (Wishbone-attached).
+    mod mem of mem::WbMem
+
+    //> UART instance (Wishbone-attached).
+    mod uart_dev of uart::WbUart
+
+    //> SPI flash controller instance.
+    mod spi_flash of spi::WbSpiFlash
+}
+
+//> Top module: the outermost entity of the design.
+pub mod Top for virt::Virt {
+    incoming clock : Clock { soc.clock := it }
+
+    //> UART pins.
+    outgoing tx : Bit { it := soc.tx }
+    incoming rx : Bit { soc.rx := it }
+
+    //> SPI flash pins.
+    outgoing spi_ck : Bit { it := soc.spi_ck }
+    outgoing spi_cs : Bit { it := soc.spi_cs }
+    outgoing spi_mosi : Bit { it := soc.spi_mosi }
+    incoming spi_miso : Bit { soc.spi_miso := it }
+
+    //> Exit request (see Soc).
+    outgoing exit : Valid[Word[8]] { it := soc.exit }
+
+    mod soc of Soc
+}
+
+//> Error codes reportable to the ErrorReport unit.
+pub enum type ErrorCode {
+    IllegalInstruction
+}
+
+//> Reporter FSM state.
+enum type ReportState {
+    //> Waiting for an error report.
+    Idle    = 0b00w2
+    //> Polling the UART's LSR for transmitter readiness.
+    Poll    = 0b01
+    //> Writing the message to the UART.
+    Sending = 0b10
+    //> Waiting for the transmitter to fully drain the last character.
+    Drain   = 0b11
+}
+
+//> ErrorReport: a Wishbone master that reports a hardware error over
+//> the UART.
+//>
+//> When `error` arrives as `@Valid(code)`, the reporter selects the
+//> message ROM for `code` and writes it, one byte at a time, to the
+//> UART's transmit-holding register (THR at 0x4000_0000 in the system
+//> memory map), stopping when it reaches the message's NUL terminator
+//> (which is not itself written).
+//>
+//> A report arriving while a message is already being printed is
+//> ignored.
+//>
+//> Each byte write is preceded by a poll of the UART's LSR until the
+//> transmitter holding register is empty (THRE), since the WbUart
+//> acknowledges immediately and has only a single-byte buffer.
+//>
+//> After the last byte of the message is written, the reporter polls
+//> LSR until the transmitter is completely empty (TEMT) — i.e. the
+//> final character has fully shifted out over the serial line — and
+//> raises `halt` at that moment.  It then latches high (and drops
+//> again only when a new report begins).
+pub mod ErrorReport {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    //> Error report request.
+    incoming error : Valid[ErrorCode]
+
+    //> Whether an error report is being requested this cycle.
+    //>
+    //> Hoisted out of the register drivers below because a statement-level
+    //> `case <cond> match ...` arm translates to an else-if branch that
+    //> consumes the whole chain even when its inner match matches nothing,
+    //> starving the arms after it (which froze the halt countdown).
+    wire error_valid : Bit {
+        it := match error {
+            with @Valid(code) => true
+            with @Invalid() => false
+        }
+    }
+
+    //> The requested error code (only meaningful while error_valid).
+    wire error_code : ErrorCode {
+        it := match error {
+            with @Valid(code) => code
+            with @Invalid() => #IllegalInstruction
+        }
+    }
+
+    //> Set once the current error episode has been accepted for
+    //> reporting; cleared only when `error` returns to @Invalid.
+    //>
+    //> Keeps a level-held error — e.g. a CPU frozen on the faulting
+    //> instruction, holding cpu.halt valid — from re-triggering the
+    //> report after the message finishes printing.
+    reg reported : Bit {
+        if {
+            when reset {
+                it <= false
+            }
+            when !error_valid {
+                it <= false
+            }
+            when error_valid && !it {
+                it <= true
+            }
+        }
+    }
+
+    //> Accept a new report only when the error is fresh (rising into
+    //> @Valid, or a new episode after @Invalid in between).
+    wire accept : Bit {
+        it := state == #Idle && error_valid && !reported
+    }
+
+    //> High the moment the transmitter has fully drained the last
+    //> character of the message (LSR TEMT); cleared when the next
+    //> report begins.
+    outgoing reg halt : Bit {
+        if {
+            when reset {
+                it <= false
+            }
+            when accept {
+                it <= false
+            }
+            when state == #Drain && wb.ack && wb.dat_rd[6] {
+                it <= true
+            }
+        }
+    }
+
+    //> Wishbone master socket, pointed at the UART.
+    //>
+    //> THR (0x4000_0000) for writes, LSR (0x4000_0004) for the
+    //> transmitter-ready polls.
+    client socket wb of wishbone::Wishbone {
+        unused it.err
+
+        it.cyc    := state != #Idle
+        it.stb    := state != #Idle
+        it.we     := state == #Sending
+        it.sel    := 0b0001w4
+        it.adr    := mux(state == #Sending, 0x40000000w32, 0x40000004w32)
+        it.dat_wr := word(0w24, char_reg)
+    }
+
+    //> Byte staged for the write in progress.
+    //>
+    //> Latched from the message ROM at the Poll→Sending transition
+    //> (where `char` still holds ROM[char_index]).  It must be a
+    //> register because the WbUart's ack is combinational: by the time
+    //> `wb.ack` is high, `rom_index` has already advanced, so `char`
+    //> presents the *next* byte.
+    reg char_reg : Word[8] {
+        if {
+            when reset {
+                it <= 0
+            }
+            when state == #Poll && wb.ack && wb.dat_rd[5] {
+                it <= char
+            }
+        }
+    }
+
+    //> Reporter FSM state.
+    //>
+    //> Idle -> (error accepted) -> Poll: read LSR until bit 5 (THRE,
+    //> transmitter holding register empty) is set, then -> Sending:
+    //> write the current message byte.  After each acknowledged byte,
+    //> back to Poll for the next one; after the byte before the NUL
+    //> terminator, -> Drain: read LSR until bit 6 (TEMT, transmitter
+    //> completely empty — the last character has fully shifted out),
+    //> then -> Idle with `halt` raised.
+    reg state : ReportState {
+        if {
+            when reset {
+                it <= #Idle
+            }
+            when accept {
+                it <= #Poll
+            }
+            when it == #Poll && wb.ack && wb.dat_rd[5] {
+                it <= #Sending
+            }
+            when it == #Sending && wb.ack && char != 0w8 {
+                it <= #Poll
+            }
+            when it == #Sending && wb.ack && char == 0w8 {
+                it <= #Drain
+            }
+            when it == #Drain && wb.ack && wb.dat_rd[6] {
+                it <= #Idle
+            }
+        }
+    }
+
+    //> Code of the error currently being reported.
+    reg reported_code : ErrorCode {
+        if {
+            when accept {
+                it <= error_code
+            }
+        }
+    }
+
+    //> Message-ROM index of the character being written.
+    //>
+    //> Starts at 0 when a report is accepted and advances after each
+    //> acknowledged byte write.
+    reg char_index : Word[8] {
+        if {
+            when reset {
+                it <= 0
+            }
+            when accept {
+                it <= 0
+            }
+            when state == #Sending && wb.ack && char != 0 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Index currently presented to the message ROM.
+    //>
+    //> Normally this is `char_index`, the byte being written.  During
+    //> the acknowledge cycle of a byte write it is `char_index + 1`,
+    //> so that the FSM (via `char`) sees the *next* byte and can
+    //> compare it against the NUL terminator before deciding to
+    //> continue.
+    wire rom_index : Word[8] {
+        it := mux(state == #Sending && wb.ack, char_index + 1, char_index)
+    }
+
+    //> Character ROM for the #IllegalInstruction message:
+    //> "ERROR: Illegal Instruction", NUL-terminated.
+    wire illegal_instruction_message_char : Word[8] {
+        it := match rom_index {
+            with 0  => 0x45     // 'E'
+            with 1  => 0x52     // 'R'
+            with 2  => 0x52     // 'R'
+            with 3  => 0x4f     // 'O'
+            with 4  => 0x52     // 'R'
+            with 5  => 0x3a     // ':'
+            with 6  => 0x20     // ' '
+            with 7  => 0x49     // 'I'
+            with 8  => 0x6c     // 'l'
+            with 9  => 0x6c     // 'l'
+            with 10 => 0x65     // 'e'
+            with 11 => 0x67     // 'g'
+            with 12 => 0x61     // 'a'
+            with 13 => 0x6c     // 'l'
+            with 14 => 0x20     // ' '
+            with 15 => 0x49     // 'I'
+            with 16 => 0x6e     // 'n'
+            with 17 => 0x73     // 's'
+            with 18 => 0x74     // 't'
+            with 19 => 0x72     // 'r'
+            with 20 => 0x75     // 'u'
+            with 21 => 0x63     // 'c'
+            with 22 => 0x74     // 't'
+            with 23 => 0x69     // 'i'
+            with 24 => 0x6f     // 'o'
+            with 25 => 0x6e     // 'n'
+            with 26 => 0x0d     // '\r'
+            with 27 => 0x0a     // '\n'
+            else    => 0x00     // NUL terminator
+        }
+    }
+
+    //> Character byte selected from the message ROM.
+    wire char : Word[8] {
+        it := match reported_code {
+            with #IllegalInstruction => illegal_instruction_message_char
+        }
+    }
+}
