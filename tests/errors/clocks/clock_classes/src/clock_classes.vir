@@ -1,15 +1,17 @@
 // Clock classes and definitions (CLOCKCHECKING.md, *Clock classes*).
 //
-// A driver to a Clock-typed target must be a *definition*: an
-// unconditional plain reference to a clock.  A guarded driver is an
-// assignment — two definitions of one name, or an identity that varies
-// at runtime — and is diagnosed whatever the guard says, even a
-// constant one.  A computed clock (a `mux` over clocks) likewise
-// cannot be defined, and its operands conflict.  An outgoing clock
-// port that aliases an incoming clock must declare its provenance with
-// `dependson`.  Internal clock sources count: a module registering two
-// oscillator instances is multi-clock.  Nets on distinct clock classes
-// cannot be connected.
+// A driver to a Clock-typed target must have a driving expression
+// that is a plain reference to a clock.  A conditional whose guards
+// and clock drivers do not all denote one clock class mixes domains
+// (`DomainMismatch`); a driver whose driving expression is not a
+// plain clock reference — a computed clock (a `mux` over clocks) — is
+// an error (`ConditionalClockDriver`), and its operands conflict.
+// (A guarded driver of a plain clock reference under a single-class
+// conditional is legal but warns; see tests/warnings/guarded_clock_driver.)
+// An outgoing clock port that aliases an incoming clock must declare
+// its provenance with `dependson`.  Internal clock sources count: a
+// module registering two oscillator instances is multi-clock.  Nets on
+// distinct clock classes cannot be connected.
 
 pub mod GuardedClock {
     incoming clk_a : Clock
@@ -18,13 +20,12 @@ pub mod GuardedClock {
 
     wire muxed_clk : Clock
 
+    // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
     if {
         when sel {
-            // CHECK: `muxed_clk` is a clock and may only be defined by an unconditional reference to a clock: clocks are defined, not assigned
             muxed_clk := clk_a
         }
         else {
-            // CHECK: `muxed_clk` is a clock and may only be defined by an unconditional reference to a clock: clocks are defined, not assigned
             muxed_clk := clk_b
         }
     }
@@ -38,13 +39,12 @@ pub mod ConstantGuardClock {
 
     wire muxed_clk : Clock
 
+    // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
     if {
         when true {
-            // CHECK: `muxed_clk` is a clock and may only be defined by an unconditional reference to a clock: clocks are defined, not assigned
             muxed_clk := clk_a
         }
         else {
-            // CHECK: `muxed_clk` is a clock and may only be defined by an unconditional reference to a clock: clocks are defined, not assigned
             muxed_clk := clk_b
         }
     }
@@ -57,7 +57,7 @@ pub mod ComputedClock {
     incoming clk_b : Clock
 
     wire muxed_clk : Clock {
-        // CHECK: `muxed_clk` is a clock and may only be defined by an unconditional reference to a clock: clocks are defined, not assigned
+        // CHECK: `muxed_clk` is a clock and may only be driven by a reference to a clock: clocks are defined, not assigned
         // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
         it := mux(true, clk_a, clk_b)
     }
@@ -110,6 +110,6 @@ pub mod CrossedNets {
 }
 
 // CHECK: FAILED with
-// CHECK: 9 ERROR
+// CHECK: 7 ERROR
 // CHECK-NOT: WARNING
 // CHECK: Check failed

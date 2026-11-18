@@ -1,0 +1,47 @@
+// GuardedClockDriver: a driver to a Clock-typed target under a
+// condition is legal but warns: a conditional cannot change which
+// clock the target denotes (the whole `if` acts on a single clock
+// domain, and the guarded driver joins the target into the driving
+// clock's class just as an unconditional driver would), so the
+// gating is pointless.
+
+pub mod GuardedSameClass {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming sel : Bit on clk_a
+
+    wire muxed_clk : Clock
+
+    if {
+        when sel {
+            // WARNING: `muxed_clk` is a clock: a conditional cannot change which clock it denotes — drive it unconditionally
+            muxed_clk := clk_a
+        }
+    }
+
+    // The guarded driver joins `muxed_clk` into `clk_a`'s class, so
+    // the `on` clause here resolves like any other clock.
+    reg r : Word[4] on muxed_clk {
+        it <= 0w4
+    }
+}
+
+pub mod ConstantGuard {
+    incoming clk_a : Clock
+
+    wire c : Clock
+
+    if {
+        when true {
+            // WARNING: `c` is a clock: a conditional cannot change which clock it denotes — drive it unconditionally
+            c := clk_a
+        }
+    }
+
+    unused c
+}
+
+// CHECK: PASSED with
+// CHECK-NOT: ERROR
+// CHECK: 3 WARNING
+// CHECK: Check OK

@@ -1197,12 +1197,11 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     // builtin is a source of its own; distinct sources are distinct
     // clocks however the platform ultimately wires them, so a module's
     // clock structure never depends on its instantiation context) and
-    // by *definitions*: an unconditional driver whose target is a
-    // Clock-typed component and whose driving expression is a plain
-    // reference to a Clock-typed thing asserts the two are the same
-    // clock.  A guarded driver is an assignment, not a definition, and
-    // contributes nothing (it is `ConditionalClockDriver`'s business).
-    let clock_classes = compute_clock_classes(&item_ast, &component_analysis);
+    // by drivers: a driver whose target is a Clock-typed component
+    // and whose driving expression is a plain reference to a
+    // Clock-typed thing asserts the two are the same clock.  See
+    // `collect_guarded_defs` for how guarded drivers contribute.
+    let clock_classes = compute_clock_classes(&item_ast, &mut component_analysis);
     let clock_count = clock_classes.sources.len();
     // The module's unique clock: the single sourced class's source,
     // when there is exactly one.  It may arise from any kind of source
@@ -1545,16 +1544,16 @@ pub struct ClockClasses {
 ///    the checker mints fresh classes for `asclock` calls).
 ///
 /// The equivalence relation additionally relates a Clock-typed
-/// component to the clock its *definitions* name: an unconditional
-/// driver whose target is a Clock-typed component and whose driving
-/// expression is a plain reference to a Clock-typed thing asserts the
-/// two are the same clock.  A guarded driver is an assignment, not a
-/// definition, and contributes nothing.  Clock identity is static: it
-/// is fixed by the module's structure, never by runtime behavior, and
-/// never by instantiation-site usage.
+/// component to the clock its drivers name: a driver whose target is
+/// a Clock-typed component and whose driving expression is a plain
+/// reference to a Clock-typed thing asserts the two are the same
+/// clock.  A guarded driver contributes an equivalence only through
+/// `collect_guarded_defs`.  Clock identity is static: it is fixed by
+/// the module's structure, never by runtime behavior, and never by
+/// instantiation-site usage.
 fn compute_clock_classes(
     item_ast: &AstNode<'_>,
-    component_analysis: &ComponentAnalysis,
+    component_analysis: &mut ComponentAnalysis,
 ) -> ClockClasses {
     let mut classes = ClockClasses::default();
 
@@ -1569,12 +1568,6 @@ fn compute_clock_classes(
     // Union-find over the Clock-typed components.
     let mut parent: IndexMap<ComponentId, ComponentId> =
         clock_ids.iter().map(|&id| (id, id)).collect();
-    fn find(parent: &IndexMap<ComponentId, ComponentId>, mut id: ComponentId) -> ComponentId {
-        while parent[&id] != id {
-            id = parent[&id];
-        }
-        id
-    }
 
     // The sources: each is the canonical source of its own class.
     let mut is_source: IndexSet<ComponentId> = IndexSet::new();
@@ -1608,11 +1601,57 @@ fn compute_clock_classes(
     let mut definitions: Vec<(ComponentId, ComponentId)> = vec![];
     collect_clock_definitions(item_ast, component_analysis, &mut definitions);
     for (target, source) in &definitions {
-        let root_target = find(&parent, *target);
-        let root_source = find(&parent, *source);
+        let root_target = clock_class_root(&parent, *target);
+        let root_source = clock_class_root(&parent, *source);
         if root_target != root_source {
             // Keep the earlier-registered component as the root, for
             // determinism.
+            if root_target.index <= root_source.index {
+                parent.insert(root_source, root_target);
+            } else {
+                parent.insert(root_target, root_source);
+            }
+        }
+    }
+
+    // The module's unique clock, as a class root: when every source
+    // lies in one class, a data component without an `on` clause is
+    // clocked by that class.  Guard conditions reference such
+    // components, so their classes resolve through this root.
+    let implicit_root: Option<ComponentId> = {
+        let mut source_roots: IndexSet<ComponentId> = IndexSet::new();
+        for &id in &clock_ids {
+            if is_source.contains(&id) {
+                source_roots.insert(clock_class_root(&parent, id));
+            }
+        }
+        if source_roots.len() == 1 {
+            source_roots.into_iter().next()
+        } else {
+            None
+        }
+    };
+
+    let parsing = item_ast.parsing();
+    let mut guarded_merges: Vec<(ComponentId, ComponentId)> = vec![];
+    let mut mixed_conditionals: Vec<(Region, ComponentId, ComponentId)> = vec![];
+    let mut top_level: Vec<(ComponentId, ComponentId)> = vec![];
+    for stmt in item_ast.children() {
+        collect_guarded_defs(
+            &stmt,
+            parsing,
+            component_analysis,
+            &parent,
+            implicit_root,
+            &mut guarded_merges,
+            &mut mixed_conditionals,
+            &mut top_level,
+        );
+    }
+    for (target, root) in &guarded_merges {
+        let root_target = clock_class_root(&parent, *target);
+        let root_source = clock_class_root(&parent, *root);
+        if root_target != root_source {
             if root_target.index <= root_source.index {
                 parent.insert(root_source, root_target);
             } else {
@@ -1631,7 +1670,7 @@ fn compute_clock_classes(
         if !is_source.contains(&id) {
             continue;
         }
-        let root = find(&parent, id);
+        let root = clock_class_root(&parent, id);
         if root_source.contains_key(&root) {
             continue;
         }
@@ -1639,10 +1678,28 @@ fn compute_clock_classes(
         classes.sources.push(id);
     }
     for &id in &clock_ids {
-        let root = find(&parent, id);
+        let root = clock_class_root(&parent, id);
         if let Some(&source) = root_source.get(&root) {
             classes.canonical.insert(id, source);
         }
+    }
+
+    // A conditional whose guards and clock drivers denote more than
+    // one clock class mixes domains: reported here, where the
+    // conditional's single-clock-domain rule is decided (the clock
+    // checker, which runs against these classes, cannot see it).
+    for (region, left, right) in mixed_conditionals {
+        let render = |root: ComponentId| -> BString {
+            let source = root_source.get(&root).copied().unwrap_or(root);
+            format!("clocked by `{}`", component_path(component_analysis, source)).into()
+        };
+        component_analysis.diagnostics.push(Diagnostic::new(
+            region,
+            diagnostics::DomainMismatch {
+                left: render(left),
+                right: render(right),
+            },
+        ));
     }
     classes
 }
@@ -1651,57 +1708,280 @@ fn compute_clock_classes(
 /// Clock-typed component and whose driving expression is a plain
 /// reference to a Clock-typed thing, each as `(target, source)`.
 /// Everything beneath a statement-position `if`/`match` arm is
-/// guarded: a guarded driver is an *assignment*, not a definition, and
-/// contributes no equivalence.
+/// guarded, and is collected by `collect_guarded_defs` instead, which
+/// decides whether the enclosing conditional is single-class.
 fn collect_clock_definitions<'p>(
     node: &AstNode<'p>,
     component_analysis: &ComponentAnalysis,
     out: &mut Vec<(ComponentId, ComponentId)>,
 ) {
-    let parsing = node.parsing();
     match node.payload() {
         // Every driver beneath a statement-position `when`/`match` arm
-        // is guarded.  Nothing in the arm contributes to the class
-        // relation.
+        // is guarded.  It is collected by `collect_guarded_defs`,
+        // which judges the enclosing conditional as a whole.
         AstNodePayload::If | AstNodePayload::Match => {}
         AstNodePayload::Driver(_) | AstNodePayload::InitialDriver | AstNodePayload::IndexedDriver(_) => {
-            let it_context = find_it_context(node);
-            let resolve = |interned| -> Option<Component> {
-                let mut name = parsing.string(interned).to_owned();
-                resolve_it_path(
-                    &mut name,
-                    it_context.as_ref().map(|context| context.as_bstr()),
-                );
-                component_analysis.resolve(name.as_bstr())
-            };
-            let target = node
-                .target()
-                .and_then(|path| resolve(path))
-                .or_else(|| {
-                    node.driver_target_node()
-                        .and_then(|target_node| {
-                            component_analysis.component_at(target_node.location())
-                        })
-                        .cloned()
-                });
-            let Some(target) = target else { return };
-            if target.typ().as_ref() != Some(&Type::Clock) {
-                return;
+            if let Some((target, source)) = clock_driver_pair(node, component_analysis) {
+                out.push((target.id(), source.id()));
             }
-            let Some(rhs) = node.driver() else { return };
-            if !matches!(rhs.payload(), AstNodePayload::ExprReference) {
-                return;
-            }
-            let Some(rhs_path) = rhs.path() else { return };
-            let Some(source) = resolve(rhs_path) else { return };
-            if source.typ().as_ref() != Some(&Type::Clock) {
-                return;
-            }
-            out.push((target.id(), source.id()));
         }
         _ => {
             for child in node.children() {
                 collect_clock_definitions(&child, component_analysis, out);
+            }
+        }
+    }
+}
+
+/// The root of a Clock-typed component's class in the union-find: the
+/// canonical representative used to compare classes while the class
+/// relation is still being built.
+fn clock_class_root(
+    parent: &IndexMap<ComponentId, ComponentId>,
+    mut id: ComponentId,
+) -> ComponentId {
+    while parent[&id] != id {
+        id = parent[&id];
+    }
+    id
+}
+
+/// Resolves a driver statement to `(target, source)` when its target
+/// is a Clock-typed component and its driving expression is a plain
+/// reference to a Clock-typed thing; `None` otherwise.
+fn clock_driver_pair(
+    node: &AstNode<'_>,
+    component_analysis: &ComponentAnalysis,
+) -> Option<(Component, Component)> {
+    let parsing = node.parsing();
+    let it_context = find_it_context(node);
+    let resolve = |interned| -> Option<Component> {
+        let mut name = parsing.string(interned).to_owned();
+        resolve_it_path(
+            &mut name,
+            it_context.as_ref().map(|context| context.as_bstr()),
+        );
+        component_analysis.resolve(name.as_bstr())
+    };
+    let target = node
+        .target()
+        .and_then(|path| resolve(path))
+        .or_else(|| {
+            node.driver_target_node()
+                .and_then(|target_node| {
+                    component_analysis.component_at(target_node.location())
+                })
+                .cloned()
+        });
+    let target = target?;
+    if target.typ().as_ref() != Some(&Type::Clock) {
+        return None;
+    }
+    let rhs = node.driver()?;
+    if !matches!(rhs.payload(), AstNodePayload::ExprReference) {
+        return None;
+    }
+    let rhs_path = rhs.path()?;
+    let source = resolve(rhs_path)?;
+    if source.typ().as_ref() != Some(&Type::Clock) {
+        return None;
+    }
+    Some((target, source))
+}
+
+/// The clock class a component's domain is fixed by: a Clock-typed
+/// component denotes its own class; a data component denotes the
+/// class of the clock its `on` clause names, or the module's unique
+/// clock when it carries no clause.  `None` when no class can be
+/// attributed (a multi-clock module with no clause).
+fn component_clock_root(
+    component: &Component,
+    parsing: &Parsing,
+    component_analysis: &ComponentAnalysis,
+    parent: &IndexMap<ComponentId, ComponentId>,
+    implicit_root: Option<ComponentId>,
+) -> Option<ComponentId> {
+    if component.typ().as_ref() == Some(&Type::Clock) {
+        return Some(clock_class_root(parent, component.id()));
+    }
+    let decl = parsing.ast_node(component.location().ast_node_id());
+    decl.on_clause()
+        .and_then(|clock_node| clock_node.path())
+        .and_then(|interned| component_analysis.resolve(parsing.string(interned)))
+        .filter(|clock| clock.typ().as_ref() == Some(&Type::Clock))
+        .map(|clock| clock_class_root(parent, clock.id()))
+        .or(implicit_root)
+}
+
+/// The clock classes a condition expression denotes: the class of
+/// every component it references, each resolved through
+/// `component_clock_root`.  A condition referencing no clock (a
+/// constant) constrains nothing.
+fn expr_clock_roots(
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+    component_analysis: &ComponentAnalysis,
+    parent: &IndexMap<ComponentId, ComponentId>,
+    implicit_root: Option<ComponentId>,
+) -> Vec<ComponentId> {
+    match node.payload() {
+        AstNodePayload::ExprReference => {
+            let it_context = find_it_context(node);
+            let Some(path) = node.path() else { return vec![] };
+            let mut name = parsing.string(path).to_owned();
+            resolve_it_path(&mut name, it_context.as_ref().map(|context| context.as_bstr()));
+            component_analysis
+                .resolve(name.as_bstr())
+                .and_then(|component| {
+                    component_clock_root(&component, parsing, component_analysis, parent, implicit_root)
+                })
+                .into_iter()
+                .collect()
+        }
+        _ => node
+            .children()
+            .into_iter()
+            .flat_map(|child| {
+                expr_clock_roots(&child, parsing, component_analysis, parent, implicit_root)
+            })
+            .collect(),
+    }
+}
+
+/// Collects the clock *merges* implied by guarded drivers, and the
+/// conditionals that mix clock classes.
+///
+/// A driver to a Clock-typed target beneath a statement-position
+/// `if`/`match` merges its target into the driving clock's class iff
+/// the whole conditional — its guards (`match` subjects) and every
+/// clock driver in its arms, an `else` arm's included — denotes a
+/// single clock class: the conditional then acts on one clock domain
+/// and is equivalent to its drivers written unconditionally.  A
+/// conditional whose guards and clock drivers denote more than one
+/// class mixes domains: it contributes no merge and is reported
+/// `DomainMismatch`.  A conditional whose guards and drivers denote
+/// no class at all constrains nothing.
+///
+/// The traversal follows statements only: driver RHS subtrees are
+/// never descended, and `if`/`match` in expression position (a `let`
+/// binding's value, a default expression) is skipped, so an
+/// expression-position conditional is judged by the expression join
+/// rules, not as a statement.
+fn collect_guarded_defs<'p>(
+    node: &AstNode<'p>,
+    parsing: &Parsing,
+    component_analysis: &ComponentAnalysis,
+    parent: &IndexMap<ComponentId, ComponentId>,
+    implicit_root: Option<ComponentId>,
+    merges: &mut Vec<(ComponentId, ComponentId)>,
+    mixed: &mut Vec<(Region, ComponentId, ComponentId)>,
+    level: &mut Vec<(ComponentId, ComponentId)>,
+) {
+    match node.payload() {
+        AstNodePayload::If | AstNodePayload::Match => {
+            if node.is_expression_position() {
+                return;
+            }
+            let mut cond_roots: IndexSet<ComponentId> = IndexSet::new();
+            let mut arm_pairs: Vec<(ComponentId, ComponentId)> = vec![];
+            match node.payload() {
+                AstNodePayload::If => {
+                    let children = node.children();
+                    for (guard, body) in if_arm_children(&children) {
+                        if let Some(guard) = guard {
+                            cond_roots.extend(expr_clock_roots(
+                                guard,
+                                parsing,
+                                component_analysis,
+                                parent,
+                                implicit_root,
+                            ));
+                        }
+                        let mut sub_level = vec![];
+                        collect_guarded_defs(
+                            body,
+                            parsing,
+                            component_analysis,
+                            parent,
+                            implicit_root,
+                            merges,
+                            mixed,
+                            &mut sub_level,
+                        );
+                        arm_pairs.extend(sub_level);
+                    }
+                }
+                AstNodePayload::Match => {
+                    if let Some(subject) = node.subject() {
+                        cond_roots.extend(expr_clock_roots(
+                            &subject,
+                            parsing,
+                            component_analysis,
+                            parent,
+                            implicit_root,
+                        ));
+                    }
+                    let children = node.children();
+                    for (_pat, body) in match_arm_children(&children) {
+                        let mut sub_level = vec![];
+                        collect_guarded_defs(
+                            body,
+                            parsing,
+                            component_analysis,
+                            parent,
+                            implicit_root,
+                            merges,
+                            mixed,
+                            &mut sub_level,
+                        );
+                        arm_pairs.extend(sub_level);
+                    }
+                }
+                _ => unreachable!(),
+            }
+            let mut all_roots = cond_roots.clone();
+            for (_, root) in &arm_pairs {
+                all_roots.insert(*root);
+            }
+            if cond_roots.len() > 1 {
+                // The conditions themselves denote more than one class:
+                // the guard join in the clock checker diagnoses the
+                // conditional; do not cascade.
+                return;
+            }
+            match all_roots.len() {
+                0 => {}
+                1 => {
+                    let root = *all_roots.iter().next().unwrap();
+                    for (target, _) in arm_pairs {
+                        merges.push((target, root));
+                    }
+                }
+                _ => {
+                    let mut roots = all_roots.iter();
+                    let left = *roots.next().unwrap();
+                    let right = *roots.next().unwrap();
+                    mixed.push((node.region(), left, right));
+                }
+            }
+        }
+        AstNodePayload::Driver(_) | AstNodePayload::InitialDriver | AstNodePayload::IndexedDriver(_) => {
+            if let Some((target, source)) = clock_driver_pair(node, component_analysis) {
+                level.push((target.id(), clock_class_root(parent, source.id())));
+            }
+        }
+        _ => {
+            for child in node.children() {
+                collect_guarded_defs(
+                    &child,
+                    parsing,
+                    component_analysis,
+                    parent,
+                    implicit_root,
+                    merges,
+                    mixed,
+                    level,
+                );
             }
         }
     }

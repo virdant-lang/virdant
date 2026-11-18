@@ -1,4 +1,4 @@
 kind = "check"
 expect = "error"
-description = "Clock classes and definitions: a guarded or computed driver to a Clock-typed target is an assignment, not a definition (`ConditionalClockDriver`, even under a constant guard); an outgoing clock port that aliases an incoming clock must declare `dependson`; internal clock sources count toward the clock count; nets on distinct clock classes cannot be connected."
+description = "Clock classes and definitions: a conditional whose guards and clock drivers do not all denote one clock class mixes domains (`DomainMismatch`); a driver to a Clock-typed target whose driving expression is not a plain clock reference is an error (`ConditionalClockDriver`; a guarded driver under a single-class conditional warns instead — see tests/warnings/guarded_clock_driver); an outgoing clock port that aliases an incoming clock must declare `dependson`; internal clock sources count toward the clock count; nets on distinct clock classes cannot be connected."
 filecheck = "src/clock_classes.vir"

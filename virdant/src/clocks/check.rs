@@ -401,13 +401,35 @@ impl Clocking {
                 // every driver would cascade the same error.
                 let joined = self.infer(node);
                 let children = node.children();
+                // The whole `if` acts on a single clock domain: an
+                // `else` arm is guarded by the negations of the
+                // preceding conditions, which denote the same domains
+                // as the conditions themselves.
+                let condition_guards: Vec<(Domain, Location)> = if joined.is_some() {
+                    if_arm_children(&children)
+                        .into_iter()
+                        .filter_map(|(guard, _)| guard)
+                        .filter_map(|guard| {
+                            self.infer(guard).map(|domain| (domain, guard.location()))
+                        })
+                        .collect()
+                } else {
+                    vec![]
+                };
                 for (guard, body) in if_arm_children(&children) {
                     let mut arm_guards = guards.to_vec();
-                    if joined.is_some()
-                        && let Some(guard) = guard
-                        && let Some(domain) = self.infer(guard)
-                    {
-                        arm_guards.push((domain, guard.location()));
+                    if joined.is_some() {
+                        match guard {
+                            Some(guard) => {
+                                if let Some(domain) = self.infer(guard) {
+                                    arm_guards.push((domain, guard.location()));
+                                }
+                            }
+                            // An `else` arm carries no guard *expression*, but
+                            // it is still guarded: by the negations of the
+                            // preceding conditions.
+                            None => arm_guards.extend(condition_guards.iter().cloned()),
+                        }
                     }
                     self.walk(builder, &body, context, &arm_guards, true);
                 }
@@ -462,15 +484,24 @@ impl Clocking {
         };
         let target_name = target.path();
 
-        // Clocks are defined, not assigned: a
-        // Clock-typed target admits only definitions — unconditional
-        // drivers whose driving expression is a plain reference to a
-        // Clock-typed thing.  Anything else — a guarded driver, or a
-        // driving expression that is not a plain clock reference — is
-        // reported here, and the ordinary upcast checks do not apply:
-        // a definition that binds an instance clock port is checked
-        // definitionally, and guard checking never applies to a
-        // Clock-typed target.
+        // Clocks are defined, not assigned: a Clock-typed target
+        // admits only drivers whose driving expression is a plain
+        // reference to a Clock-typed thing (`ConditionalClockDriver`
+        // otherwise).  A guarded driver of a plain clock reference
+        // warns (`GuardedClockDriver`), but only when the target's
+        // class is resolved — an unresolved class means the enclosing
+        // conditional is mixed (or the driving clock unsourced), and
+        // an error is already reported for it.  How a guarded driver
+        // contributes to the target's clock class is decided by
+        // component analysis.  What is local to the checker: guards
+        // are checked against the target's class when that class is
+        // resolved (a guard on a foreign clock is a real
+        // `DriverDomainMismatch`), the checks do not cascade when the
+        // class is unresolved, and the driving expression is never
+        // checked against the target (a plain clock reference is in
+        // the target's class by construction of the merge, and a
+        // driver that binds an instance clock port is checked
+        // definitionally).
         if target.typ().as_ref() == Some(&Type::Clock) {
             let is_plain_clock_reference = node.driver().is_some_and(|rhs| {
                 if !matches!(rhs.payload(), AstNodePayload::ExprReference) {
@@ -490,16 +521,39 @@ impl Clocking {
                         component.typ().as_ref() == Some(&Type::Clock)
                     })
             });
-            // An `else` arm carries no guard *expression*, but it is
-            // still a conditional context: the arm's driver is
-            // guarded by the negation of the preceding conditions.
-            if !guards.is_empty() || conditional || !is_plain_clock_reference {
+            if !is_plain_clock_reference {
                 self.diagnostics.push(Diagnostic::new(
                     node.region(),
                     diagnostics::ConditionalClockDriver {
                         target: target_name.clone(),
                     },
                 ));
+                return;
+            }
+            if let Some(target_domain) = self.component_domain(&target) {
+                if !guards.is_empty() || conditional {
+                    self.diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        diagnostics::GuardedClockDriver {
+                            target: target_name.clone(),
+                        },
+                    ));
+                }
+                for (domain, guard) in guards {
+                    if !self.guard_checks.insert((*guard, target.id())) {
+                        continue;
+                    }
+                    if !domain.upcasts_to(&target_domain) {
+                        self.diagnostics.push(Diagnostic::new(
+                            builder.get_location_region(*guard),
+                            diagnostics::DriverDomainMismatch {
+                                target: target_name.clone(),
+                                target_domain: self.render_domain(&target_domain),
+                                expr_domain: self.render_domain(domain),
+                            },
+                        ));
+                    }
+                }
             }
             return;
         }
@@ -733,8 +787,6 @@ impl Clocking {
             );
         }
 
-        for (instance, clocks) in instances.iter().zip(&instance_clocks) {
-        }
         // Pin the single-clock instances; report the conflicted ones.
         // An instance touched by no clock leaves its clock variable
         // unbound — the all-async mode: every flexible component of the

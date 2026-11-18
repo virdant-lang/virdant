@@ -85,11 +85,13 @@ pub enum DiagnosticPayload {
     /// component cannot accept: the driving domain must upcast to the
     /// target's declared domain (`Constant <= Sync(c) <= Async`).
     DriverDomainMismatch(DriverDomainMismatch),
-    /// A Clock-typed target was driven by anything other than an
-    /// unconditional plain reference to a clock: a guarded driver, or a
-    /// driving expression that is not a plain clock reference.  Clocks
-    /// are defined, not assigned.
+    /// A Clock-typed target was driven by a driving expression that is
+    /// not a plain clock reference.  Clocks are defined, not assigned.
     ConditionalClockDriver(ConditionalClockDriver),
+    /// A Clock-typed target was driven under a condition (an
+    /// enclosing guard, or an `else` arm).  A conditional cannot
+    /// change which clock the target denotes.
+    GuardedClockDriver(GuardedClockDriver),
     /// An outgoing Clock-typed port is driven from an incoming clock
     /// port without declaring the provenance: it must carry
     /// `dependson <clock>` so the parent's checker can identify the
@@ -495,10 +497,18 @@ pub struct DriverDomainMismatch {
     pub expr_domain: BString,
 }
 
-/// A Clock-typed target was driven by anything other than an
-/// unconditional plain reference to a clock.
+/// A Clock-typed target was driven by a driving expression that is
+/// not a plain reference to a clock.  Clocks are defined, not assigned.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConditionalClockDriver {
+    pub target: BString,
+}
+
+/// A Clock-typed target was driven under a condition (an enclosing
+/// guard, or an `else` arm).  A conditional cannot change which clock
+/// the target denotes: the gating is pointless.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuardedClockDriver {
     pub target: BString,
 }
 
@@ -1125,7 +1135,13 @@ impl Diagnostic {
             }
             DiagnosticPayload::ConditionalClockDriver(d) => {
                 format!(
-                    "`{}` is a clock and may only be defined by an unconditional reference to a clock: clocks are defined, not assigned",
+                    "`{}` is a clock and may only be driven by a reference to a clock: clocks are defined, not assigned",
+                    d.target,
+                ).into()
+            }
+            DiagnosticPayload::GuardedClockDriver(d) => {
+                format!(
+                    "`{}` is a clock: a conditional cannot change which clock it denotes — drive it unconditionally",
                     d.target,
                 ).into()
             }
@@ -1586,6 +1602,7 @@ impl Diagnostic {
             DiagnosticPayload::FlexibleInstanceClockConflict(_) => "FlexibleInstanceClockConflict",
             DiagnosticPayload::DriverDomainMismatch(_) => "DriverDomainMismatch",
             DiagnosticPayload::ConditionalClockDriver(_) => "ConditionalClockDriver",
+            DiagnosticPayload::GuardedClockDriver(_) => "GuardedClockDriver",
             DiagnosticPayload::MissingClockDependson(_) => "MissingClockDependson",
             DiagnosticPayload::WrongDriverType(_) => "WrongDriverType",
             DiagnosticPayload::NoRegDrivers(_) => "NoRegDrivers",
@@ -1709,7 +1726,8 @@ impl Diagnostic {
             | DiagnosticPayload::ReferencedWhileNotPub(_)
             | DiagnosticPayload::MemoryAssignInsteadOfLassign(_)
             | DiagnosticPayload::UnusedNonPub(_)
-            | DiagnosticPayload::UnusedImport(_) => DiagnosticLevel::Warning,
+            | DiagnosticPayload::UnusedImport(_)
+            | DiagnosticPayload::GuardedClockDriver(_) => DiagnosticLevel::Warning,
             DiagnosticPayload::Todo(_) => DiagnosticLevel::Info,
             _ => DiagnosticLevel::Error,
         }
@@ -1745,7 +1763,7 @@ from_diagnostic! {
     DuplicateSlot, UnresolvedPackage, InvalidPackageName, UnresolvedItem, UnresolvedType, MissingOnClause,
     PackageNotImported,
     RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
-    ConditionalClockDriver, MissingClockDependson,
+    ConditionalClockDriver, GuardedClockDriver, MissingClockDependson,
     MemoryElementNotPowerOf2Word, MemoryDepthNotLiteral, MemoryDepthNotPowerOf2, MemoryIndexWidth,
     MemoryIndexOutOfRange, MemoryWriteOutsideOnRegion, OverlappingMemoryWrites,
     MemoryAssignInsteadOfLassign, MemoryUsedWithoutIndex, IndexedDriverNotMemory,
