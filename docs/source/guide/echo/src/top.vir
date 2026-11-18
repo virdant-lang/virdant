@@ -7,14 +7,19 @@ pub mod Top for virt::Virt {
     outgoing tx : Bit
     incoming rx : Bit
 
-    mod sender of uart::UartSender {
+    mod rx_sync of Sync {
         it.clock := clock
-        tx       := it.tx
+        it.inp   := rx
     }
 
     mod receiver of uart::UartReceiver {
         it.clock := clock
-        it.rx    := rx
+        it.rx    := rx_sync.out
+    }
+
+    mod sender of uart::UartSender {
+        it.clock := clock
+        tx       := it.tx
     }
 
     sender.inp :=: receiver.out

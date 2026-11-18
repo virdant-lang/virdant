@@ -1,238 +1,248 @@
 Echo
 ====
-Now that we have seen counters and FIFOs,
-let's put a few pieces together and build a real peripheral:
-a UART echo.
+:tooltip:`UART (Universal Asynchronous Receiver/Transmitter)` is a simple protocol
+used to communicate over just two wires.
 
-A UART sends bytes one bit at a time over a single wire.
-When the line is idle, it is held high.
-To send a byte, the transmitter pulls the line low for one bit period (the "start" bit),
-then sends the eight bits of the byte one at a time, least significant bit first,
-and finally releases the line high again (the "stop" bit).
+In this example, we will look at `Echo`, a server which takes whatever data is send over UART
+and echoes it back unmodified.
 
-Our project is a `Top` module which echoes bytes back:
-whatever byte arrives on its `rx` port is transmitted back out of its `tx` port.
+
+Top
+---
+The `Top` module for our server is quite simple:
 
 .. literalinclude:: src/top.vir
     :caption: top.vir
     :language: virdant
 
-This module is small,
-because the interesting logic lives in two submodules:
-a UART transmitter (`UartSender`) and a UART receiver (`UartReceiver`),
-both in `src/uart.vir`.
-We will look at the transmitter first, then the receiver.
+We see `Top` is a top module for the `virt::Virt` platform.
+Other than `clock`, it declares two ports with type `Bit`: `rx` and `tx`,
+which are the standard ports for receiving and sending data over UART respectively.
+
+We don't define `exit`, so our simulation will run indefinitely (or until we type `Ctrl+C`).
+
+We also don't define `debug`.
+`debug` as a tool is meant to be for simulations only,
+but I don't know of any hardware that supports anything like it.
+It's an easy way to get output on the same cycle that a problem occurs.
+
+In this example, all of the output we see on the screen is
+but rather a realistic UART output that you will frequently be using in real designs!
 
 
-The Top module
---------------
-`Top` declares two serial pins: `tx`, the outgoing line,
-and `rx`, the incoming line.
+Running the Echo Server
+-----------------------
+If you have Virdant installed, run it like this, and then start typing:
+
+.. code-block:: console
+
+    $ vir new hello
+    Created project 'hello'
+    $ cd hello/
+    $ vir run
+    Hello, Virdant!
+
+.. tip::
+
+    Use `Ctrl+C` to exit!
+
+The demo may seem like it doesn't do much.
+But it's important to note that `vir run` actually *disables* your terminal's loopback.
+
+You can confirm that our echo server is, in fact, hard at work if you delete everything and run it:
+
+.. code-block:: virdant
+    :caption: top.vir
+
+    import virt
+
+    pub mod Top for virt::Virt {}
+
+Now if you try running the demo with `vir run`, you can type all you want, but nothing appears!
+
+
+`Sync`
+------
+`Top` contains three submodules.
+The first is rather special: `Sync` is a builtin module.
+It's role is hard to appreciate at first,
+but we'll present it here so you will know about it when you need it.
 
 .. literalinclude:: src/top.vir
     :language: virdant
+    :lines: 10-13
     :dedent:
-    :lines: 7-8
 
-`Top` does not implement the UART protocol itself.
-Instead, it instantiates the two submodules and wires them together:
+In our Virdant designs, all signals change in sync with the clock.
+But pins like `rx` are often driven from outside of your FPGA,
+and they are *not* synchronized with the clock.
 
-.. literalinclude:: src/top.vir
-    :language: virdant
-    :dedent:
-    :lines: 10-20
+In hardware design, it is incredibly dangerous to use signals
+that are not synchronized to your clock.
+The reason is that 99.9999% of the time -- your design works perfectly.
 
-The `sender` drives the `tx` line,
-and the `receiver` listens on the `rx` line.
-The last line is the whole point of this example:
-`sender.inp :=: receiver.out` connects two sockets directly to each other.
-The receiver produces bytes on its `out` socket,
-and the sender consumes them from its `inp` socket,
-so every byte that arrives on `rx` is handed straight to the sender
-and echoed back out on `tx`.
+But that other 0.0001% of the time...
+
+To avoid these difficult to debug errors, Virdant provides `Sync`.
+Simply put, you feed `Sync` two inputs:
+`clock`, the clock you wish to synchronize with,
+and `inp`, the unsynchronized signal.
+Then the `out` port will give you a synchronized copy of `inp`.
 
 
-The transmitter
+UART Submodules
 ---------------
-The transmitter, `UartSender`, is a `reverse` behind a `Pipe` socket,
-just like the FIFO we built earlier.
-Here is the whole file, transmitter and receiver together:
+The functionality of `Top` lives in two submodules from the `uart` package:
+`UartReceiver` is responsible for receiving data over UART,
+and `UartSender` is responsible for sending it.
+
+.. note::
+
+    Virdant's `coding conventions </coding-conventions>`_ say that when you abbreviate something,
+    you should do so with the first letter capitalized.
+    So "UART Receiver" becomes `UartReceiver` when written as the name of a module.
+
+Both connect to just the clock, their respective UART pin:
+
+.. literalinclude:: src/top.vir
+    :language: virdant
+    :lines: 15-23
+    :dedent:
+
+Of course, for `UartReceiver`, we are using the synchronized version of `rx`, `rx_sync.out`.
+
+On the very last line, we see where they get their data from:
+
+.. literalinclude:: src/top.vir
+    :language: virdant
+    :lines: 25
+    :dedent:
+
+`:=:` is called a bidirectional driver.
+`sender.inp` and `receiver.out` are two `Pipe` sockets.
+`receiver.out` is a `forward socket` and `sender.inp` is a `reverse socket`.
+This means that they were meant for each other!
+
+`:=:` connects each of their corresponding ports together,
+each in the proper direction.
+It is just as if we had written (note the flip in direction):
+
+.. code-block:: virdant
+
+    sender.inp.data    :=: receiver.out.data
+    receiver.out.ready :=: sender.inp.ready
+
+Bidirectional drivers are super handy.
+They save a bunch of typing.
+And for larger sockets, such as AXI, TileLink, or Wishbone interfaces,
+it can easily save you dozens of lines of typing.
+
+The UART Protocol
+-----------------
+The UART protocol is pretty simple.
+Let's take a look at how it works.
+
+UART is asynchronous.
+This means it doesn't send a clock over the wires.
+Instead, both sides must keep time separately.
+For this, our UART uses a standard baud rate of 115200 bits per second.
+
+This means, separate from our clock, we must do timekeeping.
+Our clock runs at a nominal 1 MHz.
+So each bit we send (whether its a data bit or control bit) is sent every 1/115200 s.
+If we do the math, this means we send or receive bits at roughly 1 bit per 9 clock cycles.
+
+.. note::
+
+    The exact number of cycles is closer to 8.68.
+    This is captured in `baud_limit` (which is `8`, plus a clock cycle delay is 9 clock cycles).
+    Our design accounts for this by using a regiser called `baud_timer`
+    and it essentially lets us re-sync every time a byte is sent or received.
+    This avoids our clocks ever getting too far out of sync.
+
+Let's consider the sender.
+
+When idle, we keep `tx` high.
+In order to start a transmission, we pull `tx` low for one baud period (9 clock cycles).
+We call this the **start bit**.
+
+For the next 8 baud periods, we send each bit,
+starting with the :tooltip:`LSB (least significant bit)`.
+
+Finally, we end the transmission by bringing the `tx` line high again for one more baud period.
+We call this the **stop bit**.
+So in total, it takes us 10 baud periods (90 clock cycles).
+
+.. note::
+
+    Compared to `debug` which prints your data after *just 1* cycle,
+    you can see how UART is rather slow.
+
+Next, let's consider the receiver.
+The sender's `tx` is treated as the receiver's `rx`.
+So just imagine what the sender does, but observed on the `rx` signal.
+
+The `rx` line idles high.
+As soon as it is pulled low, we understand this as receiving the start bit.
+We expect the `rx` line to be low for one baud period.
+
+For the next 8 baud periods, we must sample the `rx` line to learn what data is being sent.
+Since each bit is held for ~9 clock cycles (this might not be exact!),
+it's best that we sample close to the middle.
+(For this reason, `UartReceiver` has a wire called `half_period`).
+For each bit we receive, we shift it into a shift register (called `buffer`).
+
+Once all the bits are sampled, the sender will pull the line high.
+This is the stop bit, and it's held high for one baud period.
+Unless we are looking for errors, this isn't interesting to us.
+
+.. note::
+
+    This describes the most common configuration of UART: 8N1.
+    That is, we sent 8 bits at a time,
+    we do *not* include a parity bit, and
+    we include 1 stop bit.
+
+    The `Virt` platform defaults to 115200, which is the most second most common baud rate.
+    You can change it with `vir run --baud 9600` if you want to use the most common value of 9600.
+
+
+The UART State
+--------------
+The `uart` package defines three items: `Uartstate` `UartSender` and `UartReceiver`.
+Let's look at each in turn.
 
 .. literalinclude:: src/uart.vir
     :caption: uart.vir
     :language: virdant
-
-The state of the transmitter is described by a union type, `UartState`:
-`Idle`, `Start`, `Data`, or `Stop`.
-The `Data` state carries its own payload, the index of the bit currently being sent.
-
-.. literalinclude:: src/uart.vir
-    :language: virdant
-    :dedent:
     :lines: 1-6
 
-The `tx` line is driven by a `match` on that state:
+The UART protocol requires that both our sender and receiver go through four states.
+
+.. list-table::
+    :header-rows: 1
+
+    * - State
+      - Meaning
+    * - `@Idle()`
+      - No data is being sent / received
+    * - `@Start()`
+      - | The start bit is being sent / received.
+        | The line should be low.
+    * - `@Data(i)`
+      - | Bit number `i` is being sent / received.
+        | `i` starts with `0` and goes up to `7`.
+    * - `@Stop()`
+      - | The stop bit is being sent / received.
+        | The line should be high.
+
+
+The Full `uart` Package
+-----------------------
+The full example of UART doesn't have any new features in Virdant.
+It's best to simply study the code to understand how it all works.
 
 .. literalinclude:: src/uart.vir
+    :caption: uart.vir
     :language: virdant
-    :dedent:
-    :lines: 15-22
-
-While `Idle` or `Stop`, the line idles high.
-During `Start`, it is pulled low.
-During `Data`, we send one bit of `buffer` at a time,
-selected with `buffer[dyn index]`.
-
-The timing comes from a baud timer, a simple countdown register:
-
-.. literalinclude:: src/uart.vir
-    :language: virdant
-    :dedent:
-    :lines: 30-44
-
-Each bit lasts `baud_limit` + 1 cycles.
-Here it is `8`, so every bit is held for nine cycles:
-slow enough to watch comfortably in a waveform,
-and exactly the shape of a real UART at any baud rate.
-
-The transitions between states are the last statement in `UartSender`:
-
-.. literalinclude:: src/uart.vir
-    :language: virdant
-    :dedent:
-    :lines: 46-71
-
-Whenever the baud timer has run out, we advance:
-`Idle` latches a byte from the `inp` socket into `buffer` and moves to `Start`,
-`Start` moves to `Data(0)`,
-`Data` counts its bit index up to `7` and then moves to `Stop`,
-and `Stop` returns to `Idle`.
-That is the entire protocol.
-
-
-The receiver
-------------
-The receiver, `UartReceiver`, faces the other direction:
-it watches the `rx` line and assembles the bits it sees back into a byte.
-
-Its output is a `forward` socket, `out`,
-whose `data` simply presents the contents of a register:
-
-.. literalinclude:: src/uart.vir
-    :language: virdant
-    :dedent:
-    :lines: 78-80
-
-That register, `hold`, holds one received byte as a `Valid[Word[8]]`:
-
-.. literalinclude:: src/uart.vir
-    :language: virdant
-    :dedent:
-    :lines: 88-108
-
-While `hold` is `@Invalid`, there is nothing to deliver.
-When a byte arrives, `hold` latches `@Valid(buffer)` and keeps presenting it
-until the consumer (here, the sender) takes it,
-at which point `hold` drops back to `@Invalid`.
-This is exactly the handshake a `Pipe` socket wants.
-
-How do we know when a byte has arrived?
-The receiver runs the same kind of countdown as the transmitter:
-
-.. literalinclude:: src/uart.vir
-    :language: virdant
-    :dedent:
-    :lines: 110-132
-
-The trick is in the `@Idle` arm.
-While the line idles high, the timer holds at `0`, waiting.
-The moment `rx` drops low, the timer loads `half_period`,
-which is half of a bit period.
-Sampling half a bit period after the falling edge
-lands the receiver near the middle of the start bit,
-and every following bit is one full bit period apart,
-so every sample lands near the middle of its bit too.
-
-The `byte_done` wire sums up the completion condition:
-we are in `Stop`, the line is high (a valid stop bit), and the timer has run out.
-
-.. literalinclude:: src/uart.vir
-    :language: virdant
-    :dedent:
-    :lines: 84-86
-
-The state machine itself mirrors the transmitter's,
-but running backwards:
-
-.. literalinclude:: src/uart.vir
-    :language: virdant
-    :dedent:
-    :lines: 138-168
-
-In `Idle`, a falling edge on `rx` starts a frame.
-In `Start`, we check the line again:
-if it has gone back high, that was a glitch, not a start bit,
-and we return to `Idle`.
-Otherwise the line is confirmed low,
-and each `Data` step shifts the current `rx` value into the top of `buffer`
-with `buffer <= word(rx, buffer[8..1])`,
-since UART sends the least significant bit first.
-After eight bits, `Stop` waits for the line to go high,
-`byte_done` fires, and the finished byte is latched into `hold`.
-
-
-Waveform
---------
-Let's land this example by watching it run in the waveform viewer.
-The design does not run by itself this time:
-we have to play the role of the far-end UART
-and send a byte into `rx` ourselves.
-The `run.poke` script sends the byte `0x41` (`A`),
-one bit at a time, nine cycles per bit:
-
-.. code-block:: console
-
-    $ vir poke run.poke
-
-And here is the echo in action:
-
-.. vcd:: trace.vcd
-
-    label Clock
-    signal top.clock:clk
-
-    label Input
-    signal top.rx
-
-    label Receiver
-    signal top.receiver.state:uart::UartState
-    signal top.receiver.buffer:bin
-
-    label Sender
-    signal top.sender.state:uart::UartState
-    signal top.sender.buffer:dec
-
-    label Serial output
-    signal top.tx
-
-Follow `rx` on the left half:
-it idles high, drops low for the start bit,
-shifts through the eight data bits of `0x41`,
-and returns high for the stop bit.
-Meanwhile `receiver.buffer` shifts those same bits in one by one,
-ending at `01000001` = `A`,
-and `hold` goes `@Valid`.
-From there the sender takes over:
-it latches the byte into `sender.buffer` (`65`, the ASCII code of `A`),
-and you can watch it re-play the identical frame out on `tx`
-on the right half of the waveform.
-
-.. note::
-
-    You can hover over the waveform diagram with your mouse.
-    The yellow line shows you what the value of every signal is
-    at that exact moment in time.
-
-A UART may not look like much,
-but it is the classic "hello, world" of FPGA design:
-with it, your board can talk back to your computer.
+    :lines: 1-169

@@ -46,3 +46,6 @@ Please report each violation of any of these rules.
 ## Versioning
 - Require that any change which introduces or modifies version is reconciled against `RELEASES.md`
 - Require that any change to the version of any Rust, Python, or other package matches `VERSION`.
+
+## RestructuredText
+- When writing RestructuredText, forbid using 2-3 space indentation.

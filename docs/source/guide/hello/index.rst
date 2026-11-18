@@ -1,6 +1,6 @@
 Hello World
 ===========
-This is the design you get when you create a new Virdant project.
+Hello, World is the design you get when you create a new Virdant project.
 After running ``vir new hello``, the freshly-created ``hello/src/top.vir`` looks
 exactly like this:
 

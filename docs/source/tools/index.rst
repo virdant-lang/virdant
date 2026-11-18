@@ -12,6 +12,13 @@ Basic
     check
     run
 
+Tools
+-----
+.. toctree::
+    :maxdepth: 1
+
+    ls
+
 Flows
 -----
 .. toctree::

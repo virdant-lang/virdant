@@ -17,7 +17,6 @@ You can also synthesizing it with the Yosys toolchain and get it running on your
 
 See Also
 --------
-* :doc:`/tools/synth`: Synthesize the generated Verilog for an FPGA.
 * :doc:`/tools/check`: Re-check your project after making changes.
 * `Icarus Verilog <https://steveicarus.github.io/iverilog/>`_: An open-source Verilog simulator.
 * `Verilator <https://www.verilator.org/>`_: A fast, open-source Verilog simulator.

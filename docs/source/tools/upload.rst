@@ -22,20 +22,20 @@ In order, it will:
 The programmer used is selected automatically from the platform.
 
 .. list-table::
-   :header-rows: 1
+    :header-rows: 1
 
-   * - Platform
-     - Programmer
-   * - ``ice40::IceSugar``
-     - ``icesprog``
-   * - ``ice40::IceStick``
-     - ``iceprog``
-   * - ``ice40::Fomu``
-     - ``dfu-util``
-   * - ``xilinx::ArtyA7``
-     - ``openFPGALoader``
-   * - ``xilinx::ArtyA7_100T``
-     - ``openFPGALoader``
+    * - Platform
+      - Programmer
+    * - ``ice40::IceSugar``
+      - ``icesprog``
+    * - ``ice40::IceStick``
+      - ``iceprog``
+    * - ``ice40::Fomu``
+      - ``dfu-util``
+    * - ``xilinx::ArtyA7``
+      - ``openFPGALoader``
+    * - ``xilinx::ArtyA7_100T``
+      - ``openFPGALoader``
 
 .. warning::
 

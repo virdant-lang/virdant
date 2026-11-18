@@ -922,3 +922,10 @@ footer .virdant-footer-meta {
   background-color: #3a6a4a !important;
   color: #d0d0d0 !important;
 }
+
+/* Line blocks in table cells: Sphinx's basic.css gives .line-block a 1em
+   margin top and bottom, which reads as an extra blank line inside a cell. */
+.rst-content td .line-block {
+  margin-top: 0;
+  margin-bottom: 0;
+}

@@ -7,7 +7,7 @@ Usage
 -----
 .. code-block:: console
 
-  $ vir ls serve
+  $ vir ls
 
 ``vir ls`` is the Virdant Language Server.
 It provides language intelligence for Virdant projects:
@@ -26,12 +26,3 @@ for inspecting a project from the command line:
 * ``vir ls definition <target>`` — The definition of the item at a location,
   or of a name (e.g. ``vir ls definition Foo::Bar``).
 * ``vir ls references <target>`` — Locations that reference the target.
-* ``vir ls diagnostics`` — Project diagnostics (exits 0 even when errors are reported).
-
-These subcommands accept ``--json`` to render their output as JSON,
-which makes them convenient for tooling and scripts.
-
-Options
--------
-``-C``, ``--dir <DIR>``
-    Operate on the project in ``DIR`` instead of the current directory.
