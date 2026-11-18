@@ -57,10 +57,15 @@ A wire watches the stream for the `0` terminator:
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
-    :lines: 28-40
+    :lines: 28-33
 
 When the NUL shows up and the sender is ready to accept it,
-`exit` becomes `@Valid(0)` and the simulation ends.
+`exit` becomes `@Valid(0)` and the simulation ends:
+
+.. literalinclude:: src/top.vir
+    :language: virdant
+    :dedent:
+    :lines: 35-40
 
 
 The Spi socket
@@ -92,16 +97,23 @@ Here is the whole file:
     :caption: spiflash.vir
     :language: virdant
 
+The controller's two client sockets tie it to the rest of the design:
+
 .. literalinclude:: src/spiflash.vir
     :language: virdant
     :dedent:
     :lines: 8-22
 
-The whole controller runs on a single 32-bit shift register,
+Over `spi`, it drives the clock, holds chip select low,
+and puts the top bit of its shift register onto `mosi`.
+Over `out`, whenever it is not mid-command,
+it offers up the low byte of that same shift register.
+
+The whole controller runs on that single 32-bit shift register,
 which does double duty.
 It starts out holding the command and address,
 `0x03_000000`: the READ command followed by a 24-bit address of zero.
-Each bit is shifted out `mosi`-first, MSB first, one bit every two cycles.
+Each bit goes out onto `mosi`, MSB first, one bit every two cycles.
 
 The `running` and `is_offbeat` registers generate the timing:
 while `running`, `is_offbeat` toggles every cycle,
@@ -177,7 +189,7 @@ and `top.tx` carries them back out to the host.
 There is something quietly satisfying about this design:
 the poem that names "hammers" and "harps of gold" is dug out
 of a simulated flash chip, one bit at a time,
-by a shift register fifty lines long.
+by a single shift register in a module under seventy lines long.
 Reading a flash chip is the classic first step
 toward designs that load their own programs --
 and now we have the pieces to do it.

@@ -4,70 +4,59 @@ Now that we have seen counters and FIFOs,
 let's put a few pieces together and build a real peripheral:
 a UART echo.
 
-A UART sends bytes one bit at a time over a single wire, `tx`.
+A UART sends bytes one bit at a time over a single wire.
 When the line is idle, it is held high.
 To send a byte, the transmitter pulls the line low for one bit period (the "start" bit),
-then sends the eight bits of the byte one at a time,
+then sends the eight bits of the byte one at a time, least significant bit first,
 and finally releases the line high again (the "stop" bit).
 
-Our project is a `Top` module which streams the message `"Hello, world!"` out of its `tx` port,
-one character at a time.
+Our project is a `Top` module which echoes bytes back:
+whatever byte arrives on its `rx` port is transmitted back out of its `tx` port.
 
 .. literalinclude:: src/top.vir
     :caption: top.vir
     :language: virdant
 
-This module is larger than the previous examples,
-but it is built out of the same pieces we have already seen:
-ports, drivers, registers, submodules, and `match`.
-The UART transmitter itself lives in a separate file, `src/uart.vir`,
-which we will look at piece by piece below.
+This module is small,
+because the interesting logic lives in two submodules:
+a UART transmitter (`UartSender`) and a UART receiver (`UartReceiver`),
+both in `src/uart.vir`.
+We will look at the transmitter first, then the receiver.
 
 
 The Top module
 --------------
-`Top` declares two outgoing ports: `tx`, the serial line itself,
-and `exit`, which tells the test harness when we are done.
+`Top` declares two serial pins: `tx`, the outgoing line,
+and `rx`, the incoming line.
 
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
     :lines: 7-8
 
-When the character rom produces a `0` (the terminator of our message)
-and the sender is ready for another byte,
-`exit` becomes `@Valid(0)` and the simulation ends.
-
 `Top` does not implement the UART protocol itself.
-Instead, it instantiates two submodules and wires them together:
+Instead, it instantiates the two submodules and wires them together:
 
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
-    :lines: 10-18
+    :lines: 10-20
 
-The `sender` is the actual UART transmitter,
-and `char_rom` is a small lookup table holding the message.
-Whenever the sender is ready, `Top` feeds it the current character from the rom.
-
-A register `char_index` walks through the message:
-
-.. literalinclude:: src/top.vir
-    :language: virdant
-    :dedent:
-    :lines: 20-27
-
-Each time a character is handed to the sender (`inp_fires`),
-`char_index` increments.
-When it reaches the `0` terminator, `sending` drops and the message is done.
+The `sender` drives the `tx` line,
+and the `receiver` listens on the `rx` line.
+The last line is the whole point of this example:
+`sender.inp :=: receiver.out` connects two sockets directly to each other.
+The receiver produces bytes on its `out` socket,
+and the sender consumes them from its `inp` socket,
+so every byte that arrives on `rx` is handed straight to the sender
+and echoed back out on `tx`.
 
 
-The state machine
------------------
-The interesting part is `UartSender`,
-which lives in its own file, `uart.vir`.
-Like our FIFO, it is a `server` behind a `Pipe` socket.
-Here is the whole file:
+The transmitter
+---------------
+The transmitter, `UartSender`, is a `server` behind a `Pipe` socket,
+just like the FIFO we built earlier.
+Here is the whole file, transmitter and receiver together:
 
 .. literalinclude:: src/uart.vir
     :caption: uart.vir
@@ -114,37 +103,110 @@ The transitions between states are the last statement in `UartSender`:
     :lines: 46-71
 
 Whenever the baud timer has run out, we advance:
-`Idle` latches a byte into `buffer` and moves to `Start`,
+`Idle` latches a byte from the `inp` socket into `buffer` and moves to `Start`,
 `Start` moves to `Data(0)`,
 `Data` counts its bit index up to `7` and then moves to `Stop`,
 and `Stop` returns to `Idle`.
 That is the entire protocol.
 
 
-The character rom
------------------
-`CharRom` is a read-only memory holding the message:
+The receiver
+------------
+The receiver, `UartReceiver`, faces the other direction:
+it watches the `rx` line and assembles the bits it sees back into a byte.
 
-.. literalinclude:: src/top.vir
+Its output is a `client` socket, `out`,
+whose `data` simply presents the contents of a register:
+
+.. literalinclude:: src/uart.vir
     :language: virdant
     :dedent:
-    :lines: 43-53
+    :lines: 78-80
 
-The `@image_inline` attribute embeds the string directly in the design:
-`"Hello, world!\r\n"` followed by a `0` terminator.
-The `index` port selects one character at a time,
-and `Top` advances the index as each character is sent.
+That register, `hold`, holds one received byte as a `Valid[Word[8]]`:
+
+.. literalinclude:: src/uart.vir
+    :language: virdant
+    :dedent:
+    :lines: 88-108
+
+While `hold` is `@Invalid`, there is nothing to deliver.
+When a byte arrives, `hold` latches `@Valid(buffer)` and keeps presenting it
+until the consumer (here, the sender) takes it,
+at which point `hold` drops back to `@Invalid`.
+This is exactly the handshake a `Pipe` socket wants.
+
+How do we know when a byte has arrived?
+The receiver runs the same kind of countdown as the transmitter:
+
+.. literalinclude:: src/uart.vir
+    :language: virdant
+    :dedent:
+    :lines: 110-132
+
+The trick is in the `@Idle` arm.
+While the line idles high, the timer holds at `0`, waiting.
+The moment `rx` drops low, the timer loads `half_period`,
+which is half of a bit period.
+Sampling half a bit period after the falling edge
+lands the receiver near the middle of the start bit,
+and every following bit is one full bit period apart,
+so every sample lands near the middle of its bit too.
+
+The `byte_done` wire sums up the completion condition:
+we are in `Stop`, the line is high (a valid stop bit), and the timer has run out.
+
+.. literalinclude:: src/uart.vir
+    :language: virdant
+    :dedent:
+    :lines: 84-86
+
+The state machine itself mirrors the transmitter's,
+but running backwards:
+
+.. literalinclude:: src/uart.vir
+    :language: virdant
+    :dedent:
+    :lines: 138-168
+
+In `Idle`, a falling edge on `rx` starts a frame.
+In `Start`, we check the line again:
+if it has gone back high, that was a glitch, not a start bit,
+and we return to `Idle`.
+Otherwise the line is confirmed low,
+and each `Data` step shifts the current `rx` value into the top of `buffer`
+with `buffer <= word(rx, buffer[8..1])`,
+since UART sends the least significant bit first.
+After eight bits, `Stop` waits for the line to go high,
+`byte_done` fires, and the finished byte is latched into `hold`.
 
 
 Waveform
 --------
-Here is the transmitter in action,
-sending the first few characters of the message:
+Let's land this example by watching it run in the waveform viewer.
+The design does not run by itself this time:
+we have to play the role of the far-end UART
+and send a byte into `rx` ourselves.
+The `run.poke` script sends the byte `0x41` (`A`),
+one bit at a time, nine cycles per bit:
+
+.. code-block:: console
+
+    $ vir poke run.poke
+
+And here is the echo in action:
 
 .. vcd:: trace.vcd
 
     label Clock
     signal top.clock:clk
+
+    label Input
+    signal top.rx
+
+    label Receiver
+    signal top.receiver.state:uart::UartState
+    signal top.receiver.buffer:bin
 
     label Sender
     signal top.sender.state:uart::UartState
@@ -153,11 +215,17 @@ sending the first few characters of the message:
     label Serial output
     signal top.tx
 
-Watch `top.tx`:
+Follow `rx` on the left half:
 it idles high, drops low for the start bit,
-toggles through the eight data bits,
-and returns high for the stop bit, over and over,
-once per character of the message.
+shifts through the eight data bits of `0x41`,
+and returns high for the stop bit.
+Meanwhile `receiver.buffer` shifts those same bits in one by one,
+ending at `01000001` = `A`,
+and `hold` goes `@Valid`.
+From there the sender takes over:
+it latches the byte into `sender.buffer` (`65`, the ASCII code of `A`),
+and you can watch it re-play the identical frame out on `tx`
+on the right half of the waveform.
 
 .. note::
 

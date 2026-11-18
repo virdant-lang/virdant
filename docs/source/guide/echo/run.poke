@@ -1,0 +1,41 @@
+vcd trace.vcd
+
+// We send the byte 0x41 ("A") into rx, one bit at a time,
+// LSB first. Each bit lasts 9 cycles, matching the baud
+// timer of the sender and receiver.
+
+// Idle the line high first.
+poke rx true
+tick 9
+
+// Start bit.
+poke rx false
+tick 9
+
+// Data bits of 0x41 = 0b01000001, LSB first.
+poke rx true
+tick 9
+poke rx false
+tick 9
+poke rx false
+tick 9
+poke rx false
+tick 9
+poke rx false
+tick 9
+poke rx false
+tick 9
+poke rx true
+tick 9
+poke rx false
+tick 9
+
+// Stop bit.
+poke rx true
+tick 9
+
+// Hold the line idle while the sender echoes the
+// byte back out on tx.
+tick 130
+
+exit
