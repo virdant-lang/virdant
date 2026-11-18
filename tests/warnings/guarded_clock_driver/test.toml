@@ -1,0 +1,5 @@
+kind = "check"
+expect = "ok"
+warnings_ok = true
+description = "GuardedClockDriver: a driver to a Clock-typed target under a condition (a `when` guard, or an `else` arm, even under a constant guard) is legal but warns (`GuardedClockDriver`): a conditional cannot change which clock the target denotes, so the gating is pointless; the guarded driver still joins the target into the driving clock's class, so the clock is usable downstream."
+filecheck = "src/guarded_clock_driver.vir"

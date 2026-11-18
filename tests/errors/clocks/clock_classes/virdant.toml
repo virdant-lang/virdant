@@ -2,4 +2,4 @@
 name = "clock_classes"
 
 [prog]
-top = "clock_classes::GuardedClock"
+top = "clock_classes::ComputedClock"
