@@ -35,3 +35,7 @@ Please report each violation of any of these rules.
 - When working with AST nodes, forbid grabbing number children (eg, `node.child(0)`)
   when it would be more appropriate to use or define
   a semantic helper in the node for that child (eg, `node.subject()`)
+
+## Versioning
+- Require that any change which introduces or modifies version is reconciled against `RELEASES.md`
+- Require that any change to the version of any Rust, Python, or other package matches `VERSION`.
