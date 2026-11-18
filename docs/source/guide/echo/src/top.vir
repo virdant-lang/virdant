@@ -14,7 +14,7 @@ pub mod Top for virt::Virt {
 
     mod receiver of uart::UartReceiver {
         it.clock := clock
-        it.rx       := rx
+        it.rx    := rx
     }
 
     sender.inp :=: receiver.out

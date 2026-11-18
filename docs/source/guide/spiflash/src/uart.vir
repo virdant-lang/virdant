@@ -8,7 +8,7 @@ union type UartState {
 pub mod UartSender {
     incoming clock : Clock
 
-    server socket inp of Pipe[Word[8]] {
+    reverse socket inp of Pipe[Word[8]] {
         it.ready := state == @Idle && baud_timer == 0
     }
 
@@ -49,23 +49,23 @@ pub mod UartSender {
                 match inp.data {
                     with @Valid(data) {
                         buffer <= data
-                        state <= @Start()
+                        state  <= @Start()
                     }
                 }
             }
             with @Start() {
-                state <= @Data(0)
+                state  <= @Data(0)
             }
             with @Data(data) if {
                 when data < 7 {
-                    state <= @Data(data + 1)
+                    state  <= @Data(data + 1)
                 }
                 else {
-                    state <= @Stop()
+                    state  <= @Stop()
                 }
             }
             with @Stop() {
-                state <= @Idle()
+                state  <= @Idle()
             }
         }
     }
@@ -73,9 +73,9 @@ pub mod UartSender {
 
 pub mod UartReceiver {
     incoming clock : Clock
-    incoming rx : Bit
+    incoming rx    : Bit
 
-    client socket out of Pipe[Word[8]] {
+    forward socket out of Pipe[Word[8]] {
         it.data := hold
     }
 
@@ -139,30 +139,30 @@ pub mod UartReceiver {
         when baud_timer == 0 match state {
             with @Idle() if {
                 when !rx {
-                    state <= @Start()
+                    state  <= @Start()
                 }
             }
             with @Start() if {
                 when rx {
-                    state <= @Idle()
+                    state  <= @Idle()
                 }
                 else {
-                    state <= @Data(0)
+                    state  <= @Data(0)
                 }
             }
             with @Data(index) {
                 buffer <= word(rx, buffer[8..1])
                 if {
                     when index < 7 {
-                        state <= @Data(index + 1)
+                        state  <= @Data(index + 1)
                     }
                     else {
-                        state <= @Stop()
+                        state  <= @Stop()
                     }
                 }
             }
             with @Stop() {
-                state <= @Idle()
+                state  <= @Idle()
             }
         }
     }

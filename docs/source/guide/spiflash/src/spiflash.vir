@@ -1,20 +1,20 @@
 pub socket Spi {
-    cosi clock : Bit
-    cosi cs    : Bit
-    cosi mosi  : Bit
-    soci miso  : Bit
+    outgoing clock : Bit
+    outgoing cs    : Bit
+    outgoing mosi  : Bit
+    incoming miso  : Bit
 }
 
 pub mod SpiFlash {
     incoming clock : Clock
 
-    client socket spi of Spi {
+    forward socket spi of Spi {
         it.clock := running && !is_offbeat
-        it.cs := false
-        it.mosi := shift[31]
+        it.cs    := false
+        it.mosi  := shift[31]
     }
 
-    client socket out of Pipe[Word[8]] {
+    forward socket out of Pipe[Word[8]] {
         it.data := if {
             when !running => @Valid(shift[8..0])
             else => @Invalid()
@@ -49,22 +49,22 @@ pub mod SpiFlash {
     if {
         when running && is_offbeat if {
             when tx_remaining > 0 {
-                shift <= word(shift[31..0], 0w1)
+                shift        <= word(shift[31..0], 0w1)
                 tx_remaining <= tx_remaining - 1
             }
             else {
-                shift <= word(shift[31..0], spi.miso)
-                rx_bits <= rx_bits + 1w3
+                shift        <= word(shift[31..0], spi.miso)
+                rx_bits      <= rx_bits + 1w3
                 if {
                     when rx_bits == 7 {
-                        running <= false
+                        running      <= false
                     }
                 }
             }
         }
         else if {
             when out.ready {
-                running <= true
+                running      <= true
             }
         }
     }

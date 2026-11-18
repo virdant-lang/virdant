@@ -1,6 +1,6 @@
 union type GcdState {
     Idle()
-    Running(x : Word[8], y : Word[8])
+    Running(x   : Word[8], y : Word[8])
     Done(result : Word[8])
 }
 
@@ -12,8 +12,8 @@ struct type GcdRequest {
 pub mod Gcd {
     incoming clock : Clock
 
-    server socket inp of Pipe[GcdRequest]
-    client socket out of Pipe[Word[8]]
+    reverse socket inp of Pipe[GcdRequest]
+    forward socket out of Pipe[Word[8]]
 
     reg state : GcdState {
         initial it <= @Idle()

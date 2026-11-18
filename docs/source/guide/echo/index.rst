@@ -54,7 +54,7 @@ and echoed back out on `tx`.
 
 The transmitter
 ---------------
-The transmitter, `UartSender`, is a `server` behind a `Pipe` socket,
+The transmitter, `UartSender`, is a `reverse` behind a `Pipe` socket,
 just like the FIFO we built earlier.
 Here is the whole file, transmitter and receiver together:
 
@@ -115,7 +115,7 @@ The receiver
 The receiver, `UartReceiver`, faces the other direction:
 it watches the `rx` line and assembles the bits it sees back into a byte.
 
-Its output is a `client` socket, `out`,
+Its output is a `forward` socket, `out`,
 whose `data` simply presents the contents of a register:
 
 .. literalinclude:: src/uart.vir

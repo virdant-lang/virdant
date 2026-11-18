@@ -78,18 +78,18 @@ The SPI bus itself is described by a socket, `Spi`:
     :lines: 1-6
 
 Like `Pipe`, this is a socket with two sides.
-The `cosi` and `soci` prefixes say which way each wire flows:
-`cosi` stands for *controller-out, slave-in*,
-and `soci` for *slave-out, controller-in*.
+The `outgoing` and `incoming` prefixes say which way each wire flows:
+an `outgoing` wire flows out of the controller into the peripheral,
+and an `incoming` wire flows back from the peripheral to the controller.
 The `SpiFlash` module is the controller on this bus,
-so the clock, chip select, and `mosi` lines are `cosi`,
+so the clock, chip select, and `mosi` lines are `outgoing`,
 while `miso` flows the other way.
 
 
 The flash controller
 --------------------
 `SpiFlash` is the interesting part.
-It speaks the flash chip's protocol over its `spi` client socket
+It speaks the flash chip's protocol over its `spi` forward socket
 and offers each byte it reads on an `out` pipe.
 Here is the whole file:
 
@@ -97,7 +97,7 @@ Here is the whole file:
     :caption: spiflash.vir
     :language: virdant
 
-The controller's two client sockets tie it to the rest of the design:
+The controller's two forward sockets tie it to the rest of the design:
 
 .. literalinclude:: src/spiflash.vir
     :language: virdant

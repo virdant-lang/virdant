@@ -5,24 +5,24 @@ import virt
 pub mod Top for virt::Virt {
     incoming clock : Clock
 
-    outgoing spi_ck : Bit
-    outgoing spi_cs : Bit
+    outgoing spi_ck   : Bit
+    outgoing spi_cs   : Bit
     outgoing spi_mosi : Bit
     incoming spi_miso : Bit
 
     outgoing tx : Bit
 
     mod flash of spiflash::SpiFlash {
-        it.clock := clock
-        spi_ck := it.spi.clock
-        spi_cs := it.spi.cs
-        spi_mosi := it.spi.mosi
+        it.clock    := clock
+        spi_ck      := it.spi.clock
+        spi_cs      := it.spi.cs
+        spi_mosi    := it.spi.mosi
         it.spi.miso := spi_miso
     }
     mod sender of uart::UartSender {
-        it.clock := clock
-        it.inp :=: flash.out
-        tx := it.tx
+        it.clock    := clock
+        it.inp      :=: flash.out
+        tx          := it.tx
     }
 
     wire null_pending : Bit {

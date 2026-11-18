@@ -1,11 +1,11 @@
 pub mod Fifo {
     incoming clock : Clock
 
-    server socket inp of Pipe[Word[8]] {
+    reverse socket inp of Pipe[Word[8]] {
         it.ready := !is_full
     }
 
-    client socket out of Pipe[Word[8]] {
+    forward socket out of Pipe[Word[8]] {
         it.data := out_data
     }
 

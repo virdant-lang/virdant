@@ -11,8 +11,8 @@ which works by repeatedly subtracting the smaller number from the larger one.
     :language: virdant
 
 `Gcd` has an `incoming` port `clock`,
-a `server` socket `inp` of `Pipe[GcdRequest]`,
-and a `client` socket `out` of `Pipe[Word[8]]`.
+a `reverse` socket `inp` of `Pipe[GcdRequest]`,
+and a `forward` socket `out` of `Pipe[Word[8]]`.
 Requests arrive on `inp`, and the answers leave on `out`.
 We will see what all of this means below.
 
@@ -94,10 +94,10 @@ and the other side carries a `ready` bit.
     :dedent:
 
 `Gcd` declares two sockets.
-The `inp` socket is a `server` socket of `Pipe[GcdRequest]`:
+The `inp` socket is a `reverse` socket of `Pipe[GcdRequest]`:
 the module *receives* requests on `inp.data`
 and *drives* `inp.ready` to say when it can accept one.
-The `out` socket is a `client` socket of `Pipe[Word[8]]`:
+The `out` socket is a `forward` socket of `Pipe[Word[8]]`:
 the module *drives* `out.data` with the answer
 and *receives* `out.ready` to learn when the answer has been taken.
 
