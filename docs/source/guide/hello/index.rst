@@ -239,7 +239,7 @@ Up to this point, waveforms have been the primary way we interact with our desig
 Now that we have platforms, though, we can actually start running our designs for real.
 
 Of course, when things go wrong on hardware, nothing is better than a waveform.
-For small designs, you can produce a :tooltip:`VCD (Value change dump
+For small designs, you can produce a :tooltip:`VCD (Value change dump)`.
 
 
 

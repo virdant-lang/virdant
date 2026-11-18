@@ -9,28 +9,17 @@ Usage
 
   $ vir run
 
-``vir run`` simulates your ``Top`` module directly from the Virdant sources — no Verilog involved.
-A new project runs as-is:
+``vir run`` simulates your `Top` module if it implements the `virt::Virt` platform
+(see :doc:`/reference/platforms`).
 
-.. code-block:: console
+The UART is controlled by standard input.
 
-  $ vir run
-  Hello, world!
-
-The simulator feeds your design's inputs and watches its outputs.
-For a design running on a virtual board, input comes from standard input and output goes to standard output,
-so the design behaves like an ordinary command-line program.
+To terminate the simulation early, you can use `Ctrl+C`.
 
 Options
 -------
 ``--baud <BAUD>``
-    UART baud rate for the virt board (default 115200, overridable via
-    ``[virt]`` in ``virdant.toml``).
-    The board decodes the design's ``tx`` and drives ``rx`` at exactly
-    ``clock_hz / baud`` cycles per bit: a design must clock its UART
-    bits at that divisor (within the usual UART tolerance of half a
-    bit over a frame) in both directions.
-    The baud must leave at least two clock cycles per bit.
+    UART baud rate (default 115200)
 
 ``--cycles <N>``
     Put an upper bound on the number of cycles simulated.
@@ -38,23 +27,16 @@ Options
 
 ``--trace [<FILE>]``
     Record a VCD waveform while the design runs.
-    With a filename (e.g. ``--trace trace.vcd``) the trace is written there;
-    bare ``--trace`` defaults to ``trace.vcd``.
     The waveform can then be opened in a viewer such as Surfer or GTKWave.
-
-``-v``, ``--verbose``
-    Print extra detail while the simulation runs.
-
-``--fps``
-    Pace the simulation to real time, based on the platform's declared clock frequency.
-    Useful for designs that interact with you as they run.
-
-``--fps-no-cap``
-    Like ``--fps``, but without the frame-rate cap: the simulation runs unthrottled.
+    Be careful when simulating large or long-running designs,
+    since the VCD file can be huge!
 
 ``--flash <FILE>``
     Preload the simulated SPI flash device with the contents of a file.
 
 See also
 --------
+* :doc:`/reference/platforms`: Platforms in Virdant.
 * :doc:`/tools/build`: Compile the design to Verilog instead of simulating it.
+* `Surfer <https://surfer-project.org/>`_: A modern, open-source waveform viewer.
+* `GTKWave <https://gtkwave.sourceforge.net/>`_: A classic, long-standing waveform viewer.

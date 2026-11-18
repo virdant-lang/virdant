@@ -15,6 +15,9 @@ Please report each violation of any of these rules.
 - Ensure that any changes to the language are reflected in `docs/source/reference`
 - Ensure that any changes to the language are reflected in `agents/skills/virdant`
 
+## Tool Changes
+- When adding or changing tools, make sure the changes are reflected in `docs/source/tools`
+
 ## Code Comments
 - Disallow unnecessary comments or overly verbose
 - Disallow comments which are not written for human readability.

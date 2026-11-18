@@ -9,22 +9,16 @@ Usage
 
   $ vir build
 
-``vir build`` elaborates your Virdant design and translates it into Verilog,
-written to your project's ``build`` directory.
-The generated Verilog is self-contained:
-one module per Virdant module, with the same names and ports,
-so it can be dropped into any standard Verilog flow.
+``vir build`` elaborates your Virdant design and translates it into Verilog.
+The results are put in the ``build`` directory.
 
-The generated Verilog is a faithful translation of your design —
-it does not attempt to optimize or restructure it.
-It is simply what your Virdant modules look like, expressed in Verilog.
+You can simulate your design using Icarus Verilog or Verilator.
+You can also synthesizing it with the Yosys toolchain and get it running on your FPGA!
 
-Options
--------
-``-C``, ``--dir <DIR>``
-    Operate on the project in ``DIR`` instead of the current directory.
-
-Next steps
-----------
+See Also
+--------
 * :doc:`/tools/synth`: Synthesize the generated Verilog for an FPGA.
 * :doc:`/tools/check`: Re-check your project after making changes.
+* `Icarus Verilog <https://steveicarus.github.io/iverilog/>`_: An open-source Verilog simulator.
+* `Verilator <https://www.verilator.org/>`_: A fast, open-source Verilog simulator.
+* `Yosys <https://yosyshq.net/yosys/>`_: An open-source synthesis suite for Verilog.

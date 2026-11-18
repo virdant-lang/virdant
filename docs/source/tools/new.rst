@@ -10,17 +10,12 @@ Usage
   $ vir new <PROJECT>
 
 This creates a new directory named ``<PROJECT>`` with a fresh Virdant project inside it,
-ready to check, simulate, and build:
-
-.. code-block:: console
-
-  $ vir new hello
-  $ cd hello
+ready to check, simulate, and build.
 
 A new project comes with:
 
 * ``virdant.toml`` — the project manifest,
-* ``src/top.vir`` — a hello-world design with a ``Top`` module,
+* ``src/top.vir`` — a hello-world design with a `Top` module,
 * and a Git repository, unless you asked not to.
 
 Options
@@ -32,7 +27,7 @@ Options
     If the new project already lives inside a Git repository (or Git is unavailable),
     Virdant skips initialization either way.
 
-Next steps
+See also
 ----------
 * :doc:`/tools/check`: Verify the project compiles.
 * :doc:`/tools/run`: Run it in the Virdant simulator.

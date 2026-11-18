@@ -9,17 +9,41 @@ Usage
 
   $ vir upload
 
-``vir upload`` does everything :doc:`/tools/bitstream` does —
-synthesis, place-and-route, and bitstream generation —
-and then uploads the resulting bitstream to your FPGA board.
+``vir upload`` will attempt to build and upload your design to your FPGA.
 
-The programmer used is selected automatically from the platform,
-which in turn comes from your top module's ``for`` clause:
+In order, it will:
 
-* ``IceSugar`` — ``icesprog``
-* ``IceStick`` — ``iceprog``
-* ``Fomu`` — ``dfu-util``
-* ``ArtyA7`` and ``ArtyA7_100T`` — ``openFPGALoader``
+- compile your design to Verilog, placing it in the `build/` directory
+- synthesize the Verilog with Yosys.
+- place-and-route the synthesized design with NextPNR
+- generate a bitstream
+- flash the bitstream to your device
+
+The programmer used is selected automatically from the platform.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Platform
+     - Programmer
+   * - ``ice40::IceSugar``
+     - ``icesprog``
+   * - ``ice40::IceStick``
+     - ``iceprog``
+   * - ``ice40::Fomu``
+     - ``dfu-util``
+   * - ``xilinx::ArtyA7``
+     - ``openFPGALoader``
+   * - ``xilinx::ArtyA7_100T``
+     - ``openFPGALoader``
+
+.. warning::
+
+    For ``vir upload`` to work, all tools must be installed on your ``$PATH``.
+
+.. warning::
+
+    To upload your design, you must have the proper udev permissions to access the USB device.
 
 Options
 -------
@@ -33,6 +57,6 @@ Options
 ``--allow-timing-failure``
     Do not fail when the design does not meet its timing constraints.
 
-Next steps
-----------
+See also
+--------
 * :doc:`/tools/run`: Before uploading, try your design in the simulator.
