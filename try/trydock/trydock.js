@@ -147,12 +147,16 @@ const $ = (id) => root.querySelector(`#${id}`);
 const dock = $('trydock');
 const pill = document.getElementById('trydock-pill')
   ?? (() => {
-    // The boot script normally creates the pill; fall back to a
-    // minimal one if this bundle was loaded directly.
+    // The boot script normally creates the pill (inside the footer
+    // bar); fall back to a minimal one if this bundle was loaded
+    // directly.
+    const bar = document.createElement('div');
+    bar.id = 'trydock-bar';
     const p = document.createElement('button');
     p.id = 'trydock-pill';
     p.textContent = 'Try Virdant';
-    document.body.appendChild(p);
+    bar.appendChild(p);
+    document.body.appendChild(bar);
     return p;
   })();
 const fileTabs = $('td-filetabs');
@@ -1159,7 +1163,11 @@ const SCROLL_KEY = 'virdant-trydock:scrolly';
 
 function parkPageScroll() {
   const grid = document.querySelector('.wy-grid-for-nav');
-  const y = (grid && !dock.hidden) ? grid.scrollTop : window.scrollY;
+  // With boot.css the grid is permanently the page scroller (its
+  // scrollbar stops at the footer bar), so its scrollTop is the
+  // position; without it (bundle loaded standalone) the window is.
+  const gridScrolls = grid && getComputedStyle(grid).overflowY !== 'visible';
+  const y = gridScrolls ? grid.scrollTop : window.scrollY;
   try { sessionStorage.setItem(SCROLL_KEY, String(Math.round(y))); } catch { /* storage unavailable */ }
 }
 window.addEventListener('pagehide', parkPageScroll);
@@ -1189,7 +1197,22 @@ function syncPageScroller() {
     grid.style.height = `calc(100% - ${hpx})`;
     grid.style.overflowY = 'auto';
     grid.style.overflowX = 'hidden'; // matches the theme's root overflow-x
-    if (taking) grid.scrollTop = restoreScrollY();
+    if (taking) {
+      // Fresh navigations carry their scroll position on their own:
+      // with boot.css the grid is permanently the scroller, so its
+      // scrollTop survives opening the dock untouched.  Reload and
+      // back/forward lose it (the root can't be restored into), so
+      // restore the parked position there.
+      let nav = null;
+      try { nav = performance.getEntriesByType('navigation')[0]?.type ?? null; } catch { /* not available */ }
+      if (nav === 'reload' || nav === 'back_forward') {
+        grid.scrollTop = restoreScrollY();
+      } else if (getComputedStyle(grid).overflowY === 'visible') {
+        // No boot css: the grid wasn't the page scroller; carry the
+        // window position over.
+        grid.scrollTop = window.scrollY;
+      }
+    }
     // The ToC sidebar is position:fixed (outside the grid), so give its
     // own scroller the same treatment: it then ends above the dock too.
     // The theme also pads .wy-nav-side by 2em below the scroller (space
@@ -1211,7 +1234,10 @@ function syncPageScroller() {
       side.style.height = '';
       side.parentElement.style.paddingBottom = '';
     }
-    window.scrollTo(0, y);
+    // With boot.css the grid stays the scroller after clearing the
+    // inline styles, so the position survives on its own; only in the
+    // standalone layout (root scrolling) must it be handed back.
+    if (getComputedStyle(grid).overflowY === 'visible') window.scrollTo(0, y);
   }
 }
 

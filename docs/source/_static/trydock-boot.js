@@ -21,11 +21,47 @@
   if (typeof window === 'undefined') return;
   if (document.getElementById('trydock-pill')) return;
 
+  // Not available on mobile at all: no footer button, no auto-reopen,
+  // no bundle load.
+  if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+    return;
+  }
+
+  // The pill lives in a full-width footer bar pinned to the bottom of
+  // the page; the square button sits flush at the left edge.
+  var bar = document.createElement('div');
+  bar.id = 'trydock-bar';
+
   var pill = document.createElement('button');
   pill.id = 'trydock-pill';
   pill.type = 'button';
   pill.title = 'Open the Virdant playground dock';
   pill.innerHTML = '<span class="trydock-pill-dot"></span>Try Virdant';
+  bar.appendChild(pill);
+  document.body.appendChild(bar);
+
+  // boot.css makes the theme's .wy-grid-for-nav the page scroller
+  // (the root scrollbar must stop at the footer bar, not run behind
+  // it).  The browser's default keyboard scrolling targets the now
+  // unscrollable root, so forward the scrolling keys ourselves when
+  // the focus is on the page itself (not on a control inside it —
+  // those scroll their own nearest scroller natively).
+  document.addEventListener('keydown', (e) => {
+    const t = e.target;
+    if (t && t !== document && t !== document.body && t !== document.documentElement) return;
+    const grid = document.querySelector('.wy-grid-for-nav');
+    if (!grid) return;
+    let delta = null;
+    if (e.key === 'ArrowDown') delta = 48;
+    else if (e.key === 'ArrowUp') delta = -48;
+    else if (e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey)) delta = grid.clientHeight * 0.9;
+    else if (e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) delta = -grid.clientHeight * 0.9;
+    else if (e.key === 'Home') { grid.scrollTop = 0; e.preventDefault(); return; }
+    else if (e.key === 'End') { grid.scrollTop = grid.scrollHeight; e.preventDefault(); return; }
+    else return;
+    e.preventDefault();
+    grid.scrollTop += delta;
+  });
 
   var loaded = false;
 
@@ -123,7 +159,5 @@
       },
     };
   }
-
-  document.body.appendChild(pill);
   }
 })();

@@ -15,15 +15,12 @@ The Virdant Hardware Language
     Repository <https://github.com/virdant-lang/virdant>
     Discord <https://discord.gg/F9trwvHPf6>
 
-Virdant is a modern, strongly-typed hardware description language designed for predictability and developer productivity.
+Hardware should be beautiful.
 
-It was created in response to a simple philosophy: Hardware should be beautiful.
+Virdant is a modern hardware description language designed for people.
 
-The industry standard Verilog suffers from loose typing rules that allow malformed designs to quietly pass as valid hardware.
-This leads to frustrating, hard-to-debug issues.
-
-Virdant eliminates entire classes of bugs at compile time.
-By enforcing strict type safety, explicit semantics, and modern language ergonomics,
+Elegant and simple, well-designed and productive.
+Through type safety, consistent language semantics, and modern language ergonomics,
 Virdant allows hardware engineers to design complex digital systems with confidence.
 
 Ready to get started?
@@ -32,7 +29,3 @@ Ready to get started?
 * :doc:`The Guide <guide/index>`: Learn Virdant from scratch through a series of examples.
 * :doc:`Core Principles <principles>`: Understand the philosophy behind Virdant's design.
 * `Discord <https://discord.gg/F9trwvHPf6>`_: Join me on Discord.
-
-Get the Code
-------------
-* `On Github <https://github.com/virdant-lang/virdant>`_

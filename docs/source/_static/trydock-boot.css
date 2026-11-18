@@ -1,51 +1,108 @@
-/* Virdant docs-site "try dock" — boot-time styles for the persistent
-   pill (the dock's own styles ship inside /try/trydock/trydock.js).
-   Works on both docs themes; the dock itself is always dark. */
+/* Virdant docs-site "try dock" — boot-time styles for the footer bar
+   with the persistent "Try Virdant" button (the dock's own styles ship
+   inside /try/trydock/trydock.js).  Works on both docs themes; the
+   dock itself is always dark.
 
-#trydock-pill {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 9998;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  border-radius: 999px;
-  border: 1px solid #2E7D32;
-  background: #ffffff;
-  color: #2E7D32;
-  font-family: "Nunito", system-ui, sans-serif;
-  font-weight: 800;
-  font-size: 14px;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
-}
+   Layout: a small footer spans the whole bottom of the page; the
+   square button sits flush at the LEFT edge.  Not shown on mobile. */
 
-#trydock-pill:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
-}
+@media (min-width: 769px) {
+  /* The page scrollbar must stop at the footer bar instead of running
+     behind it down to the viewport bottom.  The theme lays the page
+     out in .wy-grid-for-nav (position:absolute, height:100%) with the
+     document as the scroller; make the grid the scroller instead,
+     ending exactly at the bar's top edge.  (The dock bundle uses the
+     same handover while it is open.)  trydock-boot.js forwards the
+     keyboard scrolling keys, which otherwise target the unscrollable
+     root. */
+  .wy-grid-for-nav {
+    height: calc(100% - 40px);
+    overflow-y: auto;
+    overflow-x: hidden; /* matches the theme's root overflow-x */
+  }
 
-#trydock-pill[hidden] { display: none; }
+  /* The ToC sidebar's own scroller ends at the bar too.  The theme
+     pads .wy-nav-side by 2em below its scroller (space for the RTD
+     version badge, absent here); drop it so the ToC runs down to the
+     bar instead of leaving a dead band. */
+  .wy-side-scroll {
+    height: calc(100% - 40px);
+  }
+  .wy-nav-side {
+    padding-bottom: 0;
+  }
 
-.trydock-pill-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #8FC225;
-  flex: none;
-}
+  #trydock-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 40px;
+    z-index: 9998;
+    display: flex;
+    align-items: stretch;
+    /* Right edge: Chromium's link-URL status bubble occupies the
+       bottom-left corner, so a left-aligned button would be covered
+       whenever a link is hovered. */
+    justify-content: flex-end;
+    background: #ffffff;
+    border-top: 1px solid #e2e5e9;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+  }
 
-#trydock-pill.trydock-loading {
-  opacity: 0.6;
-  pointer-events: none;
-}
+  #trydock-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    border: none;
+    border-right: 1px solid #e2e5e9;
+    border-radius: 0;
+    background: transparent;
+    color: #2E7D32;
+    font-family: "Nunito", system-ui, sans-serif;
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
 
-[data-theme="dark"] #trydock-pill {
-  background: #21242b;
-  border-color: #4fb583;
-  color: #d7dae0;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  #trydock-pill:hover {
+    background: rgba(46, 125, 50, 0.08);
+  }
+
+  #trydock-pill[hidden] { display: none; }
+
+  /* While the dock is open the bundle hides the button; hide the
+     otherwise-empty bar with it. */
+  #trydock-bar:has(#trydock-pill[hidden]) { display: none; }
+
+  .trydock-pill-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #8FC225;
+    flex: none;
+  }
+
+  #trydock-pill.trydock-loading {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  [data-theme="dark"] #trydock-bar {
+    background: #17191f;
+    border-top-color: #2a2e36;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  [data-theme="dark"] #trydock-pill {
+    background: transparent;
+    border-right-color: #2a2e36;
+    color: #d7dae0;
+  }
+
+  [data-theme="dark"] #trydock-pill:hover {
+    background: rgba(79, 181, 131, 0.12);
+  }
 }
