@@ -1,4 +1,7 @@
-/* Virdant web demo — dark theme. */
+/* Virdant web demo — dark theme (default), light theme on
+   `html[data-theme="light"]`.  The light palette mirrors the docs
+   site (virdant.org): white page, #333 text, the green accent
+   (#2E7D32 links, #8FC225 brand green). */
 
 :root {
   --bg: #191b20;
@@ -9,11 +12,31 @@
   --text-muted: #8f95a1;
   --accent: #4fb583;
   --accent-dim: #2c5c45;
+  --on-accent: #ffffff;
   --danger: #e06c75;
   --warning: #e5c07b;
   --info: #61afef;
+  --overlay: rgba(0, 0, 0, 0.55);
+  --scrollbar-hover: #3d434f;
   --mono: "JetBrains Mono", "Fira Mono", "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-raised: #f2f4f7;
+  --bg-hover: #e7eaef;
+  --border: #ccd1da;
+  --text: #333333;
+  --text-muted: #6b7280;
+  --accent: #2E7D32;
+  --accent-dim: #2E7D32;
+  --on-accent: #ffffff;
+  --danger: #b3261e;
+  --warning: #9a6b00;
+  --info: #1a6fbf;
+  --overlay: rgba(0, 0, 0, 0.35);
+  --scrollbar-hover: #b6bcc7;
 }
 
 * { box-sizing: border-box; }
@@ -30,7 +53,7 @@ body {
   display: grid;
   /* Left (IDE) pane width is draggable via the #splitter column. */
   grid-template-columns: var(--left-width, 56%) 8px 1fr;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto 1fr;
   height: 100vh;
 }
 
@@ -38,7 +61,7 @@ body {
 
 #left {
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 2;
   display: flex;
   min-width: 0;
   overflow: hidden;
@@ -169,7 +192,7 @@ body {
 
 #right {
   grid-column: 3;
-  grid-row: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -251,9 +274,9 @@ body {
   border-radius: 3px;
   letter-spacing: 0.05em;
 }
-.diag.error .badge { color: var(--danger); background: rgba(224, 108, 117, 0.12); }
-.diag.warning .badge { color: var(--warning); background: rgba(229, 192, 123, 0.12); }
-.diag.info .badge { color: var(--info); background: rgba(97, 175, 239, 0.12); }
+.diag.error .badge { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.diag.warning .badge { color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.diag.info .badge { color: var(--info); background: color-mix(in srgb, var(--info) 12%, transparent); }
 
 .diag .loc {
   flex: none;
@@ -267,7 +290,7 @@ body {
 
 #splitter {
   grid-column: 2;
-  grid-row: 1;
+  grid-row: 2;
   background: var(--border);
   cursor: col-resize;
 }
@@ -275,12 +298,12 @@ body {
 
 #bottombar {
   grid-column: 1 / 4;
-  grid-row: 2;
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
-  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   background: var(--bg-raised);
 }
 
@@ -300,7 +323,7 @@ body {
 #run {
   background: var(--accent-dim) !important;
   border-color: var(--accent) !important;
-  color: #fff !important;
+  color: var(--on-accent) !important;
   font-weight: 600;
 }
 #run:hover:not(:disabled) { filter: brightness(1.15); }
@@ -308,7 +331,7 @@ body {
 #stop {
   background: var(--danger) !important;
   border-color: var(--danger) !important;
-  color: #fff !important;
+  color: var(--on-accent) !important;
   font-weight: 600;
 }
 
@@ -335,7 +358,7 @@ body {
 #settingsmodal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -455,5 +478,32 @@ body {
 /* Scrollbars (webkit) */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
-::-webkit-scrollbar-thumb:hover { background: #3d434f; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+/* ── Theme toggle (mirrors the docs site's dark-mode button) ─ */
+
+/* `#bottombar button` (higher specificity) styles the base chrome;
+   these rules override its shape for the round toggle. */
+#bottombar button#themetoggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin-left: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.15s;
+  line-height: 1;
+}
+#themetoggle:hover {
+  background: var(--bg-hover);
+  transform: scale(1.08);
+}
+#themetoggle:active { transform: scale(0.95); }
+#themetoggle svg { display: block; }
 ::-webkit-scrollbar-track { background: transparent; }

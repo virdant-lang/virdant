@@ -109,6 +109,111 @@ const virdantTheme = EditorView.theme({
   '.cm-activeLineGutter': { backgroundColor: '#21242b' },
 }, { dark: true });
 
+// Light editor chrome, mirroring the docs site's light palette
+// (virdant.org): white page, #333 text, green caret/selection.  The
+// syntax colors above are the docs' light-anchored palette, so they
+// read well on both backgrounds.
+const virdantThemeLight = EditorView.theme({
+  '&': { color: '#333333', backgroundColor: '#ffffff' },
+  '.cm-content': { caretColor: '#2E7D32' },
+  '&.cm-focused .cm-cursor': { borderLeftColor: '#2E7D32' },
+  '&.cm-focused .cm-selectionBackground, ::selection':
+    { backgroundColor: '#c9d8c2' },
+  '&.cm-selectionBackground, ::selection': { backgroundColor: '#dbe7d4' },
+  '.cm-gutters': {
+    backgroundColor: '#ffffff', color: '#9aa0a8', border: 'none',
+  },
+  '.cm-activeLine': { backgroundColor: '#f4f6f8' },
+  '.cm-activeLineGutter': { backgroundColor: '#f4f6f8' },
+}, { dark: false });
+
+function themeExtensions() {
+  return currentTheme === 'light'
+    ? [virdantThemeLight, syntaxHighlighting(virdantHighlight)]
+    : [virdantTheme, syntaxHighlighting(virdantHighlight)];
+}
+
+// ── Theme toggle (mirrors the docs site's dark-mode toggle) ─
+//
+// Choice persists in localStorage (`virdant-try:theme`); with no
+// stored choice it follows `prefers-color-scheme`.  Toggling swaps
+// `data-theme` on <html>, the editor chrome (via `themeCompartment`)
+// and the terminal palette.
+
+const THEME_KEY = 'virdant-try:theme';
+
+function storedTheme() {
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === 'dark' || stored === 'light') return stored;
+  } catch { /* storage unavailable */ }
+  return null;
+}
+
+let currentTheme = storedTheme()
+  ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+function applyTheme(theme) {
+  currentTheme = theme;
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem(THEME_KEY, theme); } catch { /* storage unavailable */ }
+  applyThemeIcons(theme);
+  term.options.theme = theme === 'dark' ? termThemeDark() : termThemeLight();
+  if (view) {
+    view.dispatch({
+      effects: themeCompartment.reconfigure(themeExtensions()),
+    });
+  }
+  // Other files' stored editor states are rebuilt lazily on switch
+  // (same mechanism as the keymap toggle).
+  compartmentGen += 1;
+  for (const f of files) {
+    if (f.state && f.gen !== compartmentGen) {
+      f.state = EditorState.create({
+        doc: f.state.doc,
+        selection: f.state.selection,
+        extensions: baseExtensions(),
+      });
+      f.gen = compartmentGen;
+    }
+  }
+}
+
+function termThemeDark() {
+  return {
+    background: '#191b20',
+    foreground: '#d7dae0',
+    cursor: '#4fb583',
+    cursorAccent: '#191b20',
+    selectionBackground: '#3a4150',
+  };
+}
+
+function termThemeLight() {
+  return {
+    background: '#ffffff',
+    foreground: '#333333',
+    cursor: '#2E7D32',
+    cursorAccent: '#ffffff',
+    selectionBackground: '#c9d8c2',
+  };
+}
+
+function initTheme() {
+  document.documentElement.dataset.theme = currentTheme;
+  applyThemeIcons(currentTheme);
+  $('themetoggle').addEventListener('click', () => {
+    applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+  });
+}
+
+function applyThemeIcons(theme) {
+  document.querySelector('#themetoggle .dm-sun').style.display =
+    theme === 'dark' ? 'inline' : 'none';
+  document.querySelector('#themetoggle .dm-moon').style.display =
+    theme === 'dark' ? 'none' : 'inline';
+}
+
 // ── DOM handles ──────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
@@ -231,6 +336,7 @@ function keymapExtensions() {
 // Lint plumbing: the lint source reads from `diagnosticsByFile` (the
 // wasm checker is the real linter); `refreshLint` forces a re-lint
 // after each check without a document change.
+const themeCompartment = new Compartment();
 const refreshLint = StateEffect.define();
 const virdantLinter = linter((view) => {
   const stem = fileStem(files[activeIdx].name);
@@ -267,8 +373,7 @@ function baseExtensions() {
     indentOnInput(),
     indentUnit.of('    '),
     bracketMatching(),
-    virdantTheme,
-    syntaxHighlighting(virdantHighlight),
+    themeCompartment.of(themeExtensions()),
     virdantLanguage,
     virdantLinter,
     vimCompartment.of(keymapExtensions()),
@@ -592,13 +697,7 @@ const term = new Terminal({
   fontSize: 12,
   fontFamily: '"JetBrains Mono", "Fira Mono", "SF Mono", Menlo, Consolas, monospace',
   scrollback: 5000,
-  theme: {
-    background: '#191b20',
-    foreground: '#d7dae0',
-    cursor: '#4fb583',
-    cursorAccent: '#191b20',
-    selectionBackground: '#3a4150',
-  },
+  theme: currentTheme === 'dark' ? termThemeDark() : termThemeLight(),
 });
 const fitAddon = new FitAddon();
 term.loadAddon(fitAddon);
@@ -871,6 +970,10 @@ function stopRun() {
 
 runBtn.addEventListener('click', startRun);
 stopBtn.addEventListener('click', stopRun);
+
+// ── Theme ────────────────────────────────────────────────────
+
+initTheme();
 
 // ── Keymap ───────────────────────────────────────────────────
 

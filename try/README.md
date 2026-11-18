@@ -56,6 +56,10 @@ it), and `npm`.
   (projects, contents, open file, settings) is session-only;
   Settings has a "Reset files to default" button for
   the current project.
+- **Theme**: the round sun/moon button in the bottom bar switches
+  between dark and light (mirroring the docs site's toggle); the
+  choice persists, and with none stored it follows
+  `prefers-color-scheme`.
 - **Errors tab**: live diagnostics (debounced re-check on every edit)
   with click-to-jump.  The Run button is greyed out while there are
   errors.
