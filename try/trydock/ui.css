@@ -425,6 +425,13 @@
 .trydock-root .td-editorhost .cm-editor.cm-focused {
   outline: none;
 }
+
+/* virtry.goto_source(): muted-yellow marker on the jumped-to line.
+   Lives until the user edits any source file (see trydock.js). */
+.trydock-root .td-editorhost .td-goto-line {
+  background: rgba(229, 192, 123, 0.13);
+  box-shadow: inset 3px 0 0 rgba(229, 192, 123, 0.55);
+}
 .trydock-root .td-editorhost .cm-scroller {
   overflow: auto;
   font-family: var(--td-mono) !important;

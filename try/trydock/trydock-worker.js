@@ -22,6 +22,9 @@
 //                                             project by name, select
 //                                             it, optionally reset it
 //     {type:'listProjects'}                   reply: {type:'projectsList', names}
+//     {type:'locate', target}                 resolve an FQN to its
+//                                             definition span; reply:
+//                                             {type:'located', ok, ...}
 //     {type:'run', top?, fpsNoCap?}           check, then start the sim
 //     {type:'config', fpsNoCap}               mid-run settings update
 //     {type:'input', bytes:Uint8Array}        UART rx bytes
@@ -30,6 +33,9 @@
 //   worker → dock(s):
 //     {type:'sync', ...session snapshot}      on hello (that port only)
 //     {type:'projectsList', names}            reply to listProjects (that port only)
+//     {type:'located', ok, file, line, col,
+//      endLine, endCol, kind, fqn}           reply to locate (that port
+//                                             only); ok:false → {message}
 //     {type:'diagnostics', diagnostics, ok, checked}
 //     {type:'checking'}                       a re-check just started
 //     {type:'checkAborted'}                   check could not run (wasm)
@@ -46,7 +52,7 @@
 // scrollback and the running state mid-stream.  Persistence beyond
 // the worker's lifetime is deliberately out of scope (see PLAN.md).
 
-import init, { check as wasmCheck, VirtVm } from '../src/wasm/virdant_try.js';
+import init, { check as wasmCheck, locate as wasmLocate, VirtVm } from '../src/wasm/virdant_try.js';
 
 // ── Seed projects (same rules as the SPA's main.js) ─────────
 
@@ -230,6 +236,19 @@ async function runCheck() {
   return res;
 }
 
+// ── FQN → definition location (virtry.goto_source) ──────────
+//
+// The wasm `locate` export rebuilds a Db from the current project's
+// sources and resolves the FQN against its symbol table (parsing
+// only — no full check pipeline, so it works on uncompiling
+// sources).  Replies on the requesting port only; the dock pairs
+// replies with requests by FIFO order (same rule as listProjects).
+
+async function runLocate(target) {
+  await ensureWasm();
+  return JSON.parse(wasmLocate(buildPayload(), target));
+}
+
 // ── Simulator (adapted from the SPA's src/sim-worker.js; the step
 //    loop, adaptive chunk sizing and real-time pacing are unchanged) ─
 
@@ -390,6 +409,26 @@ self.onconnect = (e) => {
         // seeds.  Reply on this port only (no broadcast needed).
         port.postMessage({ type: 'projectsList', names: seedSpecs.map((s) => s.name) });
         break;
+      case 'locate': {
+        // FQN → definition span, resolved against the CURRENT
+        // project's sources (the dock jumps within what it can edit).
+        const target = String(m.target ?? '');
+        runLocate(target).then(
+          (res) => port.postMessage({
+            type: 'located',
+            ok: true,
+            fqn: res.fqn,
+            kind: res.kind,
+            file: res.file,
+            line: res.line,
+            col: res.col,
+            endLine: res.end_line,
+            endCol: res.end_col,
+          }),
+          (err) => port.postMessage({ type: 'located', ok: false, message: String(err) }),
+        );
+        break;
+      }
       case 'loadProject': {
         // Programmatic project load (virtry.load).  Looks the name up
         // in the seeds — not the live session: a restored session may

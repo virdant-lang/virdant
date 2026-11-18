@@ -157,6 +157,48 @@
           tryLoad();
         });
       },
+
+      // `virtry.goto_source(target)`: open the dock and jump to a
+      // definition.  `target` is either an item FQN (e.g.
+      // `counter::Top`) or `<FILENAME>:<LINENO>` (e.g. `top.vir:12`).
+      // Resolves once the editor has jumped; rejects — the async
+      // form of throwing — when the target cannot be resolved
+      // (unknown file or FQN).  Like load/list, a call before the
+      // bundle has loaded parks itself (target + promise pair) in a
+      // queue the bundle consumes on load; the promise settles then.
+      goto_source: function (target) {
+        if (window.__trydock && typeof window.__trydock.gotoSource === 'function') {
+          return window.__trydock.gotoSource(target);
+        }
+        const p = new Promise((resolve, reject) => {
+          (window.__trydockBootGotoQueue ??= []).push({
+            target: String(target ?? ''),
+            resolve,
+            reject,
+          });
+        });
+        tryLoad();
+        return p;
+      },
+
+      // `virtry.find_source(target)`: the pure query form of
+      // goto_source — same target forms, resolves to true iff
+      // goto_source(target) would succeed (false otherwise).  Never
+      // opens the dock, never rejects.  Parking works like
+      // goto_source's, minus the dock opening.
+      find_source: function (target) {
+        if (window.__trydock && typeof window.__trydock.findSource === 'function') {
+          return window.__trydock.findSource(target);
+        }
+        const p = new Promise((resolve) => {
+          (window.__trydockBootFindQueue ??= []).push({
+            target: String(target ?? ''),
+            resolve,
+          });
+        });
+        tryLoad();
+        return p;
+      },
     };
   }
   }

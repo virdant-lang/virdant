@@ -15,10 +15,10 @@
 import cssText from './ui.css?inline';
 import xtermCss from '@xterm/xterm/css/xterm.css?inline';
 
-import { EditorState, Compartment, StateEffect } from '@codemirror/state';
+import { EditorState, Compartment, StateEffect, StateField } from '@codemirror/state';
 import {
   EditorView, keymap as cmKeymap, lineNumbers, highlightActiveLine,
-  highlightActiveLineGutter, drawSelection, dropCursor,
+  highlightActiveLineGutter, drawSelection, dropCursor, Decoration,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands';
 import { vim } from '@replit/codemirror-vim';
@@ -255,6 +255,38 @@ function backspaceToIndent({ state, dispatch }) {
 
 const refreshLint = StateEffect.define();
 
+// ── goto_source line highlight ──────────────────────────────
+//
+// virtry.goto_source() drops a muted-yellow marker on the line it
+// jumped to, to catch the user's eye.  It clears itself on the first
+// edit to its own file (the StateField wipes on docChanged); edits
+// in OTHER files dismiss it too — the dock tracks that at the session
+// level (`gotoHl` below) and clears the stored state lazily, on tab
+// switch.  Diagnostic clicks share jumpToLine but pass no highlight.
+
+const setGotoHighlight = StateEffect.define(); // {lineFrom} | null
+
+const gotoHighlightField = StateField.define({
+  create: () => null,
+  update(value, tr) {
+    let next = value;
+    for (const e of tr.effects) {
+      if (e.is(setGotoHighlight)) next = e.value;
+    }
+    if (next && tr.docChanged) return null; // edited: highlight's job is done
+    if (next) return { lineFrom: tr.changes.mapPos(next.lineFrom) };
+    return next;
+  },
+  provide: (f) => EditorView.decorations.from(f, (v) =>
+    v
+      ? Decoration.set([Decoration.line({ class: 'td-goto-line' }).range(v.lineFrom)])
+      : Decoration.none),
+});
+
+// Which file's editor state currently carries the marker (and whether
+// an edit elsewhere has dismissed it, pending a lazy clear).
+let gotoHl = null; // {file, dismissed} | null
+
 const diagnosticsByFile = new Map(); // file stem -> DiagJson[]
 let hasErrors = true;
 
@@ -300,6 +332,7 @@ function baseExtensions() {
     syntaxHighlighting(virdantHighlight),
     virdantLanguage,
     virdantLinter,
+    gotoHighlightField,
     vimCompartment.of(keymapExtensions()),
     EditorView.updateListener.of(onEditorUpdate),
   ];
@@ -333,6 +366,17 @@ const view = new EditorView({ parent: editorHost });
 
 function onEditorUpdate(update) {
   if (!update.docChanged) return;
+  // Any change to the source code — in any file — ends the
+  // goto_source highlight.  In the highlighted file itself the
+  // StateField has already wiped the marker; here we retire the
+  // session-level pointer.  An edit in another file can't reach the
+  // stored state, so it only marks the highlight dismissed; the
+  // marker is cleared lazily when that file's tab is opened again
+  // (see switchToFile).
+  if (gotoHl) {
+    if (gotoHl.file === activeFile()?.name) gotoHl = null;
+    else gotoHl.dismissed = true;
+  }
   // A user-driven change (typing, paste, undo, …) means a re-check is
   // coming: show "checking..." immediately, before the debounced
   // dispatch even happens.  Programmatic changes (applySync's
@@ -471,6 +515,9 @@ function applySync(s) {
   // The worker's texts are the baseline now: equal texts dispatched
   // later are no-ops (see scheduleEdit).
   lastSentText.clear();
+  // Fresh mirror: the states are rebuilt (any goto highlight in a
+  // stored state is gone with them).
+  gotoHl = null;
   for (const p of s.projects) {
     for (const f of p.files) lastSentText.set(f.name, f.text);
   }
@@ -530,6 +577,24 @@ function applySync(s) {
     pendingLoad = null;
     performLoad(name);
   }
+
+  // virtry.goto_source() requests parked the same way (consumed after
+  // a pending load, so a load+goto sequence lands in the right
+  // place).  Rejections are the callers' own promise rejections —
+  // nothing extra to log here.
+  const parkedGotos = pendingGotos;
+  pendingGotos = [];
+  for (const entry of parkedGotos) {
+    performGoto(entry.target).then(entry.resolve, entry.reject);
+  }
+
+  // virtry.find_source() requests parked the same way (a pure query:
+  // resolve false on failure, nothing to reject).
+  const parkedFinds = pendingFinds;
+  pendingFinds = [];
+  for (const entry of parkedFinds) {
+    performFind(entry.target).then(entry.resolve);
+  }
 }
 
 // ── File tabs ───────────────────────────────────────────────
@@ -547,9 +612,23 @@ function renderFileTabs() {
 
 function switchToFile(idx) {
   if (idx === project().activeIdx) return;
+  // The goto highlight belongs to the most recent goto only: clear
+  // the outgoing file's marker before its state is stored away, so a
+  // stale decoration can't reappear when the user switches back.
+  if (gotoHl && gotoHl.file === files()[project().activeIdx].name) {
+    view.dispatch({ effects: setGotoHighlight.of(null) });
+    gotoHl = null;
+  }
   files()[project().activeIdx].state = view.state;
   project().activeIdx = idx;
   view.setState(ensureState(files()[idx]));
+  // An edit in another file dismissed this file's highlight while it
+  // was inactive (its stored state still carries the marker): clear
+  // it on arrival.
+  if (gotoHl && gotoHl.dismissed && gotoHl.file === files()[idx].name) {
+    view.dispatch({ effects: setGotoHighlight.of(null) });
+    gotoHl = null;
+  }
   renderFileTabs();
   view.dispatch({ effects: refreshLint.of(null) });
   view.focus();
@@ -593,14 +672,23 @@ function renderDiagnostics(res) {
 function jumpToDiagnostic(d) {
   const idx = files().findIndex((f) => fileStem(f.name) === d.file);
   if (idx >= 0 && idx !== project().activeIdx) switchToFile(idx);
+  jumpToLine(d.line, d.col);
+}
+
+// Center the given 1-based line:col in the editor (the current file).
+// Shared by diagnostic clicks and virtry.goto_source.  The position
+// is clamped into the document, like the diagnostics' coordinates.
+function jumpToLine(line, col, highlight = false) {
   const doc = view.state.doc;
   if (doc.lines === 0) return;
-  const line = doc.line(Math.max(1, Math.min(d.line, doc.lines)));
-  const pos = Math.min(line.from + Math.max(0, d.col - 1), line.to);
+  const ln = doc.line(Math.max(1, Math.min(line, doc.lines)));
+  const pos = Math.min(ln.from + Math.max(0, col - 1), ln.to);
+  const effects = [EditorView.scrollIntoView(pos, { y: 'center' })];
+  if (highlight) effects.push(setGotoHighlight.of({ lineFrom: ln.from }));
   view.dispatch({
     selection: { anchor: pos },
     scrollIntoView: true,
-    effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+    effects,
   });
   view.focus();
 }
@@ -979,6 +1067,119 @@ function listProjects() {
   });
 }
 
+// ── virtry.goto_source(target): jump to a definition ─────────
+//
+// Docs pages call `virtry.goto_source(target)` with either
+// `<FILENAME>:<LINENO>` (e.g. `top.vir:12` or `top:12`) or the FQN of
+// an item (e.g. `counter::Top`).  The dock opens (if closed), selects
+// the file and centers the position in the editor.  Returns a
+// promise: resolved with `{file, line}` once the jump has landed,
+// rejected — the async form of "throwing" — when the target cannot
+// be resolved (unknown file, unknown FQN, or an FQN in one of the
+// `lib/` packages, which have no editor here).
+//
+// Like virtry.load, a request may arrive before the session mirror
+// exists (bundle just loaded): park it and consume it once a sync
+// provides the file list.  FQN resolution is a worker round trip (the
+// symbol table lives in the wasm compiler there); replies are paired
+// with requests FIFO (same rule as listProjects).
+
+let pendingGotos = []; // parked virtry.goto_source requests (see applySync)
+const gotoResolvers = []; // FIFO pairing for the worker's `located` replies
+
+async function performGoto(target) {
+  // `<file>:<line>` — FQNs always contain `::` and never end in a
+  // bare `:<digits>`, so the two forms never collide.
+  const fl = target.match(/^(.+?):(\d+)$/);
+  if (fl && !fl[1].includes('::')) {
+    const name = fl[1];
+    const stem = name.replace(/\.vir$/, '');
+    const idx = files().findIndex((f) => f.name === name || fileStem(f.name) === stem);
+    if (idx < 0) {
+      throw new Error(`virtry.goto_source: no file "${name}" in project "${project()?.name ?? '?'}"`);
+    }
+    openDock();
+    if (idx !== project().activeIdx) switchToFile(idx);
+    const line = Math.max(1, parseInt(fl[2], 10));
+    jumpToLine(line, 1, true);
+    gotoHl = { file: files()[idx].name, dismissed: false };
+    return { file: files()[idx].name, line };
+  }
+  // FQN: resolved by the worker against the current project's sources.
+  const res = await new Promise((resolve, reject) => {
+    gotoResolvers.push({ resolve, reject });
+    port.postMessage({ type: 'locate', target });
+  });
+  const idx = files().findIndex((f) => fileStem(f.name) === res.file);
+  if (idx < 0) {
+    throw new Error(
+      `virtry.goto_source: "${res.fqn}" is defined in package "${res.file}", which has no file open here`,
+    );
+  }
+  openDock();
+  if (idx !== project().activeIdx) switchToFile(idx);
+  jumpToLine(res.line, res.col, true);
+  gotoHl = { file: files()[idx].name, dismissed: false };
+  return { file: files()[idx].name, line: res.line, fqn: res.fqn };
+}
+
+function gotoSource(target) {
+  const t = String(target ?? '').trim();
+  if (!t) return Promise.reject(new Error('virtry.goto_source: empty target'));
+  if (!opened || projects.length === 0) {
+    // Mirror not there yet: open the dock (the `hello` triggers the
+    // sync) and jump once the file list is known.
+    openDock();
+    return new Promise((resolve, reject) => {
+      pendingGotos.push({ target: t, resolve, reject });
+    });
+  }
+  return performGoto(t);
+}
+
+// ── virtry.find_source(target): would goto_source succeed? ───
+//
+// Same target forms, same resolution rules — but a pure query: it
+// never opens the dock, never moves the editor, never rejects.
+// Resolves to true iff goto_source(target) would land somewhere.
+// Notably, an FQN in one of the lib/ packages resolves in the
+// compiler but has no editor here, so goto_source would fail —
+// find_source therefore reports false for it, like for any unknown
+// target.  A request parked before the mirror exists is consumed by
+// the first sync (the worker pushes a snapshot on connect, so no
+// `hello`/open is needed).
+
+let pendingFinds = []; // parked virtry.find_source requests (see applySync)
+
+async function performFind(target) {
+  const fl = target.match(/^(.+?):(\d+)$/);
+  if (fl && !fl[1].includes('::')) {
+    const name = fl[1];
+    const stem = name.replace(/\.vir$/, '');
+    return files().some((f) => f.name === name || fileStem(f.name) === stem);
+  }
+  try {
+    const res = await new Promise((resolve, reject) => {
+      gotoResolvers.push({ resolve, reject });
+      port.postMessage({ type: 'locate', target });
+    });
+    return files().some((f) => fileStem(f.name) === res.file);
+  } catch {
+    return false; // unknown FQN (or the wasm lookup failed)
+  }
+}
+
+function findSource(target) {
+  const t = String(target ?? '').trim();
+  if (!t) return Promise.resolve(false);
+  if (!opened || projects.length === 0) {
+    return new Promise((resolve) => {
+      pendingFinds.push({ target: t, resolve });
+    });
+  }
+  return performFind(t);
+}
+
 runBtn.addEventListener('click', startRun);
 stopBtn.addEventListener('click', stopRun);
 
@@ -1097,6 +1298,14 @@ port.onmessage = (e) => {
     case 'projectsList': {
       const resolve = listResolvers.shift();
       if (resolve) resolve(Array.isArray(m.names) ? m.names.map(String) : []);
+      break;
+    }
+    case 'located': {
+      // Reply to a goto_source FQN lookup (paired FIFO, per port).
+      const entry = gotoResolvers.shift();
+      if (!entry) break;
+      if (m.ok) entry.resolve(m);
+      else entry.reject(new Error(String(m.message ?? 'virtry.goto_source: not found')));
       break;
     }
     case 'runBlocked':
@@ -1370,7 +1579,7 @@ vsplitHandle.addEventListener('mousedown', (e) => {
 // Expose a tiny handle for debugging / future integrations.
 // (The public entry point for pages is `virtry.load(project)` /
 // `virtry.list()`, defined in trydock-boot.js; they delegate here.)
-window.__trydock = { open: openDock, close: closeDock, toggle: toggleDock, loadProject, listProjects };
+window.__trydock = { open: openDock, close: closeDock, toggle: toggleDock, loadProject, listProjects, gotoSource, findSource };
 
 // virtry.list() calls made before this bundle loaded: hand their
 // resolvers over now (the worker connection exists, so the reply
@@ -1379,4 +1588,26 @@ if (Array.isArray(window.__trydockBootListWaiters)) {
   const waiters = window.__trydockBootListWaiters;
   delete window.__trydockBootListWaiters;
   for (const resolve of waiters) listProjects().then(resolve);
+}
+
+// virtry.goto_source() calls parked the same way: hand each target
+// over now; the caller's promise settles with ours (resolve AND
+// reject — a not-found target must reject through to the original
+// caller).
+if (Array.isArray(window.__trydockBootGotoQueue)) {
+  const queue = window.__trydockBootGotoQueue;
+  delete window.__trydockBootGotoQueue;
+  for (const entry of queue) {
+    gotoSource(entry.target).then(entry.resolve, entry.reject);
+  }
+}
+
+// virtry.find_source() calls parked the same way (resolve-only: the
+// predicate never rejects).
+if (Array.isArray(window.__trydockBootFindQueue)) {
+  const queue = window.__trydockBootFindQueue;
+  delete window.__trydockBootFindQueue;
+  for (const entry of queue) {
+    findSource(entry.target).then(entry.resolve);
+  }
 }

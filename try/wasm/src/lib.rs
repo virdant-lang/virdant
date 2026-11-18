@@ -1,10 +1,12 @@
 //! The wasm backend of the Virdant web demo.
 //!
-//! Exposes two operations to the JS SPA:
+//! Exposes three operations to the JS SPA:
 //!
 //!   - [`check`]: compile editor buffers (linked against the `lib/`
 //!     packages embedded at build time) and return the diagnostics as
 //!     JSON — the live-checking path behind the error report tab;
+//!   - [`locate`]: resolve a fully-qualified item name to the source
+//!     span it is defined on (the docs dock's `virtry.goto_source`);
 //!   - [`VirtVm`]: the `virt::Virt` board (see [`virt`], ported from
 //!     `vir/src/vir/virt.rs`) on top of the `Sim` engine, driven in
 //!     bounded chunks (`step`) from a JS rAF loop that paces the
@@ -129,6 +131,60 @@ pub fn check(sources: &str) -> Result<String, String> {
     let ok = !diags.iter().any(|d| d.level == "error");
     serde_json::to_string(&CheckResponse { ok, diagnostics: diags })
         .map_err(|e| format!("could not serialize diagnostics: {e}"))
+}
+
+// ─────────────────────────────────────────────────────────────
+// FQN → definition location (`virtry.goto_source`)
+// ─────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct LocateResponse {
+    pub fqn: String,
+    pub kind: String,
+    /// The package the item is defined in — its stem, matching the
+    /// `file` field of the diagnostics (the dock's editor tabs are
+    /// `<stem>.vir`).
+    pub file: String,
+    pub line: usize,
+    pub col: usize,
+    pub end_line: usize,
+    pub end_col: usize,
+}
+
+/// Resolve a fully-qualified item name to the source span it is
+/// defined on.  `target` must be an FQN (contains `::`); the other
+/// `virtry.goto_source` form (`<FILENAME>:<LINENO>`) is handled
+/// client-side against the editor buffers, so it never reaches here.
+/// The lookup runs against the same sources payload as [`check`] —
+/// parsing plus the symbol table only; the full check pipeline is not
+/// run, so resolution works on uncompiling (even unparsing) sources.
+/// Errors (unknown FQN) surface as `Err`, which the dock turns into
+/// a rejected `virtry.goto_source` promise.
+#[wasm_bindgen]
+pub fn locate(sources: &str, target: &str) -> Result<String, String> {
+    console_error_panic_hook::set_once();
+    let files = parse_sources(sources)?;
+    let db = build_db(files);
+    let symboltable = db.get_symboltable();
+    let symbol = symboltable
+        .resolve(target.as_bytes().as_bstr())
+        .ok_or_else(|| format!("not found: {target}"))?;
+    let location = symbol.location();
+    let region = db.get_location_region(location);
+    let span = region.span();
+    let (start, end) = (span.start(), span.end());
+    let packages = db.get_packages();
+    let response = LocateResponse {
+        fqn: symbol.fqn().to_str_lossy().into_owned(),
+        kind: format!("{:?}", symbol.kind()),
+        file: packages.name(region.package()).to_str_lossy().into_owned(),
+        line: start.line(),
+        col: start.col(),
+        end_line: end.line(),
+        end_col: end.col(),
+    };
+    serde_json::to_string(&response)
+        .map_err(|e| format!("could not serialize location: {e}"))
 }
 
 // ─────────────────────────────────────────────────────────────
