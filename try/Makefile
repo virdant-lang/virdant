@@ -9,13 +9,13 @@ all: build
 node_modules: package.json
 	npm install
 
-# Build the Rust wasm backend (virdant-web) and generate the
+# Build the Rust wasm backend (virdant-try) and generate the
 # wasm-bindgen JS glue into src/wasm/.
 wasm:
 	cd wasm && cargo build --target wasm32-unknown-unknown --release
 	wasm-bindgen --target web \
 		--out-dir src/wasm \
-		wasm/target/wasm32-unknown-unknown/release/virdant_web.wasm
+		wasm/target/wasm32-unknown-unknown/release/virdant_try.wasm
 
 build: node_modules wasm
 	npm run build

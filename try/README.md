@@ -7,7 +7,7 @@ anywhere — the built output under `dist/` is fully static.
 
 ## Layout
 
-- `wasm/` — the `virdant-web` Rust crate.  Wraps the `virdant`
+- `wasm/` — the `virdant-try` Rust crate.  Wraps the `virdant`
   compiler library (check path, diagnostics as JSON) and ports the
   `virt::Virt` board from `vir/src/vir/virt.rs` to wasm: the Unix
   shell (stdin thread, termios, SIGINT, `thread::sleep` pacing) is

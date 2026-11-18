@@ -22,10 +22,10 @@
 //     {type:'create-error', message}
 //     {type:'error', message}                   (runtime failure)
 
-import init, { VirtVm } from './wasm/virdant_web.js';
+import init, { VirtVm } from './wasm/virdant_try.js';
 
 const ready = init({
-  module_or_path: new URL('./wasm/virdant_web_bg.wasm', import.meta.url),
+  module_or_path: new URL('./wasm/virdant_try_bg.wasm', import.meta.url),
 });
 
 let vm = null;

@@ -1,6 +1,6 @@
 // Virdant web demo — the whole SPA.
 //
-// Client-side only: the `virdant-web` wasm module (built from
+// Client-side only: the `virdant-try` wasm module (built from
 // `wasm/`, a port of the `virt::Virt` board plus the compiler's
 // check path) does all the work; this file wires it to a
 // CodeMirror 6 editor (left), an Errors/Console tabbed panel
@@ -8,7 +8,7 @@
 //
 // State (files, keymap, settings) persists in localStorage.
 
-import init, { check as wasmCheck } from './wasm/virdant_web.js';
+import init, { check as wasmCheck } from './wasm/virdant_try.js';
 
 // SPI flash: 16 MiB device (see `wasm/src/virt.rs`); larger images are
 // truncated, matching the native `--flash`.
@@ -59,12 +59,12 @@ const errCountEl = $('errcount');
 
 // ── Persistent state ─────────────────────────────────────────
 
-const LS_PROJECTS = 'virdant-web-demo:projects';
-const LS_CURRENT = 'virdant-web-demo:current';
-const LS_FILES = 'virdant-web-demo:files';
-const LS_ACTIVE = 'virdant-web-demo:active';
-const LS_KEYMAP = 'virdant-web-demo:keymap';
-const LS_SETTINGS = 'virdant-web-demo:settings';
+const LS_PROJECTS = 'virdant-try:projects';
+const LS_CURRENT = 'virdant-try:current';
+const LS_FILES = 'virdant-try:files';
+const LS_ACTIVE = 'virdant-try:active';
+const LS_KEYMAP = 'virdant-try:keymap';
+const LS_SETTINGS = 'virdant-try:settings';
 
 const defaultSettings = { fpsNoCap: false, showFps: false };
 
@@ -1052,7 +1052,7 @@ flashUnload.addEventListener('click', () => {
 });
 
 // Preset flash binaries, served next to the built demo from
-// `web_demo/flash/` (copied into `dist/flash/` by the Makefile, along
+// `try/flash/` (copied into `dist/flash/` by the Makefile, along
 // with the generated `manifest.json`).  Selecting one loads it as if
 // the user had uploaded it, discarding the previous image.
 let flashPresets = null; // cached list of filenames, null until fetched
@@ -1100,7 +1100,7 @@ window.addEventListener('drop', (e) => e.preventDefault());
 
 // ── Splitter (drag to resize the IDE / console split) ──────
 
-const LS_SPLIT = 'virdant-web-demo:split';
+const LS_SPLIT = 'virdant-try:split';
 const splitter = $('splitter');
 const appEl = $('app');
 
@@ -1143,7 +1143,7 @@ splitter.addEventListener('mousedown', (e) => {
 await init({
   // Pass the wasm bytes explicitly: vite serves the asset, but the
   // generated glue's URL resolution is environment-dependent.
-  module_or_path: new URL('./wasm/virdant_web_bg.wasm', import.meta.url),
+  module_or_path: new URL('./wasm/virdant_try_bg.wasm', import.meta.url),
 });
 
 renderProjectSelect();

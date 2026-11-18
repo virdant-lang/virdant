@@ -69,8 +69,8 @@ docs:
 	$(MAKE) -C docs
 
 push_web:
-	$(MAKE) -C web_demo build
-	rsync -avz --delete web_demo/dist/ digitalocean:/root/projects/virdant/docs/build/html/web
+	$(MAKE) -C try build
+	rsync -avz --delete try/dist/ digitalocean:/root/projects/virdant/docs/build/html/try
 
 release: build
 	mkdir -p build/deb/virdant
