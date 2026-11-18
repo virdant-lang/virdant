@@ -846,6 +846,7 @@ term.onData((data) => {
 // ── Run / Stop ───────────────────────────────────────────────
 
 function setRunning(nowRunning) {
+  running = nowRunning;
   runBtn.hidden = nowRunning;
   stopBtn.hidden = !nowRunning;
   updateRunButton();

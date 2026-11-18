@@ -2,4 +2,4 @@
 name = "echo"
 
 [prog]
-top = "echo::Top"
+top = "top::Top"

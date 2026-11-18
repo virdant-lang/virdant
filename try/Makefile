@@ -29,7 +29,7 @@ serve: build
 	npm run preview -- --port $(PORT) --strictPort
 
 push_web: build
-	rsync -avz --delete dist/ digitalocean:/root/projects/virdant/docs/build/html/web
+	rsync -avz --delete dist/ digitalocean:/root/projects/virdant/docs/build/html/try
 
 clean:
 	rm -rf node_modules dist src/wasm wasm/target
