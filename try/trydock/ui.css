@@ -1,0 +1,520 @@
+/* Virdant docs-site "try dock" — dark IDE chrome (design B).
+   Palette mirrors the playground (try/src/style.css): #191b20/#21242b
+   surfaces, #4fb583 accent, Fira Mono.  All styles are scoped under
+   .trydock / #trydock-* ids so they cannot leak into the docs theme. */
+
+.trydock-root {
+  --td-bg: #191b20;
+  --td-raised: #21242b;
+  --td-hover: #2a2e37;
+  --td-border: #31353f;
+  --td-text: #d7dae0;
+  --td-muted: #8f95a1;
+  --td-accent: #4fb583;
+  --td-danger: #e06c75;
+  --td-warning: #e5c07b;
+  --td-info: #61afef;
+  --td-mono: "Fira Mono", "Fira Code", "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ── Dock frame ────────────────────────────────────────────── */
+
+.trydock-root #trydock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: min(58vh, 640px);
+  min-height: 260px;
+  z-index: 10000;
+  background: var(--td-bg);
+  border-top: 1px solid var(--td-border);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--td-mono);
+  font-size: 13px;
+  color: var(--td-text);
+}
+
+.trydock-root #trydock[hidden] { display: none; }
+
+/* Drag strip across the dock's top edge (click-and-drag resizes the
+   pane; the chosen height is remembered in localStorage). */
+.trydock-root .td-resize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 7px;
+  cursor: row-resize;
+  z-index: 5;
+}
+.trydock-root .td-resize:hover {
+  background: linear-gradient(to bottom, transparent 3px, var(--td-accent-dim, #2c5c45) 3px);
+}
+
+/* ── Toolbar ───────────────────────────────────────────────── */
+
+.trydock-root .td-toolbar {
+  flex: none;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--td-raised);
+  border-bottom: 1px solid var(--td-border);
+}
+
+.trydock-root .td-toolbar select {
+  background: var(--td-bg);
+  color: var(--td-text);
+  border: 1px solid var(--td-border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: inherit;
+  max-width: 160px;
+}
+
+.trydock-root .td-btn {
+  background: var(--td-bg);
+  color: var(--td-text);
+  border: 1px solid var(--td-border);
+  border-radius: 4px;
+  padding: 4px 14px;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.trydock-root .td-btn:hover:not(:disabled) { background: var(--td-hover); }
+.trydock-root .td-btn:disabled { opacity: 0.45; cursor: default; }
+.trydock-root .td-btn.primary {
+  background: var(--td-accent);
+  border-color: var(--td-accent);
+  color: #ffffff;
+  font-weight: 700;
+}
+.trydock-root .td-btn.danger {
+  background: var(--td-danger);
+  border-color: var(--td-danger);
+  color: #ffffff;
+  font-weight: 600;
+}
+.trydock-root .td-btn.danger:hover:not(:disabled) { filter: brightness(1.08); }
+
+.trydock-root .td-btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+.trydock-root .td-led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--td-muted);
+  flex: none;
+}
+.trydock-root .td-led.ok { background: var(--td-accent); }
+.trydock-root .td-led.error { background: var(--td-danger); }
+.trydock-root .td-led.warn { background: var(--td-warning); }
+.trydock-root .td-led.busy {
+  background: var(--td-info);
+  animation: trydock-pulse 1.2s ease-in-out infinite;
+}
+@keyframes trydock-pulse {
+  50% { opacity: 0.35; }
+}
+/* While a simulation is running: green, flashing very quickly. */
+.trydock-root .td-led.run {
+  background: var(--td-accent);
+  animation: trydock-flash 0.4s ease-in-out infinite;
+}
+@keyframes trydock-flash {
+  50% { opacity: 0.25; }
+}
+
+/* The cross between the red status dot and the "N errors" count. */
+.trydock-root .td-cross {
+  color: var(--td-danger);
+  font-weight: 700;
+}
+
+.trydock-root .td-status { color: var(--td-muted); white-space: nowrap; }
+.trydock-root .td-status.error { color: var(--td-danger); }
+.trydock-root .td-status.ok { color: var(--td-accent); }
+
+.trydock-root .td-fps {
+  color: var(--td-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  min-width: 110px;
+  text-align: right;
+}
+
+.trydock-root .td-spacer { flex: 1; }
+
+.trydock-root .td-iconbtn {
+  background: none;
+  border: none;
+  color: var(--td-muted);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  padding: 6px 9px;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: 4px;
+}
+.trydock-root .td-iconbtn:hover {
+  color: var(--td-text);
+  background: var(--td-hover);
+}
+/* The popout is an <a>, so the docs theme's link colors (green link /
+   orange visited) win over class colors — and the docs use
+   `!important` on them, so ours must too. */
+.trydock-root a.td-iconbtn,
+.trydock-root a.td-iconbtn:link,
+.trydock-root a.td-iconbtn:visited,
+.trydock-root a.td-iconbtn:active {
+  color: var(--td-muted) !important;
+}
+.trydock-root a.td-iconbtn:hover {
+  color: var(--td-text) !important;
+  background: var(--td-hover);
+}
+.trydock-root .td-iconbtn .td-svg {
+  display: block;
+}
+.trydock-root .td-iconbtn .td-svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── Settings modal (mirrors the SPA's, dark) ─────────────── */
+
+.trydock-root #td-settingsmodal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+}
+.trydock-root #td-settingsmodal[hidden] { display: none; }
+
+.trydock-root .td-settingsbox {
+  background: var(--td-raised);
+  border: 1px solid var(--td-border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: var(--td-mono);
+  font-size: 13px;
+  color: var(--td-text);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.trydock-root .td-settingsbox h2 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--td-accent);
+}
+.trydock-root .td-settingsbox label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--td-muted);
+  font-size: 12px;
+}
+.trydock-root .td-settingsbox label.td-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--td-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.trydock-root .td-settingsbox input[type="text"] {
+  background: var(--td-bg);
+  border: 1px solid var(--td-border);
+  border-radius: 4px;
+  color: var(--td-text);
+  font-family: var(--td-mono);
+  font-size: 13px;
+  padding: 6px 8px;
+  outline: none;
+}
+.trydock-root .td-settingsbox input[type="text"]:focus { border-color: var(--td-accent); }
+.trydock-root .td-settingsbox select {
+  background: var(--td-bg);
+  color: var(--td-text);
+  border: 1px solid var(--td-border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+}
+.trydock-root .td-settingsbox code {
+  background: var(--td-bg);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.trydock-root .td-settingsbuttons {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+/* ── Reset confirmation modal (same dark chrome as Settings) ─ */
+
+.trydock-root #td-confirmmodal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10002;
+}
+.trydock-root #td-confirmmodal[hidden] { display: none; }
+
+.trydock-root .td-confirmbox {
+  background: var(--td-raised);
+  border: 1px solid var(--td-border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: var(--td-mono);
+  font-size: 13px;
+  color: var(--td-text);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.trydock-root .td-confirmbox h2 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--td-accent);
+}
+.trydock-root .td-confirmbox p {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--td-text);
+}
+.trydock-root .td-confirmbuttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ── Body: editor | output ─────────────────────────────────── */
+
+.trydock-root .td-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(320px, 55%) 1fr;
+  min-height: 0;
+}
+
+.trydock-root .td-editor-col {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--td-border);
+  min-width: 0;
+  /* Without this the grid item grows to its content height (instead
+     of being capped by the dock), so the editor never overflows and
+     never scrolls. */
+  min-height: 0;
+}
+
+.trydock-root .td-filetabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px 0;
+  background: var(--td-bg);
+  border-bottom: 1px solid var(--td-border);
+  overflow-x: auto;
+}
+.trydock-root .td-filetab {
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 5px 5px 0 0;
+  color: var(--td-muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.trydock-root .td-filetab:hover { color: var(--td-text); }
+.trydock-root .td-filetab.active {
+  background: var(--td-raised);
+  border-color: var(--td-border);
+  color: var(--td-text);
+}
+
+.trydock-root .td-editorhost {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+.trydock-root .td-editorhost .cm-editor {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+.trydock-root .td-editorhost .cm-editor.cm-focused {
+  outline: none;
+}
+.trydock-root .td-editorhost .cm-scroller {
+  overflow: auto;
+  font-family: var(--td-mono) !important;
+}
+
+/* ── Scrollbars ───────────────────────────────────────────────
+   All three scroll surfaces (CodeMirror scroller, Errors panel,
+   xterm viewport) scroll, but the browser's default scrollbars are
+   near-invisible against the dark chrome — style them explicitly.
+   Firefox gets scrollbar-color (inherited); everyone else gets the
+   webkit rules. */
+
+.trydock-root {
+  scrollbar-color: #3d434f transparent;
+}
+
+.trydock-root ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+.trydock-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.trydock-root ::-webkit-scrollbar-thumb {
+  background: #3d434f;
+  border-radius: 6px;
+  border: 3px solid var(--td-bg);
+}
+.trydock-root ::-webkit-scrollbar-thumb:hover {
+  background: var(--td-hover);
+}
+.trydock-root ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* The xterm viewport manages its own scrolling; make sure it is the
+   scroll surface (xterm.css already sets overflow-y: scroll) and pick
+   up the themed thumb via the descendant rules above. */
+.trydock-root #trydock-terminal .xterm-viewport {
+  background: var(--td-bg) !important;
+}
+
+.trydock-root .td-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.trydock-root .td-tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: var(--td-raised);
+  border-bottom: 1px solid var(--td-border);
+}
+.trydock-root .td-tab {
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 5px 5px 0 0;
+  color: var(--td-muted);
+  font: inherit;
+  padding: 4px 14px;
+  cursor: pointer;
+}
+.trydock-root .td-tab:hover { color: var(--td-text); }
+.trydock-root .td-tab.active {
+  background: var(--td-bg);
+  border-color: var(--td-border);
+  color: var(--td-text);
+}
+
+.trydock-root .td-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+}
+.trydock-root .td-panel { overflow-y: auto; overflow-x: hidden; }
+.trydock-root .td-panel[hidden] { display: none; }
+.trydock-root #trydock-consolepanel {
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+.trydock-root #trydock-terminal {
+  position: absolute;
+  inset: 0;
+  padding: 6px 8px;
+}
+
+/* Diagnostics rows (checker style) */
+.trydock-root .td-diag {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.5;
+}
+.trydock-root .td-diag:hover { background: var(--td-hover); }
+.trydock-root .td-diag .td-badge {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+.trydock-root .td-diag.error .td-badge { background: rgba(224, 108, 117, 0.16); color: var(--td-danger); }
+.trydock-root .td-diag.warning .td-badge { background: rgba(229, 192, 123, 0.14); color: var(--td-warning); }
+.trydock-root .td-diag.note .td-badge { background: rgba(97, 175, 239, 0.14); color: var(--td-info); }
+.trydock-root .td-diag .td-loc { flex: none; color: var(--td-muted); font-size: 12px; }
+.trydock-root .td-diag .td-msg { color: var(--td-text); }
+.trydock-root .td-diag code {
+  font-family: var(--td-mono);
+  color: var(--td-accent);
+  background: var(--td-raised);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.trydock-root .td-diag-summary {
+  color: var(--td-muted);
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--td-border);
+  margin-bottom: 6px;
+}
+.trydock-root .td-diag-summary.ok { color: var(--td-accent); }
+
+/* Narrow screens: stack the output under the editor. */
+@media (max-width: 900px) {
+  .trydock-root .td-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr minmax(160px, 40%);
+  }
+  .trydock-root .td-editor-col { border-right: none; border-bottom: 1px solid var(--td-border); }
+}

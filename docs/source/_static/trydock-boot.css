@@ -1,0 +1,51 @@
+/* Virdant docs-site "try dock" — boot-time styles for the persistent
+   pill (the dock's own styles ship inside /try/trydock/trydock.js).
+   Works on both docs themes; the dock itself is always dark. */
+
+#trydock-pill {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 9998;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid #2E7D32;
+  background: #ffffff;
+  color: #2E7D32;
+  font-family: "Nunito", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+#trydock-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+#trydock-pill[hidden] { display: none; }
+
+.trydock-pill-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #8FC225;
+  flex: none;
+}
+
+#trydock-pill.trydock-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+[data-theme="dark"] #trydock-pill {
+  background: #21242b;
+  border-color: #4fb583;
+  color: #d7dae0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}

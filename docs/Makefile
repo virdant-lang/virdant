@@ -33,13 +33,20 @@ auto: Makefile # rustdocs
 watch:
 	bash watch.sh
 
-serve: auto
+serve: auto trydist
 	bash serve.sh
 
-.PHONY: auto clean push rustdocs watch test
+.PHONY: auto clean push trydist rustdocs watch test
 
 clean:
 	rm -rf $(BUILDDIR)
+
+# The try dock (and the full playground) are served from /try next to
+# the docs HTML (same origin, as in production — SharedWorker needs
+# it).  This mirrors try/dist into the build tree for local serving;
+# production deploys try/dist separately (root Makefile push_web).
+trydist:
+	if [ -d ../try/dist ]; then rsync -a --delete ../try/dist/ $(BUILDDIR)/html/try/; fi
 
 push: auto
 	rsync -cazvhP $(BUILDDIR)/html/* digitalocean:/root/projects/virdant/docs/build/html

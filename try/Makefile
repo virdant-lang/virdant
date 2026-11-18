@@ -2,7 +2,7 @@ PORT ?= 8000
 
 # Serve the built demo (static, client-side-only) on $(PORT).
 # Example: `make serve` or `make serve PORT=8001`.
-.PHONY: serve build wasm node_modules all clean push_web
+.PHONY: serve build trydock wasm node_modules all clean push_web
 
 all: build
 
@@ -17,8 +17,17 @@ wasm:
 		--out-dir src/wasm \
 		wasm/target/wasm32-unknown-unknown/release/virdant_try.wasm
 
+# Build the docs-site "try dock" (SharedWorker + dock UI; see PLAN.md
+# and trydock/).  Emits dist/trydock/{trydock,trydock-worker}.js; the
+# docs pages load /try/trydock/trydock.js lazily, so both the SPA dist
+# and this must be deployed together (the existing push_web rsync
+# covers both).
+trydock: node_modules
+	npm run build:trydock
+
 build: node_modules wasm
 	npm run build
+	npm run build:trydock
 	@# The preset flash binaries are served next to the built demo;
 	@# `flash/manifest.json` lists them for the settings dropdown.
 	mkdir -p dist/flash

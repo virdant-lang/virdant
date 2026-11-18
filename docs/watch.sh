@@ -23,7 +23,7 @@ release_lock() {
 
 build() {
     acquire_lock || return 0
-    make clean && make auto
+    make clean && make auto && make trydist
     release_lock
 }
 

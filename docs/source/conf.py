@@ -62,12 +62,16 @@ html_css_files = [
     'console-syntax.css',
     'grammar-syntax.css',
     'vcd.css',
+    # Persistent "try dock" pill (the dock bundle itself is served
+    # from /try/trydock/ and lazy-loaded by trydock-boot.js; PLAN.md).
+    'trydock-boot.css',
 ]
 
 html_js_files = [
     'copy.js',
     'vcd.js',
     'codefit.js',
+    'trydock-boot.js',
 ]
 
 # Set 'vir' as the default role for inline code with Virdant syntax highlighting
