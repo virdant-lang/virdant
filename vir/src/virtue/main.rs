@@ -32,8 +32,7 @@ mod vcd;
 use discovery::Test;
 use exec::{Env, Status};
 
-#[path = "../common/help_json.rs"]
-mod help_json;
+use vir_common::help_json;
 
 /// Worker → main thread events: a test was claimed (about to run) or
 /// finished.

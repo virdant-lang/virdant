@@ -1,24 +1,21 @@
-//! The `vir-value` binary: standalone value encode/decode for
-//! Virdant projects (see plans/vir-value/PLAN.md).
+//! The `vir-value` library: standalone value encode/decode for
+//! Virdant projects.
 //!
-//! `vir value` execs this binary via the `vir-*` companion-binary
-//! mechanism; see `vir/src/vir/cli.rs`.
-//!
+//! ```text
+//! encode "@Valid(0) : Valid[Word[8]]"           # value -> bit pattern
+//! decode "0b0000000010 Valid[Word[8]]"          # bit pattern -> value
 //! ```
-//! vir value encode @Valid(0) : Valid[Word[8]]   # value -> bit pattern
-//! vir value decode 0b0000000010 Valid[Word[8]]  # bit pattern -> value
-//! ```
-//!
-//! Outside a project (no `-F`, no `-C`, no manifest in or above the
-//! working directory), the binary still runs, with only the standard
-//! library loaded: builtin types (`Bit`, `Word[8]`, `Valid[...]`, ...)
-//! work, project-local types do not.  From a project subdirectory
-//! (eg, `src/`), the enclosing project is discovered and used.
 //!
 //! Types are fully-qualified (`pkg::Name[...]`) except names from the
 //! `builtin` package, which are bare (`Bit`, `Word[8]`,
 //! `Valid[Word[8]]`).  Non-pub types resolve the same way: lookup is
 //! by fully-qualified name, so visibility plays no role.
+//!
+//! This is the WASM-clean core of the `vir-value` binary: every
+//! public entry point is a pure function of its arguments (a `Db`
+//! plus a string), with no file or process access.  Build a `Db`
+//! with [`db_from_sources`] (in memory — the WASM seam) or from
+//! files on disk in the host binary.
 
 mod ast;
 mod decode;
@@ -30,97 +27,44 @@ mod resolve;
 lalrpop_util::lalrpop_mod!(
     #[allow(clippy::all)]
     grammar,
-    "/value/grammar.rs"
+    "/grammar.rs"
 );
 
-// Shared helpers, compiled once as the `vircommon` library.
-use vircommon as common;
-
-use common::ProjectLocation;
 use virdant::db::Db;
 use virdant::sim::BitPat;
 use virdant::typelayout::TypeLayoutIndex;
 use virdant::types::typ::Type;
 
-
+use bstr::BString;
 use resolve::Resolver;
 
-/// Assemble the `vir-value` command line interface.
-fn command() -> clap::Command {
-    let mut cmd = clap::Command::new("vir-value")
-        .about("Encode and decode Virdant values")
-        .subcommand_required(true)
-        .arg_required_else_help(true)
-        .subcommand(
-            clap::Command::new("encode")
-                .about("Encode a value to a bit pattern")
-                .arg(
-                    clap::Arg::new("parts")
-                        .value_name("VALUE [: TYPE]")
-                        .num_args(1..)
-                        .required(true)
-                        .help("Value expression, optionally with a `: Type` ascription"),
-                ),
-        )
-        .subcommand(
-            clap::Command::new("decode")
-                .about("Decode a bit pattern to a value")
-                .arg(
-                    clap::Arg::new("parts")
-                        .value_name("PATTERN TYPE")
-                        .num_args(2..)
-                        .required(true)
-                        .help("Bit pattern literal and the type to decode it as"),
-                ),
-        );
-    common::add_project_args(&mut cmd, false);
-    cmd
-}
-
-fn main() {
-    help_json::maybe_dump(|| command());
-    let matches = command().get_matches();
-    let location = ProjectLocation::from_matches(&matches);
-
-    let (subcommand, parts): (&str, Vec<String>) = match matches.subcommand() {
-        Some(("encode", m)) => (
-            "encode",
-            m.get_many::<String>("parts")
-                .map(|vs| vs.cloned().collect())
-                .unwrap_or_default(),
-        ),
-        Some(("decode", m)) => (
-            "decode",
-            m.get_many::<String>("parts")
-                .map(|vs| vs.cloned().collect())
-                .unwrap_or_default(),
-        ),
-        _ => unreachable!("subcommand_required"),
-    };
-
-    // The CLI is shell-friendly: the positional arguments are joined
-    // with spaces and parsed as one string, so both
-    // `encode @Valid(0) : Valid[Word[8]]` and
-    // `encode '@Valid(0):Valid[Word[8]]'` work.
-    let input = parts.join(" ");
-
-    let db = location.project_db_or_builtin();
-
-    match run(&db, subcommand, &input) {
-        Ok(output) => println!("{output}"),
-        Err(message) => {
-            eprintln!("ERROR: {message}");
-            std::process::exit(1);
-        }
+/// Build a `Db` from in-memory package sources: a list of
+/// `(package name, source text)` pairs.  This is the seam the
+/// `vir-value` CLI and the WASM front-end share: the native binary
+/// loads sources from the project on disk and calls this; a WASM
+/// module receives the sources from the embedder.
+///
+/// No builtin library is added automatically; pass `("builtin",
+/// BUILTIN_VIR)` yourself (the `BUILTIN_VIR` constant has it).
+pub fn db_from_sources(sources: Vec<(&str, String)>) -> Db {
+    let mut db = Db::new();
+    let names: Vec<BString> = sources.iter().map(|(name, _)| BString::from(*name)).collect();
+    db.set_packages(virdant::package::PackageTable::new(names));
+    let packages = db.get_packages();
+    for (name, text) in sources {
+        let package = packages.id(bstr::BStr::new(name)).unwrap();
+        db.set_source(package, virdant::common::source::Source::new(package, text.into()));
     }
+    db
 }
 
-#[path = "../common/help_json.rs"]
-mod help_json;
+/// The builtin library (`lib/builtin.vir`), embedded at compile time
+/// so WASM builds do not need filesystem access.
+pub const BUILTIN_VIR: &str = include_str!("../../../lib/builtin.vir");
 
 /// Parse, resolve, and run one encode/decode invocation against the
 /// project `Db`.
-fn run(db: &Db, subcommand: &str, input: &str) -> Result<String, String> {
+pub fn run(db: &Db, subcommand: &str, input: &str) -> Result<String, String> {
     let toks = lexer::lex(input).map_err(|e| {
         format!(
             "{} at byte {}: {}",
@@ -180,26 +124,14 @@ mod tests {
     /// (the same pattern as `virdant/src/verilog/conversion.rs`'s
     /// unit tests).
     fn scratch_db() -> Db {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let builtin = std::fs::read_to_string(root.join("../lib/builtin.vir")).unwrap();
         let scratch = r#"
             union type Scratch[T : Type] {
                 Empty
                 Full(data : T)
             }
         "#;
-        use bstr::BString;
-        let mut db = Db::new();
-        let names: Vec<BString> = vec![BString::from("builtin"), BString::from("scratch")];
-        db.set_packages(virdant::package::PackageTable::new(names));
-        let packages = db.get_packages();
-        for (name, text) in [("builtin", builtin.as_str()), ("scratch", scratch)] {
-            let package = packages
-                .id(bstr::BStr::new(name))
-                .unwrap();
-            db.set_source(package, virdant::common::source::Source::new(package, text.to_string().into()));
-        }
-        db
+        let builtin = BUILTIN_VIR;
+        db_from_sources(vec![("builtin", builtin.to_string()), ("scratch", scratch.to_string())])
     }
 
     fn run_ok(input: &str) -> String {

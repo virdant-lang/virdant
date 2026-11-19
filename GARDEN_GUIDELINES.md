@@ -28,7 +28,7 @@ Please report each violation of any of these rules.
 ## Filenames
 - Disallow the use of the Rust filename `mod.rs`.
   Instead, require that it be named as `foo.rs` (for a module `foo`)
-- Disallow the use of `-`'s inside of filenames and folder names.
+- Disallow the use of `-`'s inside of filenames and folder names unless it is a Rust crate.
 
 ## Rust
 - Forbid `cargo c` to emit warnings.

@@ -1,111 +1,34 @@
-//! The `vir-poke` binary: a REPL-driven peek/poke tester built on the
-//! `sim` library, with a small custom scripting language whose
-//! expressions use Virdant syntax.  Scripts double as assertion tests.
+//! The `vir-poke` library: the peek/poke session and scripting
+//! engine.  `vir poke` execs the `vir-poke` binary via the `vir-*`
+//! companion-binary mechanism; see `vir/src/vir/cli.rs`.
 //!
-//! `vir poke` execs this binary via the `vir-*` companion-binary
-//! mechanism; see `vir/src/vir/cli.rs`.
+//! This library owns the session (the live `Sim` plus the `cd`-style
+//! current-module location), `commands` executes parsed commands,
+//! `eval` evaluates expressions, and `display` renders values
+//! round-trippably; `driver` runs scripts and interactive sessions.
 //!
-//! A script passed bare (or via `--script`) runs standalone as an
-//! assertion test; `--repl` instead drops into the interactive REPL
-//! on the first failure.
-//!
-//! This module owns the session (the live `Sim` plus the `cd`-style
-//! current-module location); `repl` drives the line loop, `commands`
-//! executes parsed commands, `eval` evaluates expressions, and
-//! `display` renders values round-trippably.
+//! Everything here is WASM-clean for `wasm32-wasip1`/`wasip2`
+//! (wasmtime): the only host-only component is the readline REPL,
+//! gated behind `#[cfg(not(target_arch = "wasm32"))]` — on WASI the
+//! interactive loop degrades to the plain line loop, exactly like
+//! the documented non-tty behavior.  Scripts, assertions, `peek`/
+//! `poke`/`tick`/`vcd`, and value rendering all work under WASI
+//! (WASI provides `std::fs`, so VCD traces can still be written).
 
-mod ast;
-mod commands;
-mod display;
-mod eval;
-mod lexer;
-mod repl;
-
-use clap::value_parser;
-
-// Shared helpers, compiled once as the `vircommon` library.
-use vircommon as common;
-
-use common::ProjectLocation;
-
-/// Assemble the `vir-poke` command line interface.
-fn command() -> clap::Command {
-    let mut cmd = clap::Command::new("vir-poke")
-        .about("Interactive peek/poke tester")
-        .arg(clap::Arg::new("top").long("top").num_args(1)
-            .value_parser(value_parser!(String))
-            .help("Top module (may be non-pub); defaults to [prog] top"))
-        .arg(clap::Arg::new("file").value_name("SCRIPT").num_args(0..=1)
-            .value_parser(value_parser!(String))
-            .help("Script to run standalone as an assertion test"))
-        .arg(clap::Arg::new("repl").long("repl").short('r')
-            .num_args(0)
-            .requires("file")
-            .conflicts_with("script")
-            .help("Run SCRIPT, dropping into the REPL on the first failure"))
-        .arg(clap::Arg::new("script").long("script").value_name("SCRIPT").num_args(0..=1)
-            .default_missing_value("")
-            .value_parser(value_parser!(String))
-            .help("Run a script standalone as an assertion test (same as passing SCRIPT bare)"));
-    common::add_project_args(&mut cmd, false);
-    cmd
-}
-
-fn main() {
-    let matches = command().get_matches();
-    let location = ProjectLocation::from_matches(&matches);
-    let top = matches.get_one::<String>("top").cloned();
-    let file = matches.get_one::<String>("file").cloned();
-    let script = matches.get_one::<String>("script").cloned();
-    let repl_flag = matches.get_flag("repl");
-
-    // Forms:
-    //   vir poke                  — REPL
-    //   vir poke test.poke        — standalone script run (assertion test)
-    //   vir poke test.poke --script / vir poke --script test.poke
-    //                             — standalone script run (same as bare)
-    //   vir poke test.poke --repl — run the script, dropping into the
-    //                               REPL on the first failure
-    let (preload, standalone) = if repl_flag {
-        // clap enforces `--repl` requires a file and conflicts with
-        // `--script`, so `file` is always present here.
-        match file {
-            Some(file) => (Some(file), None),
-            None => {
-                eprintln!("error: --repl needs a script file");
-                std::process::exit(2);
-            }
-        }
-    } else {
-        match (file, script.as_deref()) {
-            // `vir poke test.poke --script`: bare --script flag.
-            (Some(file), Some("")) => (None, Some(file)),
-            // `vir poke a.poke --script b.poke`: conflicting.
-            (Some(_), Some(_)) => {
-                eprintln!("error: cannot give both a script and --script <path>");
-                std::process::exit(2);
-            }
-            // `vir poke test.poke`: standalone run, like `--script`.
-            (Some(file), None) => (None, Some(file)),
-            (None, Some("")) => {
-                eprintln!("error: --script needs a script file");
-                std::process::exit(2);
-            }
-            (None, Some(path)) => (None, Some(path.to_string())),
-            (None, None) => (None, None),
-        }
-    };
-
-    let code = run(&location, top, preload, standalone);
-    std::process::exit(code);
-}
+pub mod ast;
+pub mod commands;
+pub mod display;
+pub mod eval;
+pub mod lexer;
 
 // Generated from `grammar.lalrpop` by the build script (into OUT_DIR).
+lalrpop_util::lalrpop_mod!(
+    #[allow(clippy::all)]
+    grammar,
+    "/grammar.rs"
+);
 
-use lalrpop_util::lalrpop_mod;
-
-// Generated from `grammar.lalrpop` by the build script (into OUT_DIR).
-lalrpop_mod!(grammar, "/poke/grammar.rs");
+pub mod driver;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -471,6 +394,9 @@ impl Session {
     /// TAB-completion candidates for `line_so_far` (the text up to the
     /// cursor).  Two modes: completing the command word itself (only
     /// whitespace precedes it), and completing a path argument.
+    /// TAB-completion candidates for the readline REPL (host-only;
+    /// see `driver.rs`).
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn completions(&self, line_so_far: &str) -> Vec<String> {
         let words: Vec<&str> = line_so_far.split_whitespace().collect();
         let word_start = line_so_far
@@ -580,6 +506,7 @@ impl Session {
     /// Complete a dotted path `partial` against the design's signal
     /// tree.  `module_only` restricts candidates to the steps `cd`
     /// accepts (submodule names, `..`, `top`).
+    #[cfg(not(target_arch = "wasm32"))]
     fn complete_path(&self, partial: &str, module_only: bool) -> Vec<String> {
         let (head, leaf) = match partial.rfind('.') {
             Some(i) => (&partial[..i], &partial[i + 1..]),
@@ -654,6 +581,7 @@ impl Session {
     /// Whether `prefix` names a path step: the root (`"top"`), a
     /// module instance, or a socket instance (whose channels are
     /// components beneath it).
+    #[cfg(not(target_arch = "wasm32"))]
     fn is_path_prefix(&self, prefix: &str) -> bool {
         if prefix == "top" {
             return true;
@@ -883,6 +811,8 @@ fn top_socket_channel(session: &Session, signal_id: SignalId) -> Option<(SocketR
 }
 
 /// The REPL's command names, for TAB completion (and `help`'s list).
+// Host-only: consumed by the readline REPL and its completions.
+#[cfg(not(target_arch = "wasm32"))]
 const COMMANDS: [&str; 17] = [
     "cd", "peek", "poke", "watch", "break", "advance", "tick", "assert", "print", "ls", "show", "autoshow", "vcd", "top", "restart", "exit", "help",
 ];
@@ -899,6 +829,8 @@ struct ShowRow {
 /// an identifier character and continues with identifier, digit, or dot
 /// characters.  Used to decide whether to offer path completions inside
 /// expressions (`print ctr + <TAB>`).
+// Host-only: used by the readline path-completion helper.
+#[cfg(not(target_arch = "wasm32"))]
 fn looks_like_path(word: &str) -> bool {
     let mut chars = word.chars();
     match chars.next() {
@@ -923,151 +855,3 @@ fn kind_name(kind: ComponentKind) -> &'static str {
     }
 }
 
-/// Run `vir poke`.
-///
-/// `top_arg` is the explicit `--top` (may be non-pub); when absent, the
-/// top comes from `[prog] top` in `virdant.toml`.  `standalone` is a
-/// script run as an assertion test; `preload` (from `--repl`) a script
-/// run with the REPL taking over on the first failure.  Returns the
-/// process exit code.
-pub fn run(
-    location: &vircommon::ProjectLocation,
-    top_arg: Option<String>,
-    preload: Option<String>,
-    standalone: Option<String>,
-) -> i32 {
-    if preload.is_some() && standalone.is_some() {
-        eprintln!("error: cannot both preload and run a script standalone");
-        return 2;
-    }
-
-    let cwd = location.resolve_cwd();
-    let db = location.project_db();
-
-    // Resolve the top module: explicit `--top` first, else `[prog] top`.
-    let allow_non_pub = top_arg.is_some();
-    let top_name = match top_arg {
-        Some(name) => name,
-        None => match common::read_prog_key(&cwd, "top") {
-            Some(name) => name,
-            None => {
-                eprintln!("error: no top module: pass --top or set [prog] top in virdant.toml");
-                return 2;
-            }
-        },
-    };
-
-    let symboltable = db.get_symboltable();
-    let exact = symboltable
-        .items()
-        .into_iter()
-        .find(|sym| sym.kind == SymbolKind::ModDef && sym.fqn.as_bytes() == top_name.as_bytes());
-    let top_symbol = match exact {
-        Some(sym) => sym,
-        None => {
-            // Fall back to a simple-name match (the top named without
-            // its package qualifier).  Ambiguity is an error.
-            let matches: Vec<_> = symboltable
-                .items()
-                .into_iter()
-                .filter(|sym| sym.kind == SymbolKind::ModDef && sym.name().as_bytes() == top_name.as_bytes())
-                .collect();
-            match matches.len() {
-                0 => {
-                    eprintln!("error: top module '{top_name}' not found");
-                    return 2;
-                }
-                1 => matches[0].clone(),
-                _ => {
-                    let names: Vec<String> = matches
-                        .iter()
-                        .map(|sym| sym.fqn().to_str_lossy().into_owned())
-                        .collect();
-                    eprintln!(
-                        "error: top module '{top_name}' is ambiguous: {}",
-                        names.join(", ")
-                    );
-                    return 2;
-                }
-            }
-        }
-    };
-
-    // Check the project.  An explicit `--top` may name a non-pub
-    // module: the tester bypasses the pub-check by dropping the
-    // `TopNotPub` diagnostics (a non-pub mod with a `for` clause) —
-    // they gate top selection, which is exactly what `--top` overrides.
-    let top_fqn = top_symbol.fqn().to_str_lossy().into_owned();
-    let diagnostics = match virdant::util::check_db(&db) {
-        Ok(diags) => diags,
-        Err(diags) => diags,
-    };
-    let diagnostics: Vec<_> = diagnostics
-        .iter()
-        .filter(|diag| {
-            if allow_non_pub
-                && matches!(&diag.payload, virdant::diagnostics::DiagnosticPayload::TopNotPub(_))
-            {
-                return false;
-            }
-            true
-        })
-        .collect();
-    let mut failed = false;
-    for diagnostic in &diagnostics {
-        common::dump_diagnostic(&db, diagnostic);
-        if diagnostic.level() == virdant::diagnostics::DiagnosticLevel::Error {
-            failed = true;
-        }
-    }
-    if failed {
-        eprintln!("Check failed");
-        return 1;
-    }
-
-    let sim = Sim::new(&db, top_symbol.id(), InitStrategy::Random);
-    let session = Session {
-        db,
-        sim,
-        top: top_symbol.id(),
-        cwd: Vec::new(),
-        it: None,
-        break_flag: Rc::new(Cell::new(None)),
-        autoshow: false,
-        vcd: None,
-    };
-
-    let script = if let Some(path) = standalone {
-        match read_script(&path) {
-            Ok(lines) => Some((lines, true)),
-            Err(code) => return code,
-        }
-    } else if let Some(path) = preload {
-        match read_script(&path) {
-            Ok(lines) => Some((lines, false)),
-            Err(code) => return code,
-        }
-    } else {
-        None
-    };
-
-    if script.as_ref().map(|(_, standalone)| !*standalone).unwrap_or(true) {
-        println!("vir poke: top {top_fqn} (type `exit` to leave, `help` for commands)");
-    }
-    repl::run(session, script)
-}
-
-/// Read a `.poke` script file.
-fn read_script(path: &str) -> Result<Vec<(usize, String)>, i32> {
-    match std::fs::read_to_string(path) {
-        Ok(text) => Ok(text
-            .lines()
-            .enumerate()
-            .map(|(i, line)| (i + 1, line.to_string()))
-            .collect()),
-        Err(e) => {
-            eprintln!("error: cannot read script {path}: {e}");
-            Err(2)
-        }
-    }
-}

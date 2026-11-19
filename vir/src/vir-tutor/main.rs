@@ -53,7 +53,7 @@ fn initialize_git(project_dir: &Path, no_git: bool) {
     // Git setup is opt-out, not forced: respect an existing repository
     // in an ancestor and a missing/unavailable Git executable.
     let cwd = std::env::current_dir().expect("Could not determine current directory");
-    if no_git || vircommon::has_git_ancestor(&cwd) || !vircommon::git_is_executable() {
+    if no_git || vir_common::has_git_ancestor(&cwd) || !vir_common::git_is_executable() {
         return;
     }
 

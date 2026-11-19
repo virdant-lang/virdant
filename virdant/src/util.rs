@@ -5,7 +5,7 @@
 //!
 //! Filesystem loading of `.vir` files (directory scans, `Db`
 //! construction from files) lives in the tools' crate
-//! (`vircommon::load`), since the core is also built for wasm.
+//! (`vir_common::load`), since the core is also built for wasm.
 
 use std::sync::Arc;
 
@@ -38,7 +38,7 @@ pub fn is_valid_package_name(name: &BStr) -> bool {
 /// Construct a `Db` from in-memory (package name, text) pairs.
 /// This is the filesystem-free entry point used on wasm (where the
 /// web demo drives the compiler from editor buffers); the fs-backed
-/// constructors in `vircommon::load` reuse the same shape for files
+/// constructors in `vir_common::load` reuse the same shape for files
 /// read from disk.
 pub fn db_from_mem(files: Vec<(BString, BString)>) -> Db {
     use crate::common::source::Source;

@@ -22,11 +22,10 @@ use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;
 
-#[path = "../common/help_json.rs"]
-mod help_json;
+use vir_common::help_json;
 
-// Shared helpers, compiled once as the `vircommon` library.
-use vircommon as common;
+// Shared helpers, compiled once as the `vir_common` library.
+use vir_common as common;
 
 use common::ProjectLocation;
 

@@ -2018,11 +2018,8 @@ dependencies = [
  "colored",
  "indexmap",
  "json",
- "lalrpop 0.23.2",
- "lalrpop-util 0.23.2",
  "libc",
  "nix 0.31.3",
- "rustyline",
  "sdl2",
  "serde",
  "serde_json",
@@ -2030,6 +2027,47 @@ dependencies = [
  "tokio",
  "toml",
  "tower-lsp",
+ "vir-common",
+ "virdant",
+]
+
+[[package]]
+name = "vir-common"
+version = "0.4.0"
+dependencies = [
+ "bstr",
+ "clap",
+ "colored",
+ "indexmap",
+ "json",
+ "serde_json",
+ "toml",
+ "virdant",
+]
+
+[[package]]
+name = "vir-poke"
+version = "0.4.0"
+dependencies = [
+ "bstr",
+ "clap",
+ "lalrpop 0.23.2",
+ "lalrpop-util 0.23.2",
+ "libc",
+ "rustyline",
+ "vir-common",
+ "virdant",
+]
+
+[[package]]
+name = "vir-value"
+version = "0.4.0"
+dependencies = [
+ "bstr",
+ "clap",
+ "lalrpop 0.23.2",
+ "lalrpop-util 0.23.2",
+ "vir-common",
  "virdant",
 ]
 

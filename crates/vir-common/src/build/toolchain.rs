@@ -1,7 +1,7 @@
 //! FPGA toolchain dispatch and runners.  `toolchain_for` is keyed on
 //! the platform's `@fpga` family string and is the *only* family check
-//! in the codebase: platforms are unvalidated data (Decision 13), so
-//! an unknown family simply fails here when a build is attempted.
+//! in the codebase: platforms are unvalidated data, so an unknown
+//! family simply fails here when a build is attempted.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -42,7 +42,7 @@ pub fn toolchain_for(fpga: &str) -> Option<Toolchain> {
 /// Options governing the place-and-route step.
 ///
 /// The simulated-annealing placer is stochastic: the same netlist can
-/// close timing on one seed and miss on another (see FREQ_PLAN.md).
+/// close timing on one seed and miss on another.
 /// With `tries > 1`, nextpnr runs up to `tries` times, varying `--seed`
 /// from `seed` upward (`seed`, `seed + 1`, ...), and the first attempt
 /// that closes wins.  `allow_timing_failure` passes `--timing-allow-fail`

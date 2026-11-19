@@ -1,0 +1,30 @@
+[package]
+name = "vir-value"
+version = "0.4.0"
+edition = "2024"
+rust-version = "1.88"
+
+# The WASM-clean encode/decode engine (`vir_value`): every public
+# entry point is a pure function of a `Db` plus a string, so it
+# builds unchanged for `wasm32-wasip1`/`wasip2` (wasmtime) and can
+# be linked from a future `vir-wasm` facade.
+[lib]
+name = "vir_value"
+path = "src/lib.rs"
+
+# The command-line interface: identical flags and behavior to the
+# pre-split `vir-value` binary.
+[[bin]]
+name = "vir-value"
+path = "src/main.rs"
+
+[dependencies]
+vir-common = { path = "../vir-common", features = ["compiler"] }
+virdant = { path = "../../virdant" }
+
+bstr = "1.12.0"
+clap = { version = "4.5.46", features = ["derive", "string"] }
+lalrpop-util = "0.23"
+
+[build-dependencies]
+lalrpop = "0.23"

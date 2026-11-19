@@ -4,11 +4,10 @@
 //! `vir doc` execs this binary via the `vir-*` companion-binary
 //! mechanism; see `vir/src/vir/cli.rs`.
 
-#[path = "../common/help_json.rs"]
-mod help_json;
+use vir_common::help_json;
 
-// Shared helpers, compiled once as the `vircommon` library.
-use vircommon as common;
+// Shared helpers, compiled once as the `vir_common` library.
+use vir_common as common;
 mod docs;
 
 use clap::ArgAction;

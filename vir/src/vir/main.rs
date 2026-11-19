@@ -8,7 +8,7 @@ mod cli;
 
 use cli::{Args, Command};
 
-use vircommon as common;
+use vir_common as common;
 
 use bstr::{BStr, BString, ByteSlice};
 use nix::unistd::execvp;
@@ -399,7 +399,7 @@ struct BitstreamPlan {
     verilog_top: String,
     part: Option<BString>,
     freq_mhz: Option<f64>,
-    toolchain: virdant::build::Toolchain,
+    toolchain: vir_common::build::Toolchain,
 }
 
 fn plan_bitstream(args: &Args) -> BitstreamPlan {
@@ -519,7 +519,7 @@ fn plan_bitstream(args: &Args) -> BitstreamPlan {
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
 
-    let Some(toolchain) = virdant::build::toolchain_for(fpga.to_str_lossy().as_ref()) else {
+    let Some(toolchain) = vir_common::build::toolchain_for(fpga.to_str_lossy().as_ref()) else {
         eprintln!("FPGA family '{}' is not supported", fpga.to_str_lossy());
         std::process::exit(1);
     };
@@ -545,7 +545,7 @@ fn plan_bitstream(args: &Args) -> BitstreamPlan {
         }
     }
 
-    match virdant::build::emit_constraints(&mut builder, platform_id, toolchain) {
+    match vir_common::build::emit_constraints(&mut builder, platform_id, toolchain) {
         Ok((extension, mut constraints_text)) => {
             // An optional <project>.extra.<extension> in the project
             // root is appended to the emitted constraints.  Platform
@@ -585,7 +585,7 @@ fn plan_bitstream(args: &Args) -> BitstreamPlan {
     // exactly one clock; the PCF's `set_frequency` lines (emitted
     // above) still drive static timing analysis in every case.
     let clocks = virdant::analysis::platform::platform_clocks(&mut builder, platform_id);
-    let freq_mhz = virdant::build::constraints::freq_flag_mhz(&clocks);
+    let freq_mhz = vir_common::build::constraints::freq_flag_mhz(&clocks);
     if clocks.len() > 1 {
         println!("multiple clocks: nextpnr placer runs without --freq");
     }
@@ -603,18 +603,18 @@ fn plan_bitstream(args: &Args) -> BitstreamPlan {
 
 /// Builds the PnR options shared by `vir pnr` and `vir upload`,
 /// rejecting a zero `--tries`.
-fn pnr_options(tries: u32, seed: u32, allow_timing_failure: bool) -> virdant::build::PnrOptions {
+fn pnr_options(tries: u32, seed: u32, allow_timing_failure: bool) -> vir_common::build::PnrOptions {
     if tries == 0 {
         eprintln!("--tries must be at least 1");
         std::process::exit(1);
     }
-    virdant::build::PnrOptions { tries, seed, allow_timing_failure }
+    vir_common::build::PnrOptions { tries, seed, allow_timing_failure }
 }
 
 /// Synthesize, place-and-route, and pack a bitstream (`vir bitstream`).
 fn bitstream(args: &Args) -> String {
     let plan = plan_bitstream(args);
-    virdant::build::run_toolchain(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.freq_mhz, plan.toolchain, virdant::build::PnrOptions::default())
+    vir_common::build::run_toolchain(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.freq_mhz, plan.toolchain, vir_common::build::PnrOptions::default())
         .unwrap_or_else(|e| {
             eprintln!("Toolchain error: {e}");
             std::process::exit(1);
@@ -630,7 +630,7 @@ fn bitstream(args: &Args) -> String {
 /// (e.g. to inspect it, or to re-run PnR separately).
 fn synth(args: &Args) {
     let plan = plan_bitstream(args);
-    virdant::build::run_synth(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.toolchain)
+    vir_common::build::run_synth(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.toolchain)
         .unwrap_or_else(|e| {
             eprintln!("Toolchain error: {e}");
             std::process::exit(1);
@@ -648,7 +648,7 @@ fn synth(args: &Args) {
 fn pnr(args: &Args, tries: u32, seed: u32, allow_timing_failure: bool) {
     let plan = plan_bitstream(args);
     let opts = pnr_options(tries, seed, allow_timing_failure);
-    virdant::build::run_pnr(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.freq_mhz, plan.toolchain, opts)
+    vir_common::build::run_pnr(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.freq_mhz, plan.toolchain, opts)
         .unwrap_or_else(|e| {
             eprintln!("PnR error: {e}");
             std::process::exit(1);
@@ -692,7 +692,7 @@ fn programmer_for(platform: &str) -> (&'static str, &'static [&'static str]) {
 fn upload(args: &Args, tries: u32, seed: u32, allow_timing_failure: bool) {
     let plan = plan_bitstream(args);
     let opts = pnr_options(tries, seed, allow_timing_failure);
-    virdant::build::run_toolchain(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.freq_mhz, plan.toolchain, opts)
+    vir_common::build::run_toolchain(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.freq_mhz, plan.toolchain, opts)
         .unwrap_or_else(|e| {
             eprintln!("Toolchain error: {e}");
             std::process::exit(1);
@@ -702,7 +702,7 @@ fn upload(args: &Args, tries: u32, seed: u32, allow_timing_failure: bool) {
     let project = plan.project;
     let (tool, tool_args) = programmer_for(&plan.platform_name);
 
-    virdant::build::flash_bitstream(&cwd, &project, tool, tool_args)
+    vir_common::build::flash_bitstream(&cwd, &project, tool, tool_args)
         .unwrap_or_else(|e| {
             eprintln!("Flash error: {e}");
             std::process::exit(1);

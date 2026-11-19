@@ -1,0 +1,32 @@
+[package]
+name = "vir-common"
+version = "0.4.0"
+edition = "2024"
+rust-version = "1.88"
+
+# Shared helpers for the `vir` CLI binaries, published as the
+# `vir_common` library (so `use vir_common as common;` keeps working in
+# every binary).
+[lib]
+name = "vir_common"
+path = "src/lib.rs"
+
+# The compiler-linked tier (Db construction, diagnostics) is opt-in.
+# Binaries that never touch the compiler (`vir-filecheck`,
+# `vir-virtue`, `vir-format`) link the crate with
+# `default-features = false` and get only manifest resolution and
+# `help_json`.  Everything here builds for `wasm32-wasip1`/`wasip2`
+# (WASI supplies `std::fs` and process exit, so this works under
+# wasmtime).
+[features]
+compiler = ["dep:virdant"]
+
+[dependencies]
+bstr = "1.12.0"
+clap = { version = "4.5.46", features = ["derive", "string"] }
+colored = "3.1.1"
+indexmap = "2.13.0"
+json = "0.12.4"
+serde_json = "1.0.149"
+toml = "1.1.0"
+virdant = { path = "../../virdant", optional = true }

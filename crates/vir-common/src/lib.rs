@@ -2,22 +2,48 @@
 //! project location (`-C`/`-F`), building the analysis `Db`, printing
 //! diagnostics, and maintaining the `build/` directory.
 //!
-//! Each binary includes this module with `#[path = "../common.rs"]`.
-//! (`help_json.rs` lives beside it under `common/` and is included
-//! separately, since not every binary links the compiler.)
+//! Each binary links this crate as the `vir_common` library.  The
+//! compiler-linked tier (`load`, `Db` construction, diagnostics) is
+//! gated behind the `compiler` feature; binaries that only need
+//! manifest resolution or `help_json` (e.g. `vir-filecheck`,
+//! `vir-virtue`) link the crate with `default-features = false`, so
+//! they do not compile the compiler.
+//!
+//! All code here is compatible with `wasm32-wasip1`/`wasip2` targets:
+//! WASI provides `std::fs` and process exit, so the file- and
+//! manifest-handling helpers run unchanged under wasmtime.  The one
+//! host-only detail — where the standard library lives — is owned by
+//! the compiler core's [`virdant::stdlib`] module: the host resolves
+//! `lib/` beside the executable, `wasm32` embeds the files.
+//! (`help_json.rs` depends only on clap and serde_json and is always
+//! available.)
 
 use std::path::{Path, PathBuf};
 
 use clap::{Arg, ArgMatches, Command as ClapCommand, value_parser};
+#[cfg(feature = "compiler")]
 use colored::Colorize;
 
-use virdant::common::source::Region;
-use virdant::db::Db;
-use virdant::diagnostics::DiagnosticLevel;
-use virdant::util::check_db;
+pub mod help_json;
 
+#[cfg(feature = "compiler")]
+pub mod build;
+
+#[cfg(feature = "compiler")]
 pub mod load;
-pub use load::{db_from_files, db_from_lib_dir, db_from_source_dir_scan, scan_source_dir};
+#[cfg(feature = "compiler")]
+pub use load::{
+    db_from_files, db_from_lib_dir, db_from_source_dir_scan, scan_source_dir,
+};
+
+#[cfg(feature = "compiler")]
+use virdant::common::source::Region;
+#[cfg(feature = "compiler")]
+use virdant::db::Db;
+#[cfg(feature = "compiler")]
+use virdant::diagnostics::DiagnosticLevel;
+#[cfg(feature = "compiler")]
+use virdant::util::check_db;
 
 // ---------------------------------------------------------------------------
 // Project manifest (`virdant.toml`)
@@ -149,6 +175,10 @@ impl ProjectLocation {
         }
     }
 
+}
+
+#[cfg(feature = "compiler")]
+impl ProjectLocation {
     /// Build the analysis `Db` for the project: `-F` file(s), else
     /// `src/` under the resolved working directory.
     pub fn project_db(&self) -> Db {
@@ -222,6 +252,7 @@ impl ProjectLocation {
 /// directory cannot be read, or when any file's stem is not a valid
 /// package identifier (such a package could never be `import`ed).
 /// Reporting the error is the caller's job.
+#[cfg(feature = "compiler")]
 pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Result<Db, String> {
     let source_dir = source_dir.into();
     let scan = scan_source_dir(&source_dir).map_err(|e| e.to_string())?;
@@ -310,6 +341,7 @@ pub fn read_project_name_from(manifest: &Path) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 /// Print one diagnostic in the same style as [`dump_diagnostics`].
+#[cfg(feature = "compiler")]
 pub fn dump_diagnostic(db: &Db, diagnostic: &virdant::diagnostics::Diagnostic) {
     println!(
         "{}   {}   {}",
@@ -319,6 +351,7 @@ pub fn dump_diagnostic(db: &Db, diagnostic: &virdant::diagnostics::Diagnostic) {
     );
 }
 
+#[cfg(feature = "compiler")]
 fn level_label(level: DiagnosticLevel) -> colored::ColoredString {
     use colored::Colorize as _;
     match level {
@@ -328,6 +361,7 @@ fn level_label(level: DiagnosticLevel) -> colored::ColoredString {
     }
 }
 
+#[cfg(feature = "compiler")]
 pub fn region_string(db: &Db, region: Region) -> String {
     use bstr::ByteSlice as _;
 
@@ -337,6 +371,7 @@ pub fn region_string(db: &Db, region: Region) -> String {
     format!("{package}.vir {span}")
 }
 
+#[cfg(feature = "compiler")]
 pub fn dump_diagnostics(db: &Db) {
     let diagnostics = match check_db(db) {
         Ok(diags) => diags,
@@ -387,6 +422,7 @@ pub fn dump_diagnostics(db: &Db) {
 }
 
 /// Render the project's diagnostics as a JSON array.
+#[cfg(feature = "compiler")]
 pub fn diagnostics_json(db: &Db) -> json::JsonValue {
     let diagnostics = match check_db(db) {
         Ok(diags) => diags,

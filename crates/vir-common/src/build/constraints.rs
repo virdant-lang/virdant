@@ -8,11 +8,11 @@ use bstr::BString;
 use bstr::ByteSlice;
 use indexmap::IndexSet;
 
-use crate::analysis::platform::{platform_clocks, platform_pins};
-use crate::analysis::symbols::{SymbolId, SymbolKind};
+use virdant::analysis::platform::{platform_clocks, platform_pins};
+use virdant::analysis::symbols::{SymbolId, SymbolKind};
 use crate::build::toolchain::Toolchain;
-use crate::db::Builder;
-use crate::diagnostics::{self, Diagnostic};
+use virdant::db::Builder;
+use virdant::diagnostics::{self, Diagnostic};
 
 /// Emits constraints for a platform item in the toolchain's format,
 /// returning the build directory file extension together with the
@@ -32,7 +32,7 @@ pub fn emit_constraints(
 /// Diagnostics for every platform port without a `@pin`.  Both
 /// emitters refuse to emit an incomplete constraints file: a missing
 /// pin would otherwise leave the port unconstrained at place-and-route
-/// time (Decision 13: point-of-use errors).
+/// time.
 fn require_pins(builder: &mut Builder, platform_id: SymbolId) -> Result<(), Vec<Diagnostic>> {
     let pins = platform_pins(builder, platform_id);
 
@@ -65,11 +65,10 @@ fn require_pins(builder: &mut Builder, platform_id: SymbolId) -> Result<(), Vec<
 
 /// Emits the PCF for a platform item: one `set_io` line per pinned
 /// port, one `set_frequency` line per clock port (platforms with
-/// several clocks simply get several lines; Decision 13 forbids
-/// cardinality constraints).  A platform port with no `@pin` yields
-/// an `Unknown` diagnostic naming the port, and no file content is
-/// produced — the PCF would otherwise be silently incomplete
-/// (Decision 13: point-of-use errors).
+/// several clocks simply get several lines).  A platform port with
+/// no `@pin` yields an `Unknown` diagnostic naming the port, and no
+/// file content is produced — the PCF would otherwise be silently
+/// incomplete.
 pub fn emit_pcf(builder: &mut Builder, platform_id: SymbolId) -> Result<String, Vec<Diagnostic>> {
     require_pins(builder, platform_id)?;
     let pins = platform_pins(builder, platform_id);
@@ -90,8 +89,8 @@ pub fn emit_pcf(builder: &mut Builder, platform_id: SymbolId) -> Result<String, 
 /// the platform's clock list.  `--freq` takes a single frequency, so it
 /// only applies when the platform declares exactly one clock: 0 clocks
 /// means nothing to constrain, and >1 clocks means the placer runs
-/// without the flag (Decision 13 forbids cardinality constraints).
-/// Uses the same rounding as `emit_pcf`'s `set_frequency` lines so the
+/// without the flag.  Uses the same rounding as `emit_pcf`'s
+/// `set_frequency` lines so the
 /// PCF and the `--freq` flag can never disagree.
 pub fn freq_flag_mhz(clocks: &[(BString, BString, f64)]) -> Option<f64> {
     if clocks.len() != 1 {
@@ -130,9 +129,9 @@ pub fn emit_xdc(builder: &mut Builder, platform_id: SymbolId) -> Result<String, 
 mod tests {
     use bstr::BString;
 
-    use crate::common::source::Source;
-    use crate::db::Db;
-    use crate::package::PackageTable;
+    use virdant::common::source::Source;
+    use virdant::db::Db;
+    use virdant::package::PackageTable;
 
     use super::*;
 
@@ -158,8 +157,8 @@ mod tests {
         platform_symbol.id()
     }
 
-    fn builder(db: &Db) -> crate::db::Builder<'_> {
-        crate::db::Builder::new(db)
+    fn builder(db: &Db) -> virdant::db::Builder<'_> {
+        virdant::db::Builder::new(db)
     }
 
     #[test]
@@ -262,7 +261,7 @@ mod tests {
         };
         assert_eq!(diagnostics.len(), 1);
         let message = match &diagnostics[0].payload {
-            crate::diagnostics::DiagnosticPayload::Unknown(unknown) => {
+            virdant::diagnostics::DiagnosticPayload::Unknown(unknown) => {
                 unknown.message.to_string()
             }
             payload => panic!("expected Unknown diagnostic, got {payload:?}"),
@@ -289,7 +288,7 @@ mod tests {
         };
         assert_eq!(diagnostics.len(), 1);
         let message = match &diagnostics[0].payload {
-            crate::diagnostics::DiagnosticPayload::Unknown(unknown) => {
+            virdant::diagnostics::DiagnosticPayload::Unknown(unknown) => {
                 unknown.message.to_string()
             }
             payload => panic!("expected Unknown diagnostic, got {payload:?}"),
@@ -326,6 +325,6 @@ mod tests {
 
     fn builtin_source() -> String {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        std::fs::read_to_string(root.join("../lib/builtin.vir")).unwrap()
+        std::fs::read_to_string(root.join("../../lib/builtin.vir")).unwrap()
     }
 }

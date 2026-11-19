@@ -37,31 +37,6 @@ fn db_from_name_text_pairs(files: Vec<(BString, BString)>) -> Db {
     db
 }
 
-fn load_lib_dir<P: Into<std::path::PathBuf>>(lib_dir: P) -> Vec<(BString, BString)> {
-    let lib_dir = std::fs::canonicalize(lib_dir.into())
-        .expect("Could not find lib directory");
-    let mut filepaths: Vec<PathBuf> = std::fs::read_dir(&lib_dir)
-        .expect(&format!("Could not open directory: {lib_dir:?}"))
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|filepath| match filepath.extension() {
-            Some(ext) => ext.to_string_lossy() == "vir",
-            None => false,
-        })
-        .collect();
-    // Deterministic package ordering regardless of read_dir order.
-    filepaths.sort();
-    // The standard library ships with the compiler; a bad name there is
-    // a bug in Virdant itself, not a user error, so panic.
-    for filepath in &filepaths {
-        assert!(
-            is_valid_package_name(package_name_of(filepath).as_bstr()),
-            "Invalid package name in standard library: {}",
-            filepath.display(),
-        );
-    }
-    filepaths.into_iter().map(Source::load_file).collect()
-}
-
 /// The result of scanning a project source directory for `.vir` files.
 /// `invalid_names` holds the paths whose stems are not valid package
 /// names; this module does not say *how* to report them — tools decide
@@ -96,7 +71,7 @@ pub fn scan_source_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> std::io::R
 /// directory) from a [`scan_source_dir`] result.  Loading is not
 /// scoping: only `import` puts a package's items in scope.
 pub fn db_from_source_dir_scan(scan: SourceDirScan) -> Db {
-    let mut files = load_lib_dir(virdant::LIB_DIR.as_path());
+    let mut files = virdant::stdlib::sources();
     files.extend(scan.valid.into_iter().map(Source::load_file));
     db_from_name_text_pairs(files)
 }
@@ -105,7 +80,7 @@ pub fn db_from_source_dir_scan(scan: SourceDirScan) -> Db {
 /// ice40.vir, ...  Used as the degraded fallback when the LSP server
 /// cannot read the project's source directory.
 pub fn db_from_lib_dir() -> Db {
-    db_from_name_text_pairs(load_lib_dir(virdant::LIB_DIR.as_path()))
+    db_from_name_text_pairs(virdant::stdlib::sources())
 }
 
 /// Build a self-contained `Db` from an explicit list of `.vir` files
@@ -114,7 +89,7 @@ pub fn db_from_lib_dir() -> Db {
 /// check reports any that are not valid identifiers.
 pub fn db_from_files_with_lib<P, Q>(source_files: Vec<P>, lib_dir: Q) -> Db
 where P: Into<PathBuf>, Q: Into<std::path::PathBuf> {
-    let mut files = load_lib_dir(lib_dir);
+    let mut files = dir_sources(lib_dir);
 
     for source_file in source_files {
         files.push(Source::load_file(source_file.into()));
@@ -123,7 +98,38 @@ where P: Into<PathBuf>, Q: Into<std::path::PathBuf> {
     db_from_name_text_pairs(files)
 }
 
-/// [`db_from_files_with_lib`] with the standard library directory.
+/// The standard-library half of [`db_from_files_with_lib`]: sorted,
+/// name-validated `.vir` files in the given directory.
+fn dir_sources<P: Into<PathBuf>>(lib_dir: P) -> Vec<(BString, BString)> {
+    let lib_dir = std::fs::canonicalize(lib_dir.into())
+        .expect("Could not find lib directory");
+    let mut filepaths: Vec<PathBuf> = std::fs::read_dir(&lib_dir)
+        .expect(&format!("Could not open directory: {lib_dir:?}"))
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|filepath| match filepath.extension() {
+            Some(ext) => ext.to_string_lossy() == "vir",
+            None => false,
+        })
+        .collect();
+    filepaths.sort();
+    for filepath in &filepaths {
+        assert!(
+            is_valid_package_name(package_name_of(filepath).as_bstr()),
+            "Invalid package name in standard library: {}",
+            filepath.display(),
+        );
+    }
+    filepaths.into_iter().map(Source::load_file).collect()
+}
+
+/// Build a `Db` from explicit `.vir` files (the `-F` flow) plus the
+/// standard library.  On `wasm32`, the stdlib comes from the embedded
+/// mirror ([`virdant::stdlib`]); on the host, from the installed
+/// `lib/` directory.
 pub fn db_from_files<P: Into<PathBuf>>(source_files: Vec<P>) -> Db {
-    db_from_files_with_lib(source_files, virdant::LIB_DIR.as_path())
+    let mut files = virdant::stdlib::sources();
+    for source_file in source_files {
+        files.push(Source::load_file(source_file.into()));
+    }
+    db_from_name_text_pairs(files)
 }

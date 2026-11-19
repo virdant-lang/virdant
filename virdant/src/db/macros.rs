@@ -68,7 +68,7 @@ macro_rules! db_getter {
         #[allow(dead_code)]
         impl<'d> Builder<'d> {
             #[track_caller]
-            pub(crate) fn $getter_name(&mut self, $($arg : $argtyp),*) -> $rettyp {
+            pub fn $getter_name(&mut self, $($arg : $argtyp),*) -> $rettyp {
                 let location = std::panic::Location::caller();
                 let query = Query::$query($($arg),*);
                 cast!(self.get(query, *location), $query)

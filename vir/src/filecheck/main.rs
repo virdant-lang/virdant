@@ -2,8 +2,7 @@
 //! `vir-virtue --filecheck <check-file>`.  Kept for direct invocations
 //! of the matcher (and `make install`).
 
-#[path = "../common/help_json.rs"]
-mod help_json;
+use vir_common::help_json;
 
 #[path = "../virtue/filecheck.rs"]
 mod filecheck;

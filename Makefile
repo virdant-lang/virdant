@@ -4,7 +4,7 @@ VIR    ?= $(CURDIR)/target/release/vir
 RUNNER ?= $(CURDIR)/target/release/vir-virtue
 
 build: virdant/target/lib
-	cargo build --release -p vir
+	cargo build --release --workspace
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the
 # concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar

@@ -11,11 +11,10 @@ use bstr::BStr;
 use clap::value_parser;
 use nix::unistd::execvp;
 
-#[path = "../common/help_json.rs"]
-mod help_json;
+use vir_common::help_json;
 
-// Shared helpers, compiled once as the `vircommon` library.
-use vircommon as common;
+// Shared helpers, compiled once as the `vir_common` library.
+use vir_common as common;
 
 use common::ProjectLocation;
 

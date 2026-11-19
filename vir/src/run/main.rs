@@ -12,8 +12,8 @@
 mod virt;
 mod vga;
 
-// Shared helpers, compiled once as the `vircommon` library.
-use vircommon as common;
+// Shared helpers, compiled once as the `vir_common` library.
+use vir_common as common;
 
 use common::{
     db_from_dir, dump_diagnostic, dump_diagnostics, project_manifest_or_exit, read_prog_key_from,

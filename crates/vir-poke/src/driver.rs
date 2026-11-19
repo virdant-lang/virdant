@@ -11,12 +11,23 @@ use std::cell::RefCell;
 use std::io::{BufRead, Write};
 use std::rc::Rc;
 
+// The readline REPL is host-only: `rustyline` (and the `nix` it
+// pulls in) does not build for `wasm32-wasip1`/`wasip2`.  On WASI the
+// interactive loop uses the plain line loop below — the same
+// degradation as the documented non-tty behavior.
+#[cfg(not(target_arch = "wasm32"))]
 use rustyline::completion::Completer;
+#[cfg(not(target_arch = "wasm32"))]
 use rustyline::error::ReadlineError;
+#[cfg(not(target_arch = "wasm32"))]
 use rustyline::highlight::Highlighter;
+#[cfg(not(target_arch = "wasm32"))]
 use rustyline::hint::Hinter;
+#[cfg(not(target_arch = "wasm32"))]
 use rustyline::history::FileHistory;
+#[cfg(not(target_arch = "wasm32"))]
 use rustyline::validate::Validator;
+#[cfg(not(target_arch = "wasm32"))]
 use rustyline::{CompletionType, Config, Context, Editor, Helper};
 
 use super::ast::Command;
@@ -117,11 +128,11 @@ fn run_script(session: &mut Session, lines: &[(usize, String)], mode: &Mode) -> 
 /// (editing, history, TAB completion); with piped stdin (tests,
 /// scripted sessions), a plain line loop.
 fn interactive(session: Rc<RefCell<Session>>) -> i32 {
+    #[cfg(not(target_arch = "wasm32"))]
     if unsafe { libc::isatty(libc::STDIN_FILENO) } == 1 {
-        interactive_tty(session)
-    } else {
-        interactive_basic(&mut session.borrow_mut())
+        return interactive_tty(session);
     }
+    interactive_basic(&mut session.borrow_mut())
 }
 
 /// The plain loop: used when stdin is not a terminal or when the
@@ -165,6 +176,7 @@ fn interactive_basic(session: &mut Session) -> i32 {
 
 /// The readline-style loop: line editing, history, and TAB completion
 /// (command names and signal paths, via [`Session::completions`]).
+#[cfg(not(target_arch = "wasm32"))]
 fn interactive_tty(session: Rc<RefCell<Session>>) -> i32 {
     let config = Config::builder()
         .completion_type(CompletionType::List)
@@ -218,12 +230,15 @@ fn interactive_tty(session: Rc<RefCell<Session>>) -> i32 {
 
 /// The rustyline helper: TAB completion over command names and signal
 /// paths (see [`Session::completions`]).
+#[cfg(not(target_arch = "wasm32"))]
 struct PokeHelper {
     session: Rc<RefCell<Session>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Helper for PokeHelper {}
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Completer for PokeHelper {
     type Candidate = String;
 
@@ -247,12 +262,15 @@ impl Completer for PokeHelper {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Hinter for PokeHelper {
     type Hint = String;
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Highlighter for PokeHelper {}
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Validator for PokeHelper {}
 
 enum LineResult {

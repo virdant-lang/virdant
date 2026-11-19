@@ -24,7 +24,7 @@ impl Project {
     pub fn from_project_dir(dir: &Path) -> Result<Project, String> {
         // Use the shared manifest lookup so the deprecated
         // `Virdant.toml` gets its deprecation warning too.
-        if vircommon::project_manifest(dir).is_none() {
+        if vir_common::project_manifest(dir).is_none() {
             return Err(format!("No virdant.toml found in {}", dir.display()));
         }
         let src_dir = dir.join("src");
@@ -84,5 +84,5 @@ fn db_from_dir(source_dir: std::path::PathBuf) -> Result<Db, String> {
     // its own warn-and-continue wrapper around the same
     // `virdant::util::scan_source_dir` scan, which skips bad-named
     // files instead of failing the load.
-    vircommon::db_from_dir(source_dir)
+    vir_common::db_from_dir(source_dir)
 }

@@ -7,8 +7,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[path = "../common/help_json.rs"]
-mod help_json;
+use vir_common::help_json;
 
 // ---------------------------------------------------------------------------
 // Line classification

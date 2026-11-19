@@ -28,7 +28,7 @@ const SCRATCH: &str = r#"
 
 fn builtin_source() -> String {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    std::fs::read_to_string(root.join("../lib/builtin.vir")).unwrap()
+    std::fs::read_to_string(root.join("../../lib/builtin.vir")).unwrap()
 }
 
 /// Build a throwaway project directory; returns (dir, files).
@@ -200,16 +200,20 @@ fn vir_value_companion_discovery() {
 
     // Companion discovery scans `$PATH`; put this tree's build dir
     // (where `vir-value` sits beside `vir`) at the front.
-    let exe_dir = Path::new(env!("CARGO_BIN_EXE_vir"))
+    // `vir` is built into the same target/<profile> directory as
+    // `vir-value`; cargo only exposes `CARGO_BIN_EXE_*` for the test's
+    // own package, so locate it beside `vir-value`.
+    let exe_dir = Path::new(env!("CARGO_BIN_EXE_vir-value"))
         .parent()
         .unwrap()
         .to_path_buf();
     let path = std::env::join_paths(
-        std::iter::once(exe_dir)
+        std::iter::once(exe_dir.clone())
             .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())),
     )
     .unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_vir"))
+    let vir = exe_dir.join("vir");
+    let out = Command::new(&vir)
         .args(["value", "encode", "@Valid(0)", ":", "Valid[Word[8]]"])
         .current_dir(dir.path())
         .env("PATH", path)

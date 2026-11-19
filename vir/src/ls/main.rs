@@ -19,7 +19,7 @@ type CliResult<T> = std::result::Result<T, String>;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use serde_json::json;
 
-use virdant::LIB_DIR;
+use virdant::stdlib;
 use virdant::diagnostics::DiagnosticPayload;
 use virdant::analysis::platform::resolve_platform_for;
 use virdant::analysis::ports::Port;
@@ -28,8 +28,7 @@ use virdant::types::Type;
 use virdant::common::{ComponentKind, DriverType, PortDir};
 use virdant::db::{Builder, Db};
 
-#[path = "../common/help_json.rs"]
-mod help_json;
+use vir_common::help_json;
 
 // The language-query core shared by the LSP handlers and the CLI query
 // subcommands below.
@@ -70,7 +69,7 @@ fn new_db() -> Db {
 fn project_root_for(dir: &std::path::Path) -> std::path::PathBuf {
     let mut current = Some(dir);
     while let Some(dir) = current {
-        if vircommon::project_manifest(dir).is_some() {
+        if vir_common::project_manifest(dir).is_some() {
             return dir.to_path_buf();
         }
         current = dir.parent();
@@ -94,16 +93,16 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     // analyzed, and the skipped file reports its own diagnostic (the
     // package-name check) once opened in the editor.
     let source_dir = source_dir.into();
-    match vircommon::scan_source_dir(&source_dir) {
+    match vir_common::scan_source_dir(&source_dir) {
         Ok(scan) => {
             for path in &scan.invalid_names {
                 eprintln!(
                     "warning: skipping {}: {}",
                     path.display(),
-                    vircommon::INVALID_PACKAGE_NAME_REASON,
+                    vir_common::INVALID_PACKAGE_NAME_REASON,
                 );
             }
-            let mut db = vircommon::db_from_source_dir_scan(scan);
+            let mut db = vir_common::db_from_source_dir_scan(scan);
             // The scanned directory is the opened file's directory;
             // the project root for memory image paths
             // (`@image`/`@image_hex`) is the nearest ancestor holding
@@ -113,7 +112,7 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
         }
         Err(e) => {
             eprintln!("warning: cannot read source directory {}: {e}", source_dir.display());
-            vircommon::db_from_lib_dir()
+            vir_common::db_from_lib_dir()
         }
     }
 }
@@ -1632,13 +1631,10 @@ fn package_id_to_uri(db: &Db, package: PackageId, sibling: &Url) -> Url {
         .join(format!("{name}.vir"));
     let path = if project_path.exists() {
         project_path
+    } else if let Some(lib_path) = stdlib::package_path(packages.name(package)) {
+        lib_path
     } else {
-        let lib_path = LIB_DIR.join(format!("{name}.vir"));
-        if lib_path.exists() {
-            lib_path
-        } else {
-            project_path
-        }
+        project_path
     };
     Url::from_file_path(&path).unwrap()
 }
@@ -1722,7 +1718,7 @@ fn parse_cli_location(location: &str) -> CliResult<(String, usize, usize)> {
 /// files (the pre-existing `vir ls hover <file>` behavior), else a
 /// missing-project error.
 fn project_for_dir(dir: &Path) -> CliResult<Project> {
-    if vircommon::project_manifest(dir).is_some() {
+    if vir_common::project_manifest(dir).is_some() {
         return Project::from_project_dir(dir);
     }
     let has_sources = std::fs::read_dir(dir)
@@ -1742,7 +1738,7 @@ fn project_for_dir(dir: &Path) -> CliResult<Project> {
 fn project_for_file_dir(source_dir: &Path) -> CliResult<Project> {
     let mut ancestor = Some(source_dir.to_path_buf());
     while let Some(dir) = ancestor {
-        if vircommon::project_manifest(&dir).is_some() {
+        if vir_common::project_manifest(&dir).is_some() {
             return Project::from_project_dir(&dir);
         }
         ancestor = dir.parent().map(|parent| parent.to_path_buf());
