@@ -30,7 +30,45 @@ lalrpop_util::lalrpop_mod!(
 
 pub mod driver;
 
-use std::cell::Cell;
+// ── Output routing ──────────────────────────────────────────
+//
+// Session output (`peek`, `show`, `ls`, watches, …) goes through
+// [`emit`] instead of `println!` so a host can capture it: WASM
+// embedders install a sink with [`set_output_sink`] and read it back
+// (wasm32-unknown-unknown's stdout discards writes); native runs keep
+// the default of writing to real stdout.
+
+thread_local! {
+    static SINK: RefCell<Option<Rc<RefCell<String>>>> = const { RefCell::new(None) };
+}
+
+/// Route session output into `sink` instead of stdout, until cleared
+/// with `None`.
+pub fn set_output_sink(sink: Option<Rc<RefCell<String>>>) {
+    SINK.with_borrow_mut(|slot| *slot = sink);
+}
+
+/// Take the installed sink (if any), leaving stdout as the output.
+pub fn take_output_sink() -> Option<Rc<RefCell<String>>> {
+    SINK.with_borrow_mut(|slot| slot.take())
+}
+
+/// Emit one piece of session output: into the installed sink when a
+/// host has one, or to real stdout otherwise.
+pub(crate) fn emit(text: &str) {
+    SINK.with(|slot| {
+        if let Some(sink) = slot.borrow().as_ref() {
+            sink.borrow_mut().push_str(text);
+            return;
+        }
+        let stdout = std::io::stdout();
+        let mut lock = stdout.lock();
+        let _ = lock.write_all(text.as_bytes());
+    });
+}
+
+use std::cell::{Cell, RefCell};
+use std::io::Write;
 use std::rc::Rc;
 
 use bstr::ByteSlice;
@@ -248,13 +286,13 @@ impl Session {
         }
 
         if rows.is_empty() {
-            println!("(no components or submodule instances)");
+            emit("(no components or submodule instances)\n");
             return;
         }
         rows.sort_by(|a, b| a.0.cmp(&b.0));
         let width = rows.iter().map(|(name, _, _)| name.len()).max().unwrap_or(0);
         for (name, kind, tail) in rows {
-            println!("{name:<width$} {kind} {tail}");
+            emit(&format!("{name:<width$} {kind} {tail}\n"));
         }
     }
 
@@ -320,25 +358,25 @@ impl Session {
                 continue;
             }
             if !first {
-                println!();
+                emit("\n");
             }
             first = false;
-            println!("{}:", header);
+            emit(&format!("{}:\n", header));
             for row in rows {
                 // A Clock signal is opaque: its row shows no value.
                 if row.value.is_empty() {
-                    println!(
-                        "  {:<nw$} {:<kw$} : {:<tw$}",
+                    emit(&format!(
+                        "  {:<nw$} {:<kw$} : {:<tw$}\n",
                         row.name,
                         row.kind,
                         row.typ,
                         nw = name_width,
                         kw = kind_width,
                         tw = typ_width
-                    );
+                    ));
                 } else {
-                    println!(
-                        "  {:<nw$} {:<kw$} : {:<tw$} = {}",
+                    emit(&format!(
+                        "  {:<nw$} {:<kw$} : {:<tw$} = {}\n",
                         row.name,
                         row.kind,
                         row.typ,
@@ -346,7 +384,7 @@ impl Session {
                         nw = name_width,
                         kw = kind_width,
                         tw = typ_width
-                    );
+                    ));
                 }
             }
         }
@@ -647,9 +685,13 @@ impl Session {
                     // Clocks are opaque: a watch on a clock reports the
                     // change without a value.
                     if matches!(sim.component_type(signal_id), Type::Clock) {
-                        println!("watch: {}", path);
+                        emit(&format!("watch: {}\n", path));
                     } else {
-                        println!("watch: {} = {}", path, display::render(sim, &value));
+                        emit(&format!(
+                            "watch: {} = {}\n",
+                            path,
+                            display::render(sim, &value)
+                        ));
                     }
                 }
             }),
@@ -721,7 +763,7 @@ impl Session {
         self.it = None;
         self.break_flag.set(None);
         self.vcd = None;
-        println!("top: {}", new_top.fqn.to_str_lossy());
+        emit(&format!("top: {}\n", new_top.fqn.to_str_lossy()));
         Ok(())
     }
 }

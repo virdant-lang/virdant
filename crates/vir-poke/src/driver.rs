@@ -310,7 +310,10 @@ fn handle_line(
 
 /// Parse one line into a [`Command`].  Lines that are empty or only a
 /// comment produce no tokens; the caller treats `None` as a no-op.
-fn parse_line(line: &str) -> Result<Option<Command>, String> {
+/// Parse one script/REPL line into a command (`None` for blank and
+/// comment lines).  Also used by WASM hosts that drive the session
+/// line-by-line instead of going through [`run`].
+pub fn parse_line(line: &str) -> Result<Option<Command>, String> {
     let tokens = lexer::lex(line).map_err(|e| format!("{e}"))?;
     if tokens.is_empty() {
         return Ok(None);

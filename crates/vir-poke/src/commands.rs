@@ -9,7 +9,7 @@ use virdant::sim::Value;
 use virdant::types::Type;
 
 use super::ast::{BinKind, Command, Expr};
-use super::{display, eval, poke_legal, Session};
+use super::{display, emit, eval, poke_legal, Session};
 
 /// What happens after a command runs.
 pub enum Flow {
@@ -79,7 +79,7 @@ pub fn exec(
             // No argument toggles; an argument sets the state.
             let now = on.unwrap_or(!session.autoshow);
             session.autoshow = now;
-            println!("autoshow is now {}", if now { "on" } else { "off" });
+            emit(&format!("autoshow is now {}\n", if now { "on" } else { "off" }));
             Ok(Flow::Continue)
         }
         Command::Vcd(name) => {
@@ -98,7 +98,7 @@ pub fn exec(
             session.sim.set_vcd_offset_ps(TIMESTEP_PS / 20);
             session.sim.attach_vcd(file);
             session.vcd = Some(name.clone());
-            println!("vcd: writing trace to `{name}`");
+            emit(&format!("vcd: writing trace to `{name}`\n"));
             Ok(Flow::Continue)
         }
         Command::Peek { path } => {
@@ -110,18 +110,18 @@ pub fn exec(
             if matches!(typ, Type::Clock) {
                 // Clocks are opaque: no value is shown (time is driven
                 // by `tick`, not by values).
-                println!(
-                    "{} : {}",
+                emit(&format!(
+                    "{} : {}\n",
                     full,
                     virdant::types::render::render_type(&session.db, &typ)
-                );
+                ));
             } else {
-                println!(
-                    "{} : {} = {}",
+                emit(&format!(
+                    "{} : {} = {}\n",
                     full,
                     virdant::types::render::render_type(&session.db, &typ),
                     display::render(&session.sim, &value)
-                );
+                ));
             }
             Ok(Flow::Continue)
         }
@@ -135,7 +135,11 @@ pub fn exec(
                 lock.set(signal_id, value.clone());
             }
             let full = session.sim.full_name(signal_id).to_str_lossy().into_owned();
-            println!("{} <= {}", full, display::render(&session.sim, &value));
+            emit(&format!(
+                "{} <= {}\n",
+                full,
+                display::render(&session.sim, &value)
+            ));
             if session.autoshow {
                 session.show();
             }
@@ -221,7 +225,7 @@ pub fn exec(
             // cannot hang the session.
             let total = count.saturating_mul(TIMESTEP_PS);
             session.sim.advance_time(total);
-            println!("advanced to {} ps", session.sim.now());
+            emit(&format!("advanced to {} ps\n", session.sim.now()));
             Ok(Flow::Continue)
         }
         Command::Assert { expr, line } => {
@@ -232,12 +236,12 @@ pub fn exec(
         }
         Command::Print { expr } => {
             let value = eval::eval(session, expr)?;
-            println!("{}", display::render(&session.sim, &value));
+            emit(&format!("{}\n", display::render(&session.sim, &value)));
             Ok(check_break(session)?.unwrap_or(Flow::Continue))
         }
         Command::Restart => {
             session.restart();
-            println!("restarted");
+            emit("restarted\n");
             Ok(Flow::Continue)
         }
         Command::Top(name) => {
