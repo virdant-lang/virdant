@@ -47,12 +47,14 @@ root.innerHTML = `
   <div id="trydock" hidden>
     <div class="td-resize" id="td-resize" title="Drag to resize"></div>
     <div class="td-toolbar">
-      <button class="td-btn primary" id="td-run" title="Run (vir run)">
-        <span class="td-runlabel" data-state="run">Run</span>
-        <span class="td-runlabel" data-state="checking">Checking</span>
-        <span class="td-runlabel" data-state="error">Error</span>
-      </button>
-      <button class="td-btn danger" id="td-stop" title="Stop the simulation" hidden>Stop</button>
+      <span class="td-runwrap">
+        <button class="td-btn primary" id="td-run" title="Run (vir run)">
+          <span class="td-runlabel" data-state="run">Run</span>
+          <span class="td-runlabel" data-state="checking">Checking</span>
+          <span class="td-runlabel" data-state="error">Error</span>
+        </button>
+        <button class="td-btn danger" id="td-stop" title="Stop the simulation" hidden>Stop</button>
+      </span>
       <span class="td-led" id="td-led"></span>
       <span class="td-status" id="td-status">idle</span>
       <span class="td-spacer"></span>

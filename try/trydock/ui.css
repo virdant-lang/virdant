@@ -87,6 +87,35 @@
   cursor: pointer;
   white-space: nowrap;
 }
+
+/* The [hidden] attribute must win over the display rules below.
+   (.td-runwrap overrides this for the Run/Stop pair — see below.) */
+.trydock-root .td-btn[hidden],
+.trydock-root .td-iconbtn[hidden] {
+  display: none;
+}
+
+/* Run/Stop share ONE grid cell so the buttons (and the Run
+   tri-state labels) all render at the same width — the widest of
+   Run/Checking/Error/Stop.  The inactive one is kept in layout with
+   visibility:hidden: display:none would drop it from track sizing. */
+.trydock-root .td-runwrap {
+  display: inline-grid;
+  grid-template-columns: auto;
+  justify-items: stretch;
+}
+.trydock-root .td-runwrap > * {
+  grid-column: 1;
+  grid-row: 1;
+}
+.trydock-root .td-runwrap .td-btn[hidden] {
+  display: inline-block;
+  visibility: hidden;
+}
+.trydock-root #td-run[hidden] {
+  display: inline-grid;
+  visibility: hidden;
+}
 .trydock-root .td-btn:hover:not(:disabled) { background: var(--td-hover); }
 .trydock-root .td-btn:disabled { opacity: 0.45; cursor: default; }
 .trydock-root .td-btn.primary {
