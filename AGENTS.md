@@ -3,7 +3,6 @@
 
 # Codebase organization
 * Documentation for agents (ie, for you) are in `agents/`
-* Documentation for humans are in `docs/`
 * Examples of Virdant code can be found in `tests/` and `assets/tutorial/`.
 
 # Tests
@@ -30,4 +29,3 @@ The `VERSION` file in the base directory is the canonical version of Virdant
 Keep the versions in following files in sync:
 - virdant/Cargo.toml
 - vir/Cargo.toml
-- docs/pyproject.toml

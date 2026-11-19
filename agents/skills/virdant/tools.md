@@ -2,7 +2,7 @@
 
 `vir` is a single binary with subcommands for every stage of working on a design.
 Run `vir -h` to see the same groups listed here (v0.4.0).
-Ground truth: `docs/source/tools/*.rst`, plus `vir -h` / `vir <sub> -h` themselves.
+Ground truth: `vir -h` / `vir <sub> -h` themselves.
 
 ## Top-level surface (`vir -h`)
 

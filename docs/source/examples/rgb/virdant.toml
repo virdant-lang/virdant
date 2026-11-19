@@ -1,5 +1,0 @@
-[project]
-name = "rgb"
-
-[prog]
-top = "rgb::Top"

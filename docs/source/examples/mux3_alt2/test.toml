@@ -1,3 +1,0 @@
-kind = "check"
-description = "Standalone example: second alternate 3-input multiplexer."
-expect = "ok"

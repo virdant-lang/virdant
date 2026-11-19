@@ -1,3 +1,0 @@
-kind = "check"
-description = "Multi-package example: top imports the buffer package (demonstrates imports and pub items)."
-expect = "ok"

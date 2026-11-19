@@ -1,5 +1,0 @@
-[project]
-name = "maximum"
-
-[prog]
-top = "maximum::Top"

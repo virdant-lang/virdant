@@ -1,4 +1,4 @@
-.PHONY: build test clean install grammar docs release push_web
+.PHONY: build test clean install grammar release
 
 VIR    ?= $(CURDIR)/target/release/vir
 RUNNER ?= $(CURDIR)/target/release/vir-virtue
@@ -25,8 +25,7 @@ test_runner: virdant/target/lib build
 	@echo "########################################"
 
 # The standard entry point: Rust unit tests + the parallel test runner.
-# The runner discovers every test.toml in the tree, including the docs
-# example projects under docs/source/examples/.
+# The runner discovers every test.toml in the tree.
 test: virdant/target/lib build
 	@echo "########################################"
 	@echo "RUNNING CARGO TESTS"
@@ -64,13 +63,6 @@ install: build
 	find ./target/release -maxdepth 1 -type f -executable -name 'vir*' -exec cp {} ${HOME}/.local/virdant/bin/ \;
 	cp -r ./lib/* ${HOME}/.local/virdant/lib/
 	cp -r ./assets/* ${HOME}/.local/virdant/assets/
-
-docs:
-	$(MAKE) -C docs
-
-push_web:
-	$(MAKE) -C try build
-	rsync -avz --delete try/dist/ digitalocean:/root/projects/virdant/docs/build/html/try
 
 release: build
 	mkdir -p build/deb/virdant

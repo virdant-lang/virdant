@@ -238,9 +238,8 @@ impl State {
 }
 
 /// A seed for the random init strategy, derived from the wall clock so
-/// two runs see different uninitialized values.  On wasm there is no
-/// wall clock: seed from JS-provided entropy (see `try/wasm`),
-/// falling back to a fixed constant.
+/// two runs see different uninitialized values.  When no wall clock is
+/// available (e.g. wasm), fall back to a fixed constant.
 fn initial_seed() -> u64 {
     cfg_if_time_seed()
 }

@@ -120,7 +120,7 @@ mod MatchLoop {
     outputs cannot change in the same cycle).
   * Declaring *too much* is only a warning (see Warnings, `` Unused `dependson` ``
     below).
-* See `docs/source/reference/modules.rst` ("The `dependson` List").
+* See the reference documentation ("The `dependson` List").
 
 ### drivers
 

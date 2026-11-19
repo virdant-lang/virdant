@@ -1,5 +1,0 @@
-[project]
-name = "sockets"
-
-[prog]
-top = "sockets::Top"

@@ -1,5 +1,0 @@
-[project]
-name = "packages"
-
-[prog]
-top = "top::Top"

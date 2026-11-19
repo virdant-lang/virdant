@@ -1,3 +1,0 @@
-kind = "check"
-description = "Guide adder example: ripple-carry adder built from half/full adders."
-expect = "ok"

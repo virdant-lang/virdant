@@ -12,7 +12,6 @@ The following is a list of rules and heuristics to be observed during code revie
 Please report each violation of any of these rules.
 
 ## Language Changes
-- Ensure that any changes to the language are reflected in `docs/source/reference`
 - Ensure that any changes to the language are reflected in `agents/skills/virdant`
 
 ## Code Comments

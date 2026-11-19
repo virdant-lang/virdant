@@ -1,3 +1,0 @@
-kind = "check"
-description = "Guide mux example: 4-input multiplexer."
-expect = "ok"

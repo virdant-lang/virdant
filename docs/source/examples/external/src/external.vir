@@ -1,4 +1,0 @@
-pub ext mod Memory {
-    incoming addr : Word[16]
-    outgoing data : Word[8]
-}

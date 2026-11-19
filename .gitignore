@@ -8,7 +8,6 @@ build
 *.gtkw
 *.sh
 *.pdf
-docs/.build-lock
 
 w
 notes

@@ -392,7 +392,7 @@ pub fn discover(root: &Path) -> Result<Vec<Test>, String> {
         let dir = abs_dir.strip_prefix(root).unwrap().to_path_buf();
         let mut test = parse_test_toml(&abs_dir, &text)?;
         // Stable identity: the directory path relative to the repo root
-        // (tests/check/whens, docs/mytest, ...), used identically on
+        // (tests/check/whens, tests/mytest, ...), used identically on
         // screen and in build/tests/ paths.
         test.dir = dir.clone();
         test.name = dir.to_string_lossy().to_string();

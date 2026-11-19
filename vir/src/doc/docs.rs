@@ -1106,8 +1106,7 @@ fn kind_label(kind: &SymbolKind) -> &'static str {
 fn write_static_files(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let css = include_str!("docs/templates/style.css");
     std::fs::write(out_dir.join("style.css"), css)?;
-    // The logo mark shown in the sidebar header (same artwork as the
-    // white-on-green logo on https://virdant.org).
+    // The logo mark shown in the sidebar header.
     let logo = include_str!("docs/templates/virdant-logo.svg");
     std::fs::write(out_dir.join("virdant-logo.svg"), logo)?;
     Ok(())

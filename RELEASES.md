@@ -11,8 +11,6 @@ A release is:
 2. A **git tag** `vX.Y.Z` pushed to `origin`.
 3. A **GitHub release** containing the toolchain archive(s), produced
    automatically by `.github/workflows/release.yaml` when the tag lands.
-4. Optionally, a **rebuilt and redeployed** documentation site
-   (virdant.org).
 
 ---
 
@@ -31,14 +29,11 @@ they must agree:
 | `VERSION`                           | Canonical version                |
 | `virdant/Cargo.toml`                | Compiler crate version           |
 | `vir/Cargo.toml`                    | CLI / tools crate version        |
-| `docs/pyproject.toml`               | `virdant-docs` Sphinx project    |
-| `docs/uv.lock`                      | Lockfile embeds `virdant-docs`' version — update it too |
 | `Cargo.lock`                        | Lockfile embeds both crate versions — refresh after bumping |
 | `virdant/Cargo.toml` `rust-version` | MSRV — only changed deliberately, not per release |
 
-The simplest way to keep the lockfiles in sync is to rebuild after
-editing the manifests: `cargo build -p virdant` refreshes `Cargo.lock`,
-and `make -C docs` (or `uv lock --project docs`) refreshes `docs/uv.lock`.
+The simplest way to keep `Cargo.lock` in sync is to rebuild after
+editing the manifests: `cargo build -p virdant` refreshes `Cargo.lock`.
 
 While a release is *in development*, `VERSION` already holds the
 upcoming version number (e.g. the tree carries `0.4.0` while
@@ -97,13 +92,6 @@ separate, manual path — not part of the GitHub release — and currently
 has known issues (see [Known issues](#known-issues)). Treat it as
 experimental until fixed.
 
-### Documentation
-
-The Sphinx docs (virdant.org) are built with `make -C docs` and
-deployed manually with `make -C docs push` (rsync to the web host).
-The docs embed the version via `docs/pyproject.toml`, so cut them
-after the version bump.
-
 ---
 
 ## How the release workflow works
@@ -145,17 +133,15 @@ Edit these files, setting the version to `0.4.0`:
 - `VERSION`
 - `virdant/Cargo.toml`
 - `vir/Cargo.toml`
-- `docs/pyproject.toml`
 
 Then refresh the lockfiles:
 
     cargo build -p virdant     # refreshes Cargo.lock
-    make -C docs               # refreshes docs/uv.lock (may be skipped if deps unchanged)
 
 Verify nothing is stale:
 
     grep -rn "0\.3\.0" VERSION virdant/Cargo.toml vir/Cargo.toml \
-        docs/pyproject.toml docs/uv.lock Cargo.lock
+        Cargo.lock
 
 (Expect to match only unrelated dependency versions; the Virdant
 version should be `0.4.0` everywhere it appears.)
@@ -173,11 +159,6 @@ Also confirm generated artifacts are current:
 
     make grammar     # GRAMMAR.txt matches virdant.lalrpop
     git diff --exit-code GRAMMAR.txt
-
-And build the docs once so the release ships with a site that actually
-renders:
-
-    make -C docs
 
 Fix anything that fails; only proceed when everything passes.
 
@@ -233,15 +214,7 @@ over force-patching an existing release's assets.
 - Confirm `vir --version` built from the tagged checkout also reports
   `v0.4.0` (not `-dirty`).
 
-### 9. Deploy the docs
-
-    make -C docs push
-
-This rebuilds the docs (including rustdocs) and rsyncs them to
-virdant.org. Do this after the version bump so the site reflects the
-new release.
-
-### 10. Start the next cycle
+### 9. Start the next cycle
 
 - If it does not already exist, create `v0.5.0-dev` (or
   `v0.4.1-dev` for a patch line) for the next round of stabilization.
@@ -253,18 +226,16 @@ new release.
 ## Checklist (condensed)
 
 - [ ] Intended work merged to `master`
-- [ ] `VERSION`, `virdant/Cargo.toml`, `vir/Cargo.toml`,
-      `docs/pyproject.toml` all bumped to the same version
-- [ ] `Cargo.lock` and `docs/uv.lock` refreshed
+- [ ] `VERSION`, `virdant/Cargo.toml`, `vir/Cargo.toml` all bumped to
+      the same version
+- [ ] `Cargo.lock` refreshed
 - [ ] `make test` and `make test_cli` pass
 - [ ] `make grammar` leaves `GRAMMAR.txt` unchanged
-- [ ] `make -C docs` builds cleanly
 - [ ] Version-bump commit (`RELEASE:` prefix) is the tip of `master`
 - [ ] Tag `v0.4.0` created and pushed
 - [ ] Release workflow succeeded; tarball + sha256 attached to the
       GitHub release
 - [ ] Archive smoke-tested (`vir --version` shows the release version)
-- [ ] Docs deployed (`make -C docs push`)
 - [ ] Next dev branch created
 
 ---
@@ -286,8 +257,6 @@ Things that are currently rough, worth fixing before they bite:
   is built. `build-release.sh` is structured to accept more families
   but only `linux` is implemented; a macOS/arm64 release would need a
   `macos` family and a matching CI job.
-- **`docs/uv.lock` embeds the docs version** and is easy to forget
-  when bumping; `grep`ing for the old version (step 2) catches it.
 - **`virdant/Cargo.toml` depends on a git fork of `lalrpop`**
   (`virdant-lang/lalrpop`), not a crates.io release. Anything that
   changes that dependency is a release risk beyond the usual version

@@ -1,5 +1,0 @@
-[project]
-name = "mux3"
-
-[prog]
-top = "mux3::Mux3"

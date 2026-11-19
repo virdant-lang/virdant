@@ -14,8 +14,7 @@ purpose-built for RTL design. Designs are written in `.vir` files organized
 into packages; modules (`mod`) drive typed components (`wire`, `reg`, ports,
 sockets) with driver blocks; `vir check` is the compiler-frontend you loop on,
 and `vir build`/`synth`/`pnr`/`bitstream`/`upload` carry a design to an FPGA.
-This skill is self-contained: everything load-bearing is here; the website is
-further reading only.
+This skill is self-contained: everything load-bearing is here.
 
 ## The five non-negotiables
 

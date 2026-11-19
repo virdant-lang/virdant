@@ -1,5 +1,0 @@
-[project]
-name = "riscv"
-
-[prog]
-top = "top::Top"

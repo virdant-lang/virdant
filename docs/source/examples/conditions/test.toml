@@ -1,3 +1,0 @@
-kind = "check"
-description = "Standalone example of if/match condition blocks."
-expect = "ok"

@@ -1,5 +1,0 @@
-[project]
-name = "matches"
-
-[prog]
-top = "matches::Top"

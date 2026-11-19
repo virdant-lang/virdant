@@ -4,8 +4,7 @@
 //
 // The race: after reset release, is the first value observed from the
 // register the `initial` 5, or already the incremented 6?  The
-// documented behavior (see docs/source/reference/statements.rst, "The
-// Initial Statement": the `initial` value is what the register holds
+// documented behavior (see the reference, "The Initial Statement": the `initial` value is what the register holds
 // when the design starts up, and the `<=` driver takes over at clock
 // edges) is that the register holds 5 from power-on until the first
 // clock edge, and each edge then applies the driver once.  This test

@@ -1,9 +1,0 @@
-[project]
-name = "virdant-docs"
-version = "0.4.0"
-requires-python = ">=3.9"
-dependencies = [
-    "Sphinx==7.4.7",
-    "sphinx_rtd_theme==2.0.0",
-    "sphinxext-opengraph",
-]

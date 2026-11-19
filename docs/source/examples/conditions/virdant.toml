@@ -1,5 +1,0 @@
-[project]
-name = "conditions"
-
-[prog]
-top = "conditions::Top"
