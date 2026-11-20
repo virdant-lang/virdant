@@ -15,7 +15,7 @@
 //! (`lib.rs`/`driver.rs`), which is also what a WASM front-end
 //! (WASI/wasmtime) links.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use bstr::ByteSlice;
@@ -214,6 +214,12 @@ pub fn run(
         break_flag: Rc::new(Cell::new(None)),
         autoshow: false,
         vcd: None,
+        vcd_signals: Rc::new(RefCell::new(None)),
+        // The running script's name: the default `vcd` file name is
+        // derived from it (`<script>.vcd`).
+        script_name: standalone
+            .clone()
+            .or_else(|| preload.clone()),
     };
 
     let script = if let Some(path) = standalone {

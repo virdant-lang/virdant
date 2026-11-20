@@ -11,10 +11,28 @@
 //! widths (including user-defined aggregate types).
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::io::Write;
 use std::rc::Rc;
 
-use bstr::{BString, ByteSlice};
+use bstr::{BStr, BString, ByteSlice};
+
+/// Which signals a trace dumps, shared with the driver (the poke
+/// session's `show <SIGNAL>` list): `None` inside is every signal;
+/// `Some(set)` is only the signals whose full elaborated paths are in
+/// the set.  Shared so the list can change after attaching.
+pub type VcdSignalSet = Rc<RefCell<Option<HashSet<BString>>>>;
+
+/// Whether `path` is dumped under `filter`.
+fn dumped(filter: &Option<VcdSignalSet>, path: &BStr) -> bool {
+    match filter {
+        None => true,
+        Some(shared) => shared
+            .borrow()
+            .as_ref()
+            .is_none_or(|set| set.contains(path)),
+    }
+}
 
 use crate::analysis::elaboration::SignalId;
 use crate::common::Width;
@@ -35,7 +53,7 @@ struct DumpSig {
     offset: u64,
 }
 
-pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
+pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W, filter: Option<VcdSignalSet>) {
     let layout_index = sim.type_layout_index().clone();
     let elab = sim.elaboration();
 
@@ -68,7 +86,10 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
         writeln!(w, "#{t}").unwrap();
         last_time.set(Some(t));
         writeln!(w, "$dumpvars").unwrap();
-        for (s, _) in &sigs {
+        for (s, path) in &sigs {
+            if !dumped(&filter, path.as_bstr()) {
+                continue;
+            }
             write_change(&mut *w, &s.code, s.width, &sim.get(s.id).to_bit_string());
         }
         writeln!(w, "$end").unwrap();
@@ -81,14 +102,23 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
     // `offset` apart across settlements — true for poke's ticks.)
     let mut ordered: Vec<&(DumpSig, BString)> = sigs.iter().collect();
     ordered.sort_by_key(|(s, _)| s.offset != 0);
-    for (s, _) in ordered {
+    for (s, path) in ordered {
         let code = s.code.clone();
         let width = s.width;
         let offset = s.offset;
+        let path = path.clone();
         let writer_cb = writer.clone();
         let last_time_cb = last_time.clone();
+        let filter_cb = filter.clone();
         let sig_id = s.id;
         sim.on_change(sig_id, Box::new(move |s| {
+            // The filter is read per change, so signals added to the
+            // list after attaching start appearing from their next
+            // change.  (Their `$var` declarations were written in the
+            // header regardless, so viewers know every code.)
+            if !dumped(&filter_cb, path.as_bstr()) {
+                return;
+            }
             let t = s.now() + offset;
             let mut w = writer_cb.borrow_mut();
             if last_time_cb.get() != Some(t) {

@@ -68,6 +68,7 @@ pub(crate) fn emit(text: &str) {
 }
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::io::Write;
 use std::rc::Rc;
 
@@ -80,6 +81,8 @@ use virdant::db::Db;
 use virdant::syntax::payload::AstNodePayload;
 use virdant::sim::{InitStrategy, Sim, Value};
 use virdant::types::Type;
+
+use bstr::BString;
 
 use ast::SPath;
 
@@ -106,6 +109,17 @@ pub struct Session {
     /// The file a VCD trace (`vcd`) is being written to, if any.
     /// Cleared by `restart`: the trace lives and dies with the `Sim`.
     pub vcd: Option<String>,
+    /// Which signals the VCD trace carries: `None` is every signal
+    /// (the starting state); `Some(set)` is only the signals whose
+    /// full elaborated paths are in the set — built up by
+    /// `show <SIGNAL>` (the first call replaces "every signal" with
+    /// just that one, each further call adds one more).  Shared with
+    /// the sim's VCD watchers, so a trace attached earlier picks up
+    /// signals added to the list later.  Reset by `restart`/`top`.
+    pub vcd_signals: Rc<RefCell<Option<HashSet<BString>>>>,
+    /// The running script's path, when a script is running (used for
+    /// the default `vcd` file name: `<script>.vcd`).
+    pub script_name: Option<String>,
 }
 
 impl Session {
@@ -197,6 +211,47 @@ impl Session {
         }
         let _ = full;
         Some(hint)
+    }
+
+    /// `show <path>`: select the signal for the VCD trace.  The trace
+    /// starts off carrying every signal; the first `show` replaces
+    /// that with just this signal, and each further `show` adds one
+    /// more.  Bare `show` (no argument) never changes the list.
+    pub fn show_signal(&mut self, spath: &SPath) -> Result<(), String> {
+        let signal_id = self.resolve_signal(spath)?;
+        let full = self.sim.full_name(signal_id).to_str_lossy().into_owned();
+        let mut list = self.vcd_signals.borrow_mut();
+        match &mut *list {
+            None => {
+                *list = Some(HashSet::from([BString::from(full.clone())]));
+                emit(&format!("show: tracing {full} (only)\n"));
+            }
+            Some(set) => {
+                if set.contains(full.as_bytes().as_bstr()) {
+                    emit(&format!("show: {full} already traced\n"));
+                } else {
+                    set.insert(BString::from(full.clone()));
+                    emit(&format!(
+                        "show: tracing {full} ({} traced)\n",
+                        set.len()
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The default VCD file name for a bare `vcd`: the running
+    /// script's name with a `.vcd` extension (`counter.poke` →
+    /// `counter.vcd`), or `trace.vcd` when no script is running.
+    fn default_vcd_name(&self) -> String {
+        match &self.script_name {
+            Some(script) => std::path::Path::new(script)
+                .with_extension("vcd")
+                .to_string_lossy()
+                .into_owned(),
+            None => "trace.vcd".to_string(),
+        }
     }
 
     /// `cd <path>`: drill into a submodule, one or more levels down.
@@ -471,7 +526,7 @@ impl Session {
                 }
                 self.complete_path(word, true)
             }
-            "peek" | "watch" | "break" => {
+            "peek" | "watch" | "break" | "show" => {
                 if arg_index == 1 {
                     self.complete_path(word, false)
                 } else {
@@ -713,6 +768,8 @@ impl Session {
         // A VCD trace was attached to the old `Sim` (its watchers died
         // with it); forget it so a fresh trace can be started.
         self.vcd = None;
+        // Back to tracing every signal.
+        *self.vcd_signals.borrow_mut() = None;
     }
 
     /// `top <module>`: reload the simulator with a new top module.
@@ -763,6 +820,9 @@ impl Session {
         self.it = None;
         self.break_flag.set(None);
         self.vcd = None;
+        // Back to tracing every signal (the new design may not even
+        // have the old list's paths).
+        *self.vcd_signals.borrow_mut() = None;
         emit(&format!("top: {}\n", new_top.fqn.to_str_lossy()));
         Ok(())
     }

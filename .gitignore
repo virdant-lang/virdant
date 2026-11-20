@@ -5,6 +5,7 @@ build
 !/virdant/src/build/
 .cargo
 **/dump.vcd
+script.vcd
 *.gtkw
 *.sh
 *.pdf

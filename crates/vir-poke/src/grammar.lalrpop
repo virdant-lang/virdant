@@ -100,9 +100,11 @@ Cmd: Command = {
     "restart" => Command::Restart,
     "exit" => Command::Exit,
     "ls" => Command::Ls,
-    "show" => Command::Show,
+    "show" => Command::Show(None),
+    "show" <p: Path> => Command::Show(Some(p)),
     "autoshow" <t: AutoshowState> => t,
-    "vcd" <t: VcdTarget> => Command::Vcd(t),
+    "vcd" => Command::Vcd(None),
+    "vcd" <t: VcdTarget> => Command::Vcd(Some(t)),
     "top" <t: TopFqn> => Command::Top(t),
 };
 

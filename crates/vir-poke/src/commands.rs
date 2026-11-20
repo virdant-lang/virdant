@@ -71,8 +71,12 @@ pub fn exec(
             session.ls();
             Ok(Flow::Continue)
         }
-        Command::Show => {
+        Command::Show(None) => {
             session.show();
+            Ok(Flow::Continue)
+        }
+        Command::Show(Some(path)) => {
+            session.show_signal(path)?;
             Ok(Flow::Continue)
         }
         Command::Autoshow(on) => {
@@ -83,12 +87,16 @@ pub fn exec(
             Ok(Flow::Continue)
         }
         Command::Vcd(name) => {
+            let name = match name {
+                Some(name) => name.clone(),
+                None => session.default_vcd_name(),
+            };
             if let Some(old) = &session.vcd {
                 return Err(format!(
                     "a VCD trace is already being written to `{old}`; `restart` the simulation to start a new trace"
                 ));
             }
-            let file = std::fs::File::create(name)
+            let file = std::fs::File::create(&name)
                 .map_err(|e| format!("cannot create `{name}`: {e}"))?;
             // Educational delay: every non-clock signal's changes render
             // a twentieth of a clock period after the tick edge that
@@ -96,7 +104,7 @@ pub fn exec(
             // waveforms show logic settling just after the edge, without
             // the engine modelling delay at all.
             session.sim.set_vcd_offset_ps(TIMESTEP_PS / 20);
-            session.sim.attach_vcd(file);
+            session.sim.attach_vcd(file, Some(session.vcd_signals.clone()));
             session.vcd = Some(name.clone());
             emit(&format!("vcd: writing trace to `{name}`\n"));
             Ok(Flow::Continue)

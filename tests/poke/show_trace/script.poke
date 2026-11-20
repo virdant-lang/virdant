@@ -1,0 +1,22 @@
+// `show <signal>` selects the VCD trace: the first call makes the
+// trace contain only that signal; each further call adds one more.
+show clock
+show enable
+show counter
+show double
+// Re-showing an already-traced signal is a no-op.
+show counter
+
+// Bare `vcd` defaults to the script's name: `script.vcd`.
+vcd
+
+poke enable true
+tick 3
+assert counter == 3
+assert double == 6
+// The trace is still attached and filtering; `show` without an
+// argument prints the design and leaves the trace list alone.
+show
+tick 2
+assert counter == 5
+exit

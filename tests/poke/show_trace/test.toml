@@ -1,0 +1,2 @@
+kind = "poke"
+description = "`vir poke` `show <signal>` narrows the VCD trace: first show makes it only that signal, further shows add more; bare `vcd` defaults to the script's name."

@@ -132,8 +132,11 @@ $ test -f trace.vcd
 cd <path>           drill into a submodule (cd .. up, cd top back)
 ls                  list components (kind + type) and instances
 show                print every signal's value, grouped by module
+show <path>         select the signal for the VCD trace (first call: only it;
+                    each further call adds one more)
 autoshow [on|off]   show the design after every poke/tick
-vcd <file>          write a VCD trace from now on
+vcd [<file>]        write a VCD trace from now on (default <script>.vcd, or
+                    trace.vcd with no script)
 peek <path>         print a signal's value (also sets `it`)
 poke <path> <expr>  drive a top-level incoming port or a register
 watch <path>        print the signal whenever it changes

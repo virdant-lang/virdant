@@ -330,8 +330,11 @@ fn print_help() {
   cd <path>          drill into a submodule (cd .. up, cd top back to the top)
   ls                 list components (kind + type) and submodule/socket instances
   show               print the value of every signal in the design, by module
+  show <path>        select the signal for the VCD trace (first call: only it;
+                     each further call adds one more)
   autoshow [on|off]  show the design after every poke/tick (no arg toggles)
-  vcd <file>         write a VCD trace to the file from now on
+  vcd [<file>]       write a VCD trace to the file from now on (default:
+                     <script>.vcd, or trace.vcd with no script)
   peek <path>        print a signal's value (sets `it`)
   poke <path> <expr> drive a top-level incoming port or a register
   watch <path>       print a signal whenever it changes

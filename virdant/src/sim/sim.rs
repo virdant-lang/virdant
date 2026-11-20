@@ -366,8 +366,19 @@ impl Sim {
     /// signal `on_change` watchers are registered to write subsequent value
     /// changes.  A final `flush()` is registered to fire from `Sim::run`'s
     /// end-of-simulation hook.  See `vcd.rs` for the bit-layout seam.
-    pub fn attach_vcd<W: Write + 'static>(&mut self, writer: W) {
-        crate::sim::vcd::attach(self, writer);
+    ///
+    /// `filter` restricts which signals are dumped: `None` dumps every
+    /// signal; `Some(shared)` dumps according to the shared signal list
+    /// (an empty list — `None` inside — is every signal).  The list is
+    /// shared (`Rc<RefCell<_>>`) and read per value change, so a driver
+    /// can grow it after attaching — newly listed signals start
+    /// appearing in the trace from their next change.
+    pub fn attach_vcd<W: Write + 'static>(
+        &mut self,
+        writer: W,
+        filter: Option<crate::sim::vcd::VcdSignalSet>,
+    ) {
+        crate::sim::vcd::attach(self, writer, filter);
     }
 
     /// Evaluate every driven component, repeating until the

@@ -1,0 +1,3 @@
+// `show <signal>` on a signal that does not exist must fail the run.
+show nothere
+exit

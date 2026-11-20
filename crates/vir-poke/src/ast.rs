@@ -98,15 +98,22 @@ pub enum Command {
     Ls,
     /// `show`: print the value of every signal in the design,
     /// grouped by module.
-    Show,
+    ///
+    /// `show <path>` instead selects the signal for the VCD trace:
+    /// the first call makes the trace contain *only* that signal,
+    /// each further call adds one more (the trace starts off carrying
+    /// every signal).  Bare `show` never changes the list.
+    Show(Option<SPath>),
     /// `autoshow [on|off]`: set (or toggle, with no argument) whether
     /// the design is shown after every `poke` and `tick`.
     Autoshow(Option<bool>),
-    /// `vcd <file>`: attach a VCD trace of every dumpable signal to
-    /// the simulation, written to the given file from now on.  The
+    /// `vcd <file>`: attach a VCD trace of the traced signals to the
+    /// simulation, written to the given file from now on.  The
     /// file name may be quoted (`vcd "my trace.vcd"`) or bare
-    /// (`vcd trace.vcd`, `vcd out/trace.vcd`).
-    Vcd(String),
+    /// (`vcd trace.vcd`, `vcd out/trace.vcd`); with no argument the
+    /// default is `<script>.vcd` (the running script's name) or
+    /// `trace.vcd` when no script is running.
+    Vcd(Option<String>),
     /// `top <module>`: reload the simulator with a new top module
     /// (`package::ModDef`, or a simple name when unambiguous).
     Top(String),

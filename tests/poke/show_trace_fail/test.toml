@@ -1,0 +1,3 @@
+kind = "poke"
+description = "`vir poke` `show <signal>` on a nonexistent signal exits nonzero."
+expect = "error"

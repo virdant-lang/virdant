@@ -161,7 +161,8 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, board: VirtBoard, opts: VirtOp
                 eprintln!("virt: cannot create trace file {}: {e}", path.display());
                 std::process::exit(1);
             });
-        sim.attach_vcd(file);
+        // `vir run` traces every signal (no filter).
+        sim.attach_vcd(file, None);
     }
 
     // Start inputs in a sane state: UART idle high, flash idle low.
