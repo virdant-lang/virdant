@@ -154,8 +154,10 @@ fn invalid_reason(
 ///   the `wN` suffix is stripped for now);
 /// - `Bit` as `true`/`false`;
 /// - `Clock`/`Reset` as full-width binary (`0b0`);
-/// - enums as constructor syntax, recursively: payload enumerants
-///   as `@Valid(0)`, zero-param enumerants as `#Invalid`;
+/// - types whose members carry payloads in union syntax,
+///   recursively, with `@` for every member: `@Valid(0)`,
+///   `@Invalid()` (empty parens for a zero-payload member);
+/// - pure enums (every member zero-param) as `#Red`;
 /// - unions as constructor syntax, recursively: `@Some(0)`,
 ///   `@Idle()`;
 /// - structs as `${f = value, ...}`.
@@ -185,14 +187,21 @@ pub fn render(layouts: &TypeLayoutIndex, typ: &Type, bits: &BitPat) -> String {
             } else if let Some((slot, payloads)) =
                 layouts.decode_ctor(layouts.type_id(typ), bits)
             {
-                // Enumerants without payload print as `#A` (the
-                // source-level spelling for zero-param enums);
-                // union variants — and payload-carrying enum
-                // enumerants — always print with parens, `@A()` /
-                // `@Valid(0)`, so every decode output is a valid
+                // The spelling is decided per type, not per member:
+                // types with any payload-carrying member print in
+                // union syntax, `@Name(...)` for every member (empty
+                // parens for zero-payload members), while pure enums
+                // (every member zero-param) print `#Name`.  Either
+                // way, every decode output is a valid
                 // round-trippable value expression.
-                let ctor_prefix = match layouts.kind_of(typ) {
-                    Some(TypeLayoutKind::Enum { .. }) if payloads.is_empty() => "#",
+                let value_prefix = match layouts.kind_of(typ) {
+                    Some(TypeLayoutKind::Enum { .. }) => {
+                        let any_payload = layouts
+                            .slots_of(typ)
+                            .map(|slots| slots.iter().any(|slot| !slot.param_types.is_empty()))
+                            .unwrap_or(false);
+                        if any_payload { "@" } else { "#" }
+                    }
                     _ => "@",
                 };
                 let args: Vec<String> = payloads
@@ -201,10 +210,10 @@ pub fn render(layouts: &TypeLayoutIndex, typ: &Type, bits: &BitPat) -> String {
                     .map(|(pat, t)| render(layouts, t, pat))
                     .collect();
                 let arg_list = args.join(", ");
-                if args.is_empty() && ctor_prefix == "#" {
-                    format!("#{name}", name = slot.name.to_str_lossy())
+                if value_prefix == "#" {
+                    format!("#{name}", name = slot.name.to_str_lossy(),)
                 } else {
-                    format!("{ctor_prefix}{}({arg_list})", slot.name.to_str_lossy())
+                    format!("@{name}({arg_list})", name = slot.name.to_str_lossy(),)
                 }
             } else {
                 // Unreachable: callers validate before rendering.

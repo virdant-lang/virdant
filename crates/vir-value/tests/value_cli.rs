@@ -145,7 +145,8 @@ fn decode_examples() {
 #[test]
 fn decode_enum_examples() {
     let (_dir, files) = project_dir();
-    // Zero-payload enum enumerants decode to the `#` spelling.
+    // Zero-payload enum enumerants decode to `#Name` (the enum
+    // spelling, no parens).
     let (code, out, err) = run_value(&["decode", "0b01", "scratch::Mode"], &files);
     assert_eq!(code, 0, "stderr: {err}");
     assert_eq!(out.trim(), "#Idle");

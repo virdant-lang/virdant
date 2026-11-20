@@ -62,6 +62,32 @@ pub fn db_from_sources(sources: Vec<(&str, String)>) -> Db {
 /// so WASM builds do not need filesystem access.
 pub const BUILTIN_VIR: &str = include_str!("../../../lib/builtin.vir");
 
+/// Parse and resolve one type spelling against the project `Db`.
+///
+/// The input is a type exactly as it appears after the pattern in a
+/// `decode` invocation (`Valid[Word[8]]`, `pkg::Name[...]`, bare for
+/// builtins), parsed by the same grammar and resolved by the same
+/// resolver.  Callers that need a semantic [`Type`] without a value
+/// in hand (rendering decisions, layout queries) use this instead of
+/// round-tripping through a dummy decode.
+pub fn resolve_type(db: &Db, input: &str) -> Result<Type, String> {
+    // The grammar has no standalone type production; the `decode`
+    // one is `PatternLit VType`, so a leading `0` (a `Nat` pattern
+    // literal) is parsed and discarded.
+    let toks = lexer::lex(&format!("0 {input}")).map_err(|e| {
+        format!(
+            "{} at byte {}: {}",
+            e.message,
+            e.offset,
+            render_context(input, e.offset),
+        )
+    })?;
+    let (_, vt) = grammar::DecodeParser::new()
+        .parse(toks)
+        .map_err(|e| format!("parse error: {e}"))?;
+    Resolver::new(db).resolve_type(&vt)
+}
+
 /// Parse, resolve, and run one encode/decode invocation against the
 /// project `Db`.
 pub fn run(db: &Db, subcommand: &str, input: &str) -> Result<String, String> {
@@ -119,6 +145,7 @@ fn render_context(input: &str, offset: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use virdant::types::render::render_type_fqn;
 
     /// Build a `Db` over `builtin.vir` plus a small scratch package
     /// (the same pattern as `virdant/src/verilog/conversion.rs`'s
@@ -147,9 +174,21 @@ mod tests {
     }
 
     #[test]
-    fn ctor_prefix_spellings() {
+    fn resolve_type_examples() {
+        let db = scratch_db();
+        let t = resolve_type(&db, "scratch::Scratch[Word[4]]").unwrap();
+        // render_type_fqn qualifies builtins too; only the spelling round-trips.
+        assert_eq!(render_type_fqn(&db, &t), "scratch::Scratch[builtin::Word[4]]");
+        assert!(resolve_type(&db, "Word[8]").is_ok());
+        // Unknown names resolve like decode's do, with the same hint.
+        assert!(resolve_type(&db, "Nope").unwrap_err().contains("unknown type 'Nope'"));
+    }
+
+    #[test]
+    fn ctor_and_enumerant_spellings() {
         // `#` (poke-style) is accepted as an alias for `@` (Virdant
-        // source syntax); the decode output is always `@`.
+        // source syntax) for both union variants and enum
+        // enumerants; the decode output always round-trips.
         assert_eq!(run_ok("#Valid(0w8)"), run_ok("@Valid(0w8)"));
         assert_eq!(run_ok("#Invalid : Valid[Word[8]]"), "0b0000000001");
     }
@@ -185,11 +224,12 @@ mod tests {
     }
 
     #[test]
-    fn decode_ctors_prefixed_with_at() {
-        // Payload constructors (union variants and payload-carrying
-        // enum enumerants) decode with `@Name(...)` — the Virdant
-        // source syntax — even though `#` is accepted on input.  At
-        // the top level and at every nesting level.
+    fn decode_spellings_union_at_and_enum_pound() {
+        // Types with payload-carrying members decode with
+        // `@Name(...)` for *every* member (parens even when a
+        // member has no payload); pure enums (all members
+        // zero-param) decode with `#Name`.  At the top level and
+        // at every nesting level.
         let db = scratch_db();
         assert_eq!(
             run(&db, "decode", "0b0000000010 Valid[Word[8]]").unwrap(),
@@ -200,7 +240,8 @@ mod tests {
             "@Full(167)"
         );
 
-        // Nested constructors: `@` on the outer and the inner.
+        // Nested variants: `@` on the outer and the inner
+        // (both are unions).
         // Scratch[Scratch[Word[4]]] is 12 bits: outer tag (2) +
         // inner Full pattern (payload 1010 + tag 10 -> 101010).
         let bits = run(&db, "encode", "@Full(@Full(0b1010)) : scratch::Scratch[scratch::Scratch[Word[4]]]")
@@ -216,10 +257,11 @@ mod tests {
     fn decode_roundtrip() {
         let db = scratch_db();
         let out = run(&db, "decode", "0b0000000010 Valid[Word[8]]").unwrap();
+        // Valid[T]'s members carry payloads, so every member
+        // decodes to the `@Name(...)` spelling.
         assert_eq!(out, "@Valid(0)");
         let out = run(&db, "decode", "0b0000000001 Valid[Word[8]]").unwrap();
-        // Zero-payload enum enumerants decode to the `#` spelling.
-        assert_eq!(out, "#Invalid");
+        assert_eq!(out, "@Invalid()");
     }
 
     #[test]

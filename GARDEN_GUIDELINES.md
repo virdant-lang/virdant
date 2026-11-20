@@ -38,6 +38,7 @@ Please report each violation of any of these rules.
 - When working with AST nodes, forbid grabbing number children (eg, `node.child(0)`)
   when it would be more appropriate to use or define
   a semantic helper in the node for that child (eg, `node.subject()`)
+- Avoid use of `matches!()` if it would be better to write a function to classify the thing.
 
 ## Versioning
 - Require that any change which introduces or modifies version is reconciled against `RELEASES.md`
