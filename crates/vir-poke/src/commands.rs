@@ -128,7 +128,7 @@ pub fn exec(
                     "{} : {} = {}\n",
                     full,
                     virdant::types::render::render_type(&session.db, &typ),
-                    display::render(&session.sim, &value)
+                    display::render_fmt(&session.sim, &value, session.fmt_of(signal_id))
                 ));
             }
             Ok(Flow::Continue)
@@ -146,7 +146,7 @@ pub fn exec(
             emit(&format!(
                 "{} <= {}\n",
                 full,
-                display::render(&session.sim, &value)
+                display::render_fmt(&session.sim, &value, session.fmt_of(signal_id))
             ));
             if session.autoshow {
                 session.show();
@@ -256,6 +256,10 @@ pub fn exec(
             session.set_top(name)?;
             Ok(Flow::Continue)
         }
+        Command::Format { path, fmt } => {
+            session.format(path, *fmt)?;
+            Ok(Flow::Continue)
+        }
         Command::Exit => Ok(Flow::Exit),
     }
 }
@@ -283,7 +287,11 @@ fn check_break(session: &mut Session) -> Result<Option<Flow>, String> {
         return Ok(Some(Flow::BreakHit(format!(
             "break: {} = {}",
             path,
-            display::render(&session.sim, &value)
+            display::render_fmt(
+                &session.sim,
+                &value,
+                session.fmt_of_path(&path)
+            )
         ))));
     }
     Ok(None)

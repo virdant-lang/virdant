@@ -1,0 +1,2 @@
+kind = "poke"
+description = "`vir poke` script test: `format` sets a Word signal's display radix (hex/bin/dec; default bin)."

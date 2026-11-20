@@ -71,6 +71,30 @@ pub enum Expr {
     Slice(Box<Expr>, u16, u16),
 }
 
+/// A display radix for a Word signal (`format`): how its value
+/// renders in `show`, `peek`, `poke`, and watch output.  See
+/// `Session::formats` for how the session stores these.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fmt {
+    /// `0b...` — full-width binary (leading zeros included, so the
+    /// width is recoverable).
+    Bin,
+    /// `0x...` — zero-padded to whole nibbles (width recoverable).
+    Hex,
+    /// Plain decimal digits (the width is not recoverable).
+    Dec,
+}
+
+impl std::fmt::Display for Fmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Fmt::Bin => write!(f, "bin"),
+            Fmt::Hex => write!(f, "hex"),
+            Fmt::Dec => write!(f, "dec"),
+        }
+    }
+}
+
 /// One parsed script line.
 #[derive(Clone, Debug)]
 pub enum Command {
@@ -117,4 +141,9 @@ pub enum Command {
     /// `top <module>`: reload the simulator with a new top module
     /// (`package::ModDef`, or a simple name when unambiguous).
     Top(String),
+    /// `format <path> hex|bin|dec`: set how the signal at `path`
+    /// prints (in `show`, `peek`, `poke`, and watch output).  Any
+    /// signal takes a format; the radix only changes how Word values
+    /// render — everything else keeps its round-trippable rendering.
+    Format { path: SPath, fmt: Fmt },
 }

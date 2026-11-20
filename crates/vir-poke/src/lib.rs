@@ -68,7 +68,7 @@ pub(crate) fn emit(text: &str) {
 }
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::rc::Rc;
 
@@ -106,6 +106,20 @@ pub struct Session {
     /// Whether `show` runs automatically after every `poke` and
     /// `tick` (`autoshow`).
     pub autoshow: bool,
+    /// Per-signal display radices (`format`), keyed by full
+    /// elaborated path (`top.foo.bar`).  The value is the stored
+    /// state as an `Option<Fmt>`: a signal absent from the map was
+    /// never formatted (it just *renders* as `bin`); an entry holds
+    /// whatever `format` set, `bin` included, as `Some(fmt)`.
+    /// Shared with watch callbacks so they pick up changes live
+    /// (like `vcd_signals`).  Cleared by `top` (a new design); kept
+    /// across `restart` (the same design's signals).
+    pub formats: Rc<RefCell<HashMap<String, Option<ast::Fmt>>>>,
+    /// `--format-json`: the signals named by the scanned script's
+    /// `show` commands, in script order — exactly the entries the
+    /// JSON summary prints.  Filled by [`Session::scan_format_json`]
+    /// before [`Session::format_json`] reads it.
+    pub format_json_signals: RefCell<Vec<SignalId>>,
     /// The file a VCD trace (`vcd`) is being written to, if any.
     /// Cleared by `restart`: the trace lives and dies with the `Sim`.
     pub vcd: Option<String>,
@@ -211,6 +225,115 @@ impl Session {
         }
         let _ = full;
         Some(hint)
+    }
+
+    /// `format <path> <fmt>`: set the display radix of the signal at
+    /// a script path — any signal takes one.  Whatever the command
+    /// gave (`bin` included) is stored as `Some(fmt)`; a signal
+    /// never formatted has no entry (see `formats`).
+    pub fn format(&mut self, spath: &SPath, fmt: ast::Fmt) -> Result<(), String> {
+        let full = self.set_format(spath, fmt)?;
+        emit(&format!("format: {full} = {fmt}\n"));
+        Ok(())
+    }
+
+    /// The quiet core of [`Session::format`]: resolve the path,
+    /// store the radix, and return the signal's full path.  (The
+    /// `--format-json` scan uses this so its stdout stays
+    /// machine-readable.)
+    fn set_format(&mut self, spath: &SPath, fmt: ast::Fmt) -> Result<String, String> {
+        let signal_id = self.resolve_signal(spath)?;
+        let full = self.sim.full_name(signal_id).to_str_lossy().into_owned();
+        self.formats.borrow_mut().insert(full.clone(), Some(fmt));
+        Ok(full)
+    }
+
+    /// `--format-json`: parse and scan a script *without running
+    /// it*, recording what the JSON summary needs.  Each `show
+    /// <path>` names a signal for the summary, in script order;
+    /// each `format` sets that signal's display radix.  `cd`
+    /// commands are followed so relative paths resolve exactly as
+    /// they would when the script runs; every other command is
+    /// ignored.  A parse error or an unresolvable `show`/`format`
+    /// path is an error.
+    pub fn scan_format_json(&mut self, lines: &[(usize, String)]) -> Result<(), String> {
+        for (number, text) in lines {
+            let trimmed = text.trim();
+            if trimmed.is_empty() || trimmed.starts_with("//") {
+                continue;
+            }
+            let command = driver::parse_line(trimmed)
+                .map_err(|e| format!("line {number}: {e}"))?;
+            match command {
+                Some(ast::Command::Cd(segments)) => self.cd(&segments)?,
+                Some(ast::Command::CdAbs(segments)) => self.cd_abs(&segments)?,
+                Some(ast::Command::CdTop) => self.cwd.clear(),
+                Some(ast::Command::CdUp) => self.cd_up()?,
+                Some(ast::Command::Show(Some(path))) => {
+                    let signal_id = self.resolve_signal(&path)?;
+                    self.format_json_signals.borrow_mut().push(signal_id);
+                }
+                Some(ast::Command::Format { path, fmt }) => {
+                    self.set_format(&path, fmt)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// The display radix in effect for a signal (from its full
+    /// elaborated path), or the default (`bin`).
+    pub(crate) fn fmt_of(&self, signal_id: SignalId) -> Option<ast::Fmt> {
+        let full = self.sim.full_name(signal_id).to_str_lossy().into_owned();
+        self.fmt_of_path(&full)
+    }
+
+    /// [`Session::fmt_of`] by full path (for the places that hold a
+    /// path string, not a `SignalId` — watch/break output).  See
+    /// `formats` for the `Option<Fmt>` semantics.
+    pub(crate) fn fmt_of_path(&self, full: &str) -> Option<ast::Fmt> {
+        self.formats.borrow().get(full).copied().flatten()
+    }
+
+    /// `--format-json`: the signal summary as a JSON array — one
+    /// object per signal (`signal`, `type`, `format`), one per
+    /// `show <path>` command in the scanned script, in script order
+    /// (see [`Session::scan_format_json`]).  Types render as
+    /// source-like strings with every type name spelled as its
+    /// fully-qualified name
+    /// ([`virdant::types::render::render_type_fqn`]); `format` is the
+    /// display radix when one was set with `format`, else null.
+    pub fn format_json(&self) -> String {
+        let entries: Vec<String> = self
+            .format_json_signals
+            .borrow()
+            .iter()
+            .map(|signal_id| self.format_json_entry(*signal_id))
+            .collect();
+        format!("[\n{}\n]\n", entries.join(",\n"))
+    }
+
+    /// [`Session::format_json`] object.  `format` is the stored
+    /// radix when `format` set one (bin included); null when none
+    /// was ever set for the signal.
+    fn format_json_entry(&self, signal_id: SignalId) -> String {
+        let full = self.sim.full_name(signal_id).to_str_lossy().into_owned();
+        let typ = self.sim.component_type(signal_id);
+        let typ_str = virdant::types::render::render_type_fqn(&self.db, &typ);
+        let stored = self.formats.borrow().get(&full).copied().flatten();
+        // `Fmt`'s `Display` renders exactly the JSON spelling
+        // ("bin"/"hex"/"dec"); quote it with `serde_json`.
+        let fmt = match stored {
+            Some(fmt) => serde_json::to_string(&fmt.to_string()).unwrap(),
+            None => "null".to_string(),
+        };
+        format!(
+            "  {{\"signal\": {}, \"type\": {}, \"format\": {}}}",
+            serde_json::to_string(&full).unwrap(),
+            serde_json::to_string(&typ_str).unwrap(),
+            fmt
+        )
     }
 
     /// `show <path>`: select the signal for the VCD trace.  The trace
@@ -447,6 +570,7 @@ impl Session {
 
     fn show_row(&self, signal_id: SignalId, leaf: &bstr::BStr) -> ShowRow {
         let typ = self.sim.component_type(signal_id);
+        let fmt = self.fmt_of(signal_id);
         // A memory's scalar value is a change-detection version
         // counter; `show` its words instead (first few, then an
         // ellipsis) so a 1024-word ROM stays printable.
@@ -456,7 +580,7 @@ impl Session {
                 .iter()
                 .take(SHOW_WORDS)
                 .enumerate()
-                .map(|(index, word)| format!("[{index}] {}", display::render(&self.sim, word)))
+                .map(|(index, word)| format!("[{index}] {}", display::render_fmt(&self.sim, word, fmt)))
                 .collect();
             if words.len() > SHOW_WORDS {
                 format!(
@@ -473,7 +597,7 @@ impl Session {
             if matches!(typ, Type::Clock) {
                 String::new()
             } else {
-                display::render(&self.sim, &value)
+                display::render_fmt(&self.sim, &value, fmt)
             }
         };
         ShowRow {
@@ -529,6 +653,19 @@ impl Session {
             "peek" | "watch" | "break" | "show" => {
                 if arg_index == 1 {
                     self.complete_path(word, false)
+                } else {
+                    vec![]
+                }
+            }
+            "format" => {
+                if arg_index == 1 {
+                    self.complete_path(word, false)
+                } else if arg_index == 2 {
+                    ["hex", "bin", "dec"]
+                        .iter()
+                        .filter(|s| s.starts_with(word))
+                        .map(|s| s.to_string())
+                        .collect()
                 } else {
                     vec![]
                 }
@@ -729,6 +866,10 @@ impl Session {
         path: String,
         is_break: bool,
     ) {
+        // Read `formats` live at change time (shared `Rc`) so a
+        // later `format` affects existing watches without
+        // re-registering.
+        let formats = self.formats.clone();
         let break_flag = self.break_flag.clone();
         self.sim.on_change(
             signal_id,
@@ -742,10 +883,11 @@ impl Session {
                     if matches!(sim.component_type(signal_id), Type::Clock) {
                         emit(&format!("watch: {}\n", path));
                     } else {
+                        let fmt = formats.borrow().get(path.as_str()).copied().flatten();
                         emit(&format!(
                             "watch: {} = {}\n",
                             path,
-                            display::render(sim, &value)
+                            display::render_fmt(sim, &value, fmt)
                         ));
                     }
                 }
@@ -823,6 +965,8 @@ impl Session {
         // Back to tracing every signal (the new design may not even
         // have the old list's paths).
         *self.vcd_signals.borrow_mut() = None;
+        // A new design: the old formats' paths mean nothing here.
+        self.formats.borrow_mut().clear();
         emit(&format!("top: {}\n", new_top.fqn.to_str_lossy()));
         Ok(())
     }
@@ -915,8 +1059,8 @@ fn top_socket_channel(session: &Session, signal_id: SignalId) -> Option<(SocketR
 /// The REPL's command names, for TAB completion (and `help`'s list).
 // Host-only: consumed by the readline REPL and its completions.
 #[cfg(not(target_arch = "wasm32"))]
-const COMMANDS: [&str; 17] = [
-    "cd", "peek", "poke", "watch", "break", "advance", "tick", "assert", "print", "ls", "show", "autoshow", "vcd", "top", "restart", "exit", "help",
+const COMMANDS: [&str; 18] = [
+    "cd", "peek", "poke", "watch", "break", "advance", "tick", "assert", "print", "ls", "show", "autoshow", "vcd", "format", "top", "restart", "exit", "help",
 ];
 
 /// One `show` row: a signal's leaf name, kind, type, and rendered value.

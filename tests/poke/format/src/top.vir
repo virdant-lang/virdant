@@ -1,0 +1,17 @@
+pub mod Top {
+    incoming clock : Clock
+    incoming enable : Bit
+
+    reg counter : Word[4] {
+        initial it <= 0
+        if {
+            when enable {
+                it <= it + 1w4
+            }
+        }
+    }
+
+    outgoing double : Word[4] {
+        it := counter + counter
+    }
+}

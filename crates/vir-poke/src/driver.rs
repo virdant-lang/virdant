@@ -68,10 +68,9 @@ pub fn run(session: Session, script: Option<(Vec<(usize, String)>, bool)>) -> i3
         match run_script(&mut session.borrow_mut(), &lines, &mode) {
             ScriptStop::Finished | ScriptStop::Exit => return 0,
             ScriptStop::Failed(code) => return code,
-            ScriptStop::Paused => {
-                // A preloaded script hit a failed assert or a break:
-                // fall through to the interactive prompt.
-            }
+            // A preloaded script hit a failed assert or a break:
+            // fall through to the interactive prompt.
+            ScriptStop::Paused => {}
         }
     }
 
@@ -337,6 +336,8 @@ fn print_help() {
                      <script>.vcd, or trace.vcd with no script)
   peek <path>        print a signal's value (sets `it`)
   poke <path> <expr> drive a top-level incoming port or a register
+  format <path> <fmt> set a signal's display radix (hex, bin, or dec;
+                     default bin) — affects Word values in show/peek/poke/watch
   watch <path>       print a signal whenever it changes
   break <path>       stop after the next change of a signal
   advance [n]        move time forward n timesteps, no clock needed (default 1)

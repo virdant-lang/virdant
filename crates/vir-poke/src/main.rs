@@ -16,6 +16,7 @@
 //! (WASI/wasmtime) links.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use bstr::ByteSlice;
@@ -48,7 +49,19 @@ fn command() -> clap::Command {
         .arg(clap::Arg::new("script").long("script").value_name("SCRIPT").num_args(0..=1)
             .default_missing_value("")
             .value_parser(value_parser!(String))
-            .help("Run a script standalone as an assertion test (same as passing SCRIPT bare)"));
+            .help("Run a script standalone as an assertion test (same as passing SCRIPT bare)"))
+        // Hidden: a machine-readable exit hook.  Requires a positional
+        // SCRIPT, which is parsed and scanned but *not run*: each
+        // `show <path>` in it names a signal for the summary (in
+        // script order) and each `format` sets that signal's display
+        // radix.  A JSON array — one object per `show` — prints to
+        // stdout; nothing else is written there.
+        .arg(clap::Arg::new("format_json").long("format-json")
+            .num_args(0)
+            .requires("file")
+            .conflicts_with("script")
+            .conflicts_with("repl")
+            .hide(true));
     common::add_project_args(&mut cmd, false);
     cmd
 }
@@ -60,6 +73,7 @@ fn main() {
     let file = matches.get_one::<String>("file").cloned();
     let script = matches.get_one::<String>("script").cloned();
     let repl_flag = matches.get_flag("repl");
+    let format_json = matches.get_flag("format_json");
 
     // Forms:
     //   vir poke                  — REPL
@@ -68,6 +82,8 @@ fn main() {
     //                             — standalone script run (same as bare)
     //   vir poke test.poke --repl — run the script, dropping into the
     //                               REPL on the first failure
+    //   vir poke --format-json test.poke — scan the script, print a
+    //                               JSON signal summary (never run)
     let (preload, standalone) = if repl_flag {
         // clap enforces `--repl` requires a file and conflicts with
         // `--script`, so `file` is always present here.
@@ -98,7 +114,7 @@ fn main() {
         }
     };
 
-    let code = run(&location, top, preload, standalone);
+    let code = run(&location, top, preload, standalone, format_json);
     std::process::exit(code);
 }
 
@@ -114,6 +130,7 @@ pub fn run(
     top_arg: Option<String>,
     preload: Option<String>,
     standalone: Option<String>,
+    format_json: bool,
 ) -> i32 {
     if preload.is_some() && standalone.is_some() {
         eprintln!("error: cannot both preload and run a script standalone");
@@ -205,7 +222,7 @@ pub fn run(
     }
 
     let sim = Sim::new(&db, top_symbol.id(), InitStrategy::Random);
-    let session = Session {
+    let mut session = Session {
         db,
         sim,
         top: top_symbol.id(),
@@ -213,6 +230,7 @@ pub fn run(
         it: None,
         break_flag: Rc::new(Cell::new(None)),
         autoshow: false,
+        formats: Rc::new(RefCell::new(HashMap::new())),
         vcd: None,
         vcd_signals: Rc::new(RefCell::new(None)),
         // The running script's name: the default `vcd` file name is
@@ -220,7 +238,28 @@ pub fn run(
         script_name: standalone
             .clone()
             .or_else(|| preload.clone()),
+        format_json_signals: RefCell::new(Vec::new()),
     };
+
+    // `--format-json`: the script is required (clap enforces it) and
+    // is parsed and scanned — never run: its `show` commands name the
+    // signals in the summary, its `format` commands set their display
+    // radices.  The summary itself is the only stdout output.
+    if format_json {
+        let path = standalone
+            .or(preload)
+            .expect("--format-json requires a script file");
+        let lines = match read_script(&path) {
+            Ok(lines) => lines,
+            Err(code) => return code,
+        };
+        if let Err(e) = session.scan_format_json(&lines) {
+            eprintln!("error: {path}: {e}");
+            return 1;
+        }
+        print!("{}", session.format_json());
+        return 0;
+    }
 
     let script = if let Some(path) = standalone {
         match read_script(&path) {
@@ -236,7 +275,11 @@ pub fn run(
         None
     };
 
-    if script.as_ref().map(|(_, standalone)| !*standalone).unwrap_or(true) {
+    if script
+        .as_ref()
+        .map(|(_, standalone)| !*standalone)
+        .unwrap_or(true)
+    {
         println!("vir poke: top {top_fqn} (type `exit` to leave, `help` for commands)");
     }
     driver::run(session, script)

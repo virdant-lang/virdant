@@ -42,3 +42,13 @@ Please report each violation of any of these rules.
 ## Versioning
 - Require that any change which introduces or modifies version is reconciled against `RELEASES.md`
 - Require that any change to the version of any Rust, Python, or other package matches `VERSION`.
+
+## Formatting
+- Always use trailing commas on the *last* line of a mult-line function call:
+```
+display::render_fmt(
+    &session.sim,
+    &value,
+    session.fmt_of_path(&path),
+)
+```

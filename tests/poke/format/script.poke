@@ -1,0 +1,27 @@
+// `format` sets how a Word signal prints (show/peek/poke output);
+// the default is bin.
+poke counter 0
+format counter hex
+peek counter
+assert counter == 0x0
+poke counter 0x5
+assert counter == 0x5
+assert counter[3..0] == 0b0101
+
+format counter dec
+peek counter
+assert counter == 5
+
+// `bin` is explicit, but it is also the default: a signal with no
+// `format` prints in binary (double here has never been formatted).
+assert double == counter + counter
+format counter bin
+assert counter == 0b0101
+
+// A tick drives the counter with `enable`, and the formatted signal
+// keeps its radix.
+format counter hex
+poke enable true
+tick 1
+assert counter == 0x6
+exit

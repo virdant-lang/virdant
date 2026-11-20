@@ -9,7 +9,7 @@
 // level, as in Virdant), then unary, then postfix indexing/slicing,
 // then primaries.
 
-use crate::ast::{BinKind, Command, Expr, PathStart, SPath};
+use crate::ast::{BinKind, Command, Expr, Fmt, PathStart, SPath};
 use crate::lexer::Tok;
 
 grammar;
@@ -43,6 +43,10 @@ extern {
         "show" => Tok::Show,
         "autoshow" => Tok::Autoshow,
         "vcd" => Tok::Vcd,
+        "format" => Tok::Format,
+        "hex" => Tok::Hex,
+        "bin" => Tok::Bin,
+        "dec" => Tok::Dec,
         "on" => Tok::On,
         "off" => Tok::Off,
         "true" => Tok::True,
@@ -106,6 +110,14 @@ Cmd: Command = {
     "vcd" => Command::Vcd(None),
     "vcd" <t: VcdTarget> => Command::Vcd(Some(t)),
     "top" <t: TopFqn> => Command::Top(t),
+    "format" <p: Path> <f: FmtSpec> => Command::Format { path: p, fmt: f },
+};
+
+// `format <path> <fmt>`: the display radix for a Word signal.
+FmtSpec: Fmt = {
+    "hex" => Fmt::Hex,
+    "bin" => Fmt::Bin,
+    "dec" => Fmt::Dec,
 };
 
 // A top-module name for `top`: a package-qualified FQN
@@ -223,6 +235,10 @@ Name: String = {
     "show" => "show".to_string(),
     "autoshow" => "autoshow".to_string(),
     "vcd" => "vcd".to_string(),
+    "format" => "format".to_string(),
+    "hex" => "hex".to_string(),
+    "bin" => "bin".to_string(),
+    "dec" => "dec".to_string(),
     "on" => "on".to_string(),
     "off" => "off".to_string(),
     "true" => "true".to_string(),
@@ -253,6 +269,10 @@ PathStartName: String = {
     "show" => "show".to_string(),
     "autoshow" => "autoshow".to_string(),
     "vcd" => "vcd".to_string(),
+    "format" => "format".to_string(),
+    "hex" => "hex".to_string(),
+    "bin" => "bin".to_string(),
+    "dec" => "dec".to_string(),
     "on" => "on".to_string(),
     "off" => "off".to_string(),
 };

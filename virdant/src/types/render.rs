@@ -76,6 +76,40 @@ pub fn render_type_with(db: &Db, typ: &Type, params: &[TypeParam]) -> String {
     }
 }
 
+/// Render a type in source-like syntax with *every* type name spelled
+/// as its fully-qualified name — for machine-readable output where a
+/// consumer must resolve each name unambiguously.  The builtin
+/// primitives are qualified too (`builtin::Word[8]`, `builtin::Bit`),
+/// as are builtin item types (`builtin::Valid[Word[8]]`).
+pub fn render_type_fqn(db: &Db, typ: &Type) -> String {
+    let packages = db.get_packages();
+    let prefix = format!("{}::", packages.name(packages.builtin()).to_str_lossy());
+    match typ {
+        Type::Bit => format!("{prefix}Bit"),
+        Type::Clock => format!("{prefix}Clock"),
+        Type::Reset => format!("{prefix}Reset"),
+        Type::Word(width) => format!("{prefix}Word[{width}]"),
+        Type::Param(param_id) => render_param(*param_id, &[]),
+        Type::Usual(symbol_id, args) => {
+            let name = db
+                .get_symboltable()
+                .symbol(*symbol_id)
+                .fqn()
+                .to_str_lossy()
+                .into_owned();
+            if args.is_empty() {
+                name
+            } else {
+                let rendered_args: Vec<String> = args
+                    .iter()
+                    .map(|arg| render_type_fqn(db, arg))
+                    .collect();
+                format!("{name}[{}]", rendered_args.join(", "))
+            }
+        }
+    }
+}
+
 fn render_param(param_id: ParamId, params: &[TypeParam]) -> String {
     params
         .get(param_id.0 as usize)

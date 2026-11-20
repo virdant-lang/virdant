@@ -139,6 +139,8 @@ vcd [<file>]        write a VCD trace from now on (default <script>.vcd, or
                     trace.vcd with no script)
 peek <path>         print a signal's value (also sets `it`)
 poke <path> <expr>  drive a top-level incoming port or a register
+format <path> <fmt> set a signal's display radix — hex, bin, or dec
+                    (default bin); affects Word values in show/peek/poke/watch
 watch <path>        print the signal whenever it changes
 break <path>        stop after the next change of the signal
 tick [n] [<clock>]  apply n full clock cycles (default 1)

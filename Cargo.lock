@@ -2055,6 +2055,7 @@ dependencies = [
  "lalrpop-util 0.23.2",
  "libc",
  "rustyline",
+ "serde_json",
  "vir-common",
  "virdant",
 ]
