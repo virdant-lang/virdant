@@ -1,0 +1,25 @@
+pub struct type WriteRequest {
+    addr : Word[5]
+    data : Word[32]
+}
+
+pub mod Top {
+    incoming clock : Clock
+
+    incoming write : Valid[WriteRequest]
+
+    incoming addr : Word[5]
+
+    outgoing data : Word[32] dependson addr {
+        it := mem[dyn addr]
+    }
+
+    memory mem[32] : Word[32] {
+        match write {
+            with @Valid(request) {
+                it[dyn request->addr] <= request->data
+            }
+            with @Invalid() {}
+        }
+    }
+}

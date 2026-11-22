@@ -1,0 +1,5 @@
+[project]
+name = "struct_literal_field_order"
+
+[prog]
+top = "top::Top"

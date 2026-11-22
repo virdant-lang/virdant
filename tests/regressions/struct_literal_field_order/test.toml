@@ -1,0 +1,2 @@
+kind = "poke"
+description = "A struct literal poked into a port must reach the design with its fields in declaration order: first field in the lowest bits (regression for `encode_struct` packing the first field at the MSB end)"

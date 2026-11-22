@@ -402,9 +402,10 @@ impl TypeLayoutIndex {
     }
 
     /// Encode a struct literal as a bit pattern of `typ`: the fields
-    /// given in declaration order (first field at the MSB end), zero
-    /// padding below the lowest field if the declared field widths do
-    /// not fill the type width.  `field_bits` must be in declaration
+    /// given in declaration order (first field in the lowest bits,
+    /// mirroring [`TypeLayoutIndex::decode_struct`]), zero padding
+    /// below the lowest field if the declared field widths do not
+    /// fill the type width.  `field_bits` must be in declaration
     /// order with each pattern matching its field's width.
     pub fn encode_struct(&self, typ: &Type, field_bits: &[BitPat]) -> Option<BitPat> {
         let fields = self.fields(typ)?;
@@ -414,7 +415,7 @@ impl TypeLayoutIndex {
         let total = self.type_width(typ);
         let mut out = BitPat::zeros(total);
         let mut hi = total;
-        for (field, bits) in fields.iter().zip(field_bits.iter()) {
+        for (field, bits) in fields.iter().rev().zip(field_bits.iter().rev()) {
             let w = self.type_width(&field.param_types[0]);
             if bits.width() != w {
                 return None;
