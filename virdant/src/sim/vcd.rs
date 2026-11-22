@@ -6,6 +6,15 @@
 //! subsequent value-change lines.  A final `flush()` runs from
 //! `Sim::run`'s end-of-simulation hook.
 //!
+//! The trace's timeline is zero-based at the attach time: the
+//! `$dumpvars` snapshot lands at `#0` and every later stamp is
+//! relative to the attach time.  Attaching mid-session (a poke
+//! script's `vcd` command runs after the prelude's pokes and ticks)
+//! therefore yields a trace that starts with known values at t=0,
+//! the shape every VCD viewer expects — rather than a legal-but
+//! viewer-hostile file whose first stamp sits tens of microseconds
+//! in, leaving everything before it unknown.
+//!
 //! Values are bit patterns, so the wire dump is a straight render of
 //! each signal's bits.  `TypeLayoutIndex` supplies the per-signal type
 //! widths (including user-defined aggregate types).
@@ -79,12 +88,14 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W, filter: Optio
         writeln!(w, "$enddefinitions $end").unwrap();
     }
 
+    // The trace's time origin: everything after this line is stamped
+    // relative to it (see the module docs).
+    let base = sim.now();
     let last_time: Rc<Cell<Option<u64>>> = Rc::new(Cell::new(None));
     {
         let mut w = writer.borrow_mut();
-        let t = sim.now();
-        writeln!(w, "#{t}").unwrap();
-        last_time.set(Some(t));
+        writeln!(w, "#0").unwrap();
+        last_time.set(Some(0));
         writeln!(w, "$dumpvars").unwrap();
         for (s, path) in &sigs {
             if !dumped(&filter, path.as_bstr()) {
@@ -119,7 +130,7 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W, filter: Optio
             if !dumped(&filter_cb, path.as_bstr()) {
                 return;
             }
-            let t = s.now() + offset;
+            let t = (s.now() + offset).saturating_sub(base);
             let mut w = writer_cb.borrow_mut();
             if last_time_cb.get() != Some(t) {
                 writeln!(w, "#{t}").unwrap();
@@ -141,6 +152,7 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W, filter: Optio
     let writer_marker = writer.clone();
     let last_time_marker = last_time.clone();
     sim.set_time_marker(Box::new(move |t| {
+        let t = t.saturating_sub(base);
         // A marker stamps pure time advancement; never write it before
         // an already-emitted offset stamp (a poke's +offset change can
         // outlive a same-time marker, e.g. `advance 0`).
