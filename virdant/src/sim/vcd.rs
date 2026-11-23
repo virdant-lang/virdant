@@ -130,7 +130,20 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W, filter: Optio
             if !dumped(&filter_cb, path.as_bstr()) {
                 return;
             }
-            let t = (s.now() + offset).saturating_sub(base);
+            // A change issued before time first leaves the attach
+            // origin — a poke between `vcd` and the first tick — is
+            // part of the t=0 baseline: stamp it at #0 so it collapses
+            // into the `$dumpvars` snapshot.  Stamping it one offset
+            // later instead would strand a sliver of the snapshot's
+            // pre-poke state at the start of the timeline: for an
+            // uninitialized input (whose snapshot value is a random
+            // bit pattern) that sliver renders as a phantom pulse at
+            // the very start of the signal's row.
+            let t = if s.now() == base {
+                0
+            } else {
+                (s.now() + offset).saturating_sub(base)
+            };
             let mut w = writer_cb.borrow_mut();
             if last_time_cb.get() != Some(t) {
                 writeln!(w, "#{t}").unwrap();
