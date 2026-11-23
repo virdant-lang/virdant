@@ -771,6 +771,22 @@ impl<'p> AstNode<'p> {
         }
     }
 
+    /// The path tapped by a `bus.tap` expression.
+    pub fn tapped(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::ExprTap => Some(self.child(0)),
+            _ => None,
+        }
+    }
+
+    /// The expression assigned by a struct-field assignment (`name = expr`).
+    pub fn assign_expr(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Assign(_) => Some(self.child(0)),
+            _ => None,
+        }
+    }
+
     /// Returns the Annotations wrapper node (always present for annotatable nodes).
     pub fn annotations_node(&self) -> AstNode<'_> {
         self.child(0)

@@ -104,11 +104,11 @@ impl Clocking {
 
             // Struct construction: all field expressions join.
             AstNodePayload::ExprStruct => {
-                let parts = node
-                    .children()
-                    .iter()
-                    .map(|assign| self.infer(&assign.child(0)))
-                    .collect();
+                let mut parts = vec![];
+                for assign in node.children() {
+                    let expr = assign.assign_expr()?;
+                    parts.push(self.infer(&expr));
+                }
                 self.join(node, parts)
             }
 
@@ -174,7 +174,7 @@ impl Clocking {
 
     /// `bus.tap`: the tapped component's domain.
     fn infer_tap(&mut self, node: &AstNode<'_>) -> Option<Domain> {
-        let path_node = node.child(0);
+        let path_node = node.tapped()?;
         let component = self
             .component_analysis()
             .component_at(path_node.location())?;
