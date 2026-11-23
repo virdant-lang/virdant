@@ -71,6 +71,41 @@ mod MatchLoop {
 }
 ```
 
+### clocks
+
+Clock-domain checking: every component and expression lives on a clock
+domain (`clocked by <clock>`, `async`, or `constant`), derived from the
+module's incoming clock ports. See ./driver-blocks.md and ./memory.md.
+
+* `Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b``
+  — two distinct clock domains were combined in one expression, connection
+  (`:=:`), or conditional. Move the logic under one clock and cross clock
+  domains through registers.
+* ``Domain mismatch: cannot drive `r` (clocked by `clock`) with async`` —
+  a clocked component (reg, memory, `on`-clauses component) was driven from
+  an `async` or foreign-clock expression. Driver RHS, guards, and memory
+  write index/data must all be on the target's clock (or `constant`).
+* `` `w` is a clock and may only be driven by a reference to a clock: clocks
+  are defined, not assigned`` — a Clock-typed component was driven by a
+  computed expression (e.g. a `mux` over clocks). Clocks are identities:
+  alias them with a plain reference (`w := clk_a`).
+* ``outgoing clock `clk_out` is driven from `clk_in`; declare `dependson
+  clk_in``` — an outgoing Clock port driven from an incoming clock must
+  declare its provenance (`outgoing clk_out : Clock dependson clk_in`).
+* ``Missing `on` or `async` clause for X: <reason>`` — in a module with
+  zero or multiple clocks (or one marked `@unsafe_clocks`), every non-Clock
+  component needs an explicit `on` or `async` clause; the reason spells out
+  which case applies ("the module has multiple clocks", "the module has no
+  clocks", "the module is marked `@unsafe_clocks`"). Socketdefs with
+  multiple `Clock` channels report the same error with reason "the socket
+  has multiple Clock channels".
+* `` `r` cannot be `async`: registers and memories are clocked`` —
+  `reg`/`outgoing reg`/`memory` may not be declared `async`.
+* ``Instance `link` of a clockless module is used on both clocked by `clk_a`
+  and clocked by `clk_b`; a clockless module resolves to a single domain per
+  instantiation`` — a clock-polymorphic (zero-clock, no `async`) instance
+  was touched by two different clocks. Instantiate it twice, once per clock.
+
 ### dependson
 
 * `dependson` is a **declaration modifier only**; the old statement form
@@ -141,9 +176,11 @@ mod MatchLoop {
   from the parent, or the wrong socket side (a socket instance's driven
   channels are sources, its receiving channels are sinks). Set submodule
   inputs inside the instance's `it` block instead: `it.inp := ...`.
-* `Missing on clause for reg X` — with zero or two-or-more `Clock` components
-  a `reg` needs an explicit `on` clause. With exactly one Clock the clause is
-  optional (see the ``Redundant `on` clause`` warning below).
+* `Missing on clause for reg X` — with zero or two-or-more clock sources a
+  `reg` (or non-image `memory`) needs an explicit `on` clause. With exactly
+  one clock the clause is optional (see the ``Redundant `on` clause``
+  warning below). Clock sources include socket `Clock` channels and
+  submodule clock outputs, not just declared `Clock` ports.
 * ``Redundant `unused`: X`` — the same path marked `unused` twice (also when an
   it-block `unused it` aliases a later `unused r`).
 * ``Marked `unused` but used: X`` — the marked component is read (directly or
@@ -340,10 +377,17 @@ items, not noise.
 * `Redundant driver: X` (redundant_driver) — `r <= r` (including `it <= it`
   and mixed `it`/explicit forms) is a no-op latch; delete it.
 * `` Redundant `on` clause: `X `` (redundant_on_clause) — with exactly one
-  `Clock` component, an explicit `on clock` on any component kind is
+  clock source, an explicit `on` naming it on any component kind is
   equivalent to omitting it; omit it. `on <another clock>` (e.g. a
-  submodule's clock output) never warns. With two or more clocks an explicit
-  clause is required (see the `Missing on clause for reg` error above).
+  submodule's clock output) never warns. With zero or two or more clocks an
+  explicit clause is required (see the `Missing on clause for reg` error
+  above). The same rule applies to a socketdef channel naming the
+  socketdef's unique `Clock` channel.
+* `` `w` is a clock: a conditional cannot change which clock it denotes —
+  drive it unconditionally`` (guarded_clock_driver) — a guarded driver to a
+  Clock-typed target is legal (it joins the target into the driving clock's
+  class) but the gating is pointless; move the driver out of the
+  conditional.
 * `trailing space` (trailing_spaces) — one warning per offending line; strip
   trailing whitespace.
 * `` Item `X` is unused and not `pub` `` (unused_non_pub) — unused private item;

@@ -100,13 +100,47 @@ mod Foo {
 ```
 
 
-## Clock inference
-* Omit the `on` clause when the module declares exactly one component
-  of type `Clock`: the register is clocked by it implicitly.
-* Writing `on clock` anyway is a warning (`RedundantOnClause`).
-* The rule applies to every component kind that can carry an `on`
-  clause, but only `reg`/`outgoing reg`/`memory` are actually clocked
-  by it.
+## Clock domains
+
+A module's clocking is derived from its *incoming clock ports*: the declared
+components typed `Clock` (`incoming clk : Clock`) plus the receiving-side
+channels of its socket instances typed `Clock` (see ./sockets.md). Clocks are
+*opaque*: a clock value cannot be computed with — it can only be associated
+with components (`on` clauses) and passed around.
+
+### Clock classes and aliases
+
+A driver whose target is Clock-typed and whose driving expression is a plain
+reference makes the two denote the *same clock class*: clocks are defined by
+identity, not assigned.
+
+```virdant
+mod ClkBuf {
+    incoming clk_in : Clock
+    outgoing clk_out : Clock dependson clk_in {
+        it := clk_in
+    }
+}
+```
+
+An outgoing Clock port driven from an incoming clock must declare its
+provenance with `dependson`; without the declaration the driver is an error
+(`MissingClockDependson`). A port with no `dependson` clause — or one whose
+definition is rooted at an internal source, e.g. a submodule's clock output —
+is a *fresh clock source* and must not be driven.
+
+### The unique clock and `on` clauses
+
+A module's *clock count* is the number of clock sources visible in it:
+incoming clock ports, platform-synthesized Clock ports, undriven outgoing
+Clock ports, submodule clock outputs (`pll.clkout`), and each `asclock` call
+site.
+
+* Clock count exactly one — the module has a *unique clock*: every register
+  may omit its `on` clause and is clocked by it implicitly. Writing
+  `on clock` anyway is a warning (`RedundantOnClause`, on any component kind
+  that can carry an `on` clause) — omit it. The warning is suppressed in a
+  module marked `@unsafe_clocks`, where the explicit clause is required.
 
 ```virdant
 mod Counter {
@@ -118,10 +152,9 @@ mod Counter {
 }
 ```
 
-* With two or more Clock-typed components, there is no implicit clock:
-  every register must name its clock explicitly with `on`.
-* An `on` clause referencing a submodule's clock output never warns,
-  since it names a clock other than the module's unique one.
+* Clock count two or more — a *multi-clock module*: every register must name
+  its clock explicitly with `on`, and every other component needs an explicit
+  `on` or `async` clause.
 
 ```virdant
 mod Divider {
@@ -138,8 +171,30 @@ mod Divider {
 }
 ```
 
-Use `asclock` to turn a `Bit` into a `Clock` when a register needs to
-be clocked by an ordinary signal. See ./literals-and-builtins.md.
+* Clock count zero with no `async` component — the module is
+  *clock-polymorphic*: its combinational logic is clock-generic and resolves
+  to the instantiating context's clock. A zero-clock module that declares any
+  `async` component must annotate every component explicitly instead, and no
+  zero-clock module can contain registers or memories.
+
+### One clock domain per conditional
+
+A statement-position `if`/`match` containing clock drivers acts on a single
+clock domain: its conditions and every clock driver in its arms (an `else`
+arm included) must all denote one clock class.
+
+* A guarded driver of a plain clock reference is legal but warns
+  (`GuardedClockDriver`): the conditional cannot change which clock the target
+  denotes, so the gating is pointless — drive it unconditionally.
+* A conditional mixing clock classes is an error (`DomainMismatch`).
+* A clock driven by a *computed* expression (e.g. a `mux` over clocks) is an
+  error (`ConditionalClockDriver`): clocks are defined, not assigned.
+
+### Clocking an ordinary signal
+
+Use `asclock` to turn a `Bit` into a `Clock` when a register needs to be
+clocked by an ordinary signal (see ./literals-and-builtins.md). Each
+`asclock` call site produces its own clock class.
 
 
 ## Cull redundant register drivers

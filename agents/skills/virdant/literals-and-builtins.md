@@ -147,6 +147,9 @@ Convert a `Bit` signal to a `Clock`.
 
 - `asclock(x)` — reinterpret a `Bit` as a `Clock`.
   Useful when you need to connect a `Bit` signal to a `Clock` port.
+  Each `asclock` call site produces its own clock class — a clock derived
+  from `asclock(x)` is a clock source of the module, counted by the
+  module's clock count (see ./driver-blocks.md).
 
 ```virdant
 wire bit_sig : Bit

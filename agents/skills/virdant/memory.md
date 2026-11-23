@@ -44,15 +44,18 @@ how the memory is read (`mem[dyn addr]`).  `memory` is a reserved keyword.
 ## Clocking and writes
 
 * One clock slot per memory, resolved exactly like a `reg`'s: omit `on` when
-  the module declares exactly one `Clock`, otherwise declare it
-  (`memory mem[16] : Word[8] on clk_b`).
+  the module has exactly one clock source (declared `Clock` ports and socket
+  `Clock` channels alike), otherwise declare it
+  (`memory mem[16] : Word[8] on clk_b`). A module with no clocks cannot
+  contain a non-image memory at all (`Missing on clause`).
 * A write is `mem[dyn idx] <= data` — the first indexed LHS in the language;
   `:=` parses but warns (`MemoryAssignInsteadOfLassign`) because a write
   commits on the clock edge.
 * Inside the body, writes live either in an `on <CLOCK> { ... }` region
   (multi-clock modules) or at the top level of the body (single-clock
   modules, the same inference as `reg`); inside an `on` region only writes
-  to `it[...]` are allowed.
+  to `it[...]` are allowed. An `on` region must name the memory's own clock
+  slot — any other clock is `MemoryOnRegionClockMismatch`.
 * The write site may appear in the body or anywhere in the module (a
   blockless `memory mem[16] : Word[8]` plus a guarded module-level write).
 * Exactly **one write site** per memory (`MultipleDrivers`), and sibling

@@ -72,8 +72,10 @@ pub mod Counter {
 
 Notes on the idiom above (v0.4.0):
 
-* When a module has exactly one `Clock`, the clock is
-  inferred; writing `on clock` anyway is a warning (see `./driver-blocks.md`).
+* A module's clocking comes from its incoming clock ports: declared
+  `incoming ... : Clock` ports and socket channels typed `Clock`. With
+  exactly one clock source, registers may omit their `on` clause; writing
+  `on clock` anyway is a warning (see `./driver-blocks.md`).
 * Driver blocks write drivers into `{ ... }`; `initial` seeds a `reg` for
   simulation. `initial` is disallowed on platforms which are annotated with `@noinitial`.
 * An `outgoing` port that combinationally reads any incoming port must
@@ -96,8 +98,8 @@ If `vir check` fails, find the message in `./diagnostics.md` for cause and fix.
 
 * `./coding-conventions.md` — naming, whitespace, docstrings, `pub`, file
   and style rules.
-* `./driver-blocks.md` — writing drivers with `it`, clock inference,
-  `initial`, push-in drivers, direct chaining.
+* `./driver-blocks.md` — writing drivers with `it`, clock domains, `on`
+  clauses, `initial`, push-in drivers, direct chaining.
 * `./memory.md` — the `memory` statement: RAMs and ROMs, indexed writes,
   `on` regions, `@image`/`@image_hex`/`@image_inline`, the one-write-site
   rules.
@@ -111,8 +113,8 @@ If `vir check` fails, find the message in `./diagnostics.md` for cause and fix.
   `zext`/`sext`, `+.`/`-.`, `all`/`trunc`, `?` holes, casts, `tap`.
 * `./modules.md` — mod definitions, instantiation, it-blocks, `pub`
   visibility, imports, ext mods with `@parameter`.
-* `./sockets.md` — forward/reverse sockets, outgoing/incoming channels,
-  `:=:`, generic sockets, channel `dependson`.
+* `./sockets.md` — forward/reverse sockets, `outgoing`/`incoming` channels,
+  `:=:`, generic sockets, channel `dependson`, socket clock structure.
 * `./generics.md` — `[T : Type]` / `Nat` parameters on all definition
   forms, type arguments, mono modules.
 * `./dependson.md` — combinational-dependency declarations on `outgoing`

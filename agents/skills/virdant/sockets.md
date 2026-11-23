@@ -20,6 +20,9 @@ socket Mem {
 }
 ```
 
+The legacy spellings `cosi` (for `outgoing`) and `soci` (for `incoming`)
+still parse but are deprecated; write `outgoing`/`incoming`.
+
 Socket names begin with an uppercase letter and use camel case,
 just like module and type names.
 
@@ -68,6 +71,62 @@ Bulk connect is preferred over individual signal wiring when the sockets
 are fully connected.
 It reduces boilerplate and prevents mismatches when a socket definition
 changes.
+
+## Socket clock structure
+
+A socketdef's channels have clock domains, decided by the socketdef's clock
+structure — mirroring a module's clock rules (see ./driver-blocks.md):
+
+* A channel typed `Clock` is a clock of the socket; a channel declared
+  `async` accepts drivers from any domain.
+* With **exactly one** `Clock` channel, every other channel is implicitly
+  `on` it: all channels live on the one clock. The instantiating module
+  binds that channel (`it.clk := clock`); a client-side `Clock` channel
+  needs a `where it.clk dependson ...` clause like any driven channel.
+* With **zero** `Clock` channels, every other channel is clock-flexible:
+  it resolves to the clock of whichever module drives or reads it.
+* With **two or more** `Clock` channels, every non-Clock channel must carry
+  an explicit `on` or `async` clause
+  (`Missing \`on\` or \`async\` clause for X: the socket has multiple Clock channels`).
+  An explicit `on` naming the socketdef's unique `Clock` channel warns
+  `RedundantOnClause`, exactly like a module's unique clock.
+
+```virdant
+socket Clocked {
+    outgoing clk : Clock
+    incoming data : Word[8]
+}
+
+pub mod SyncClient {
+    incoming clock : Clock
+
+    client socket link of Clocked
+        where it.clk dependson clock
+    {
+        it.clk := clock
+    }
+
+    reg seen : Word[8] {
+        it <= link.data
+    }
+}
+
+pub mod ClockedServer {
+    // The only clock of this module is the received `link.clk`,
+    // so `count` is clocked by it without an `on` clause.
+    server socket link of Clocked {
+        it.data := count
+    }
+
+    reg count : Word[8] {
+        it <= it + 1w8
+    }
+}
+```
+
+A `Clock`-typed channel *received* by the module (an `outgoing` channel of a
+reverse/server socket instance) is an incoming clock port of the module — it
+counts toward the module's clock count and can clock its registers directly.
 
 ## Socket driver blocks (it-blocks)
 
