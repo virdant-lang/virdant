@@ -40,7 +40,7 @@ pub mod TwoClocks {
 // inward socket channel typed `Clock` — are ambiguous, `on` is still
 // required.
 socket ClkBus {
-    cosi clk : Clock
+    outgoing clk : Clock
 }
 
 pub mod PortAndSocket {

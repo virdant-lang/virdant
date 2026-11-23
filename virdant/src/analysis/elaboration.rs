@@ -557,7 +557,7 @@ fn elaborate_module(
 
                 // Each channel of the socketdef becomes an elaborated
                 // component at `{prefix}.{instance}.{channel}`.  The
-                // side this module drives (client cosi / server soci)
+                // side this module drives (client outgoing / server incoming)
                 // takes its driver from this module's driver analysis;
                 // the other side is driven by its peer through the
                 // `:=:` connection (resolved below via `connects`).

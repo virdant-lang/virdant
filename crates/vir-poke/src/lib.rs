@@ -1006,8 +1006,8 @@ pub fn poke_legal(session: &Session, signal_id: SignalId) -> Result<(), String> 
     if kind == ComponentKind::Net {
         if let Some((role, dir)) = top_socket_channel(session, signal_id) {
             let incoming = match role {
-                SocketRole::Server => dir == ChannelDir::Cosi,
-                SocketRole::Client => dir == ChannelDir::Soci,
+                SocketRole::Server => dir == ChannelDir::Outgoing,
+                SocketRole::Client => dir == ChannelDir::Incoming,
             };
             if incoming {
                 return Ok(());
@@ -1023,7 +1023,7 @@ pub fn poke_legal(session: &Session, signal_id: SignalId) -> Result<(), String> 
 /// If `signal_id` is a channel of a socket instance declared directly
 /// in the top module — a path of the form `top.<inst>.<channel>` —
 /// return the instance's role and the channel's declared direction
-/// (`cosi`/`soci`).  `None` for anything deeper, anything not under
+/// (`outgoing`/`incoming`).  `None` for anything deeper, anything not under
 /// `top`, and any name that is not a socket channel.
 fn top_socket_channel(session: &Session, signal_id: SignalId) -> Option<(SocketRole, ChannelDir)> {
     let path = session.sim.full_name(signal_id).to_str_lossy().into_owned();

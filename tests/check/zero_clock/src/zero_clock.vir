@@ -5,7 +5,7 @@
 // Clock-typed component, which is always `Async` anyway).
 
 socket ClkBus {
-    cosi clk : Clock
+    outgoing clk : Clock
 }
 
 pub mod ZeroClock {
@@ -20,7 +20,7 @@ pub mod ZeroClock {
     }
 }
 
-// `link.clk` is an *outward* clock channel (the client drives `cosi`):
+// `link.clk` is an *outward* clock channel (the client drives `outgoing`):
 // `ClockOut` hands a clock along but receives none, so it still has
 // zero incoming clock ports.
 pub mod ClockOut {

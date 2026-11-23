@@ -1,6 +1,6 @@
 // A socketdef channel's `dependson` list applies when the socket is
-// instantiated in the channel's driving role (`client` for `cosi`,
-// `server` for `soci`): the module's drive on that channel may
+// instantiated in the channel's driving role (`client` for `outgoing`,
+// `server` for `incoming`): the module's drive on that channel may
 // combinationally depend only on the listed channels of the same socket.
 // A drive that reads an undeclared channel of the same socket is an
 // error, even though the socket link itself would still carry the values.

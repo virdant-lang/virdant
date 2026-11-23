@@ -64,8 +64,8 @@ pub struct DependsonAnalysis {
     declared_edges: Vec<(BString, BString)>,
 
     /// Local socket-obligation edges: for each socket instance in the
-    /// module instantiated in its driving role (`client` for `cosi`
-    /// channels, `server` for `soci` channels), the channels with
+    /// module instantiated in its driving role (`client` for `outgoing`
+    /// channels, `server` for `incoming` channels), the channels with
     /// declared lists yield `(drive path, read path)` edges. See the
     /// module-level docs for why these obligations never produce a
     /// unused warning.
@@ -409,8 +409,8 @@ pub(crate) fn socketdef_channel_decls(
 /// at the top level of `ast` (the module's own namespace).
 ///
 /// A socketdef channel's `dependson` list applies when the socket is
-/// instantiated in the channel's driving role: `client` for `cosi`
-/// channels, `server` for `soci` channels.  The obligation is on the
+/// instantiated in the channel's driving role: `client` for `outgoing`
+/// channels, `server` for `incoming` channels.  The obligation is on the
 /// *containing* module: its drive on the channel may depend on its
 /// reads of the declared opposite-direction channels.  In the
 /// receiving role the list is inert.
@@ -504,7 +504,7 @@ fn collect_socket_obligations_for(
 fn drives_channel(role: SocketRole, dir: ChannelDir) -> bool {
     matches!(
         (role, dir),
-        (SocketRole::Client, ChannelDir::Cosi) | (SocketRole::Server, ChannelDir::Soci)
+        (SocketRole::Client, ChannelDir::Outgoing) | (SocketRole::Server, ChannelDir::Incoming)
     )
 }
 
@@ -577,7 +577,7 @@ fn where_entry_is_legal(
 ///
 /// The carrier (`it.<CH>`, or `<SOCKET>.<CH>`, which warns in favor of
 /// `it`) must be a *driven* channel of the attached socket instance
-/// (`client` + `cosi`, or `server` + `soci`).  Each entry must resolve
+/// (`client` + `outgoing`, or `server` + `incoming`).  Each entry must resolve
 /// to an incoming component of the module (see
 /// `where_entry_is_legal`).  Only validated edges are recorded; the
 /// same edge may legitimately duplicate a socketdef obligation (a
@@ -701,8 +701,8 @@ fn collect_where_edges_for(
             };
             if !drives_channel(socket.role, decl.dir) {
                 let (drives, drives_word, receive_word) = match socket.role {
-                    SocketRole::Client => ("client", "cosi", "soci"),
-                    SocketRole::Server => ("server", "soci", "cosi"),
+                    SocketRole::Client => ("client", "outgoing", "incoming"),
+                    SocketRole::Server => ("server", "incoming", "outgoing"),
                 };
                 diagnostics.push(Diagnostic::new(
                     carrier_node.region(),
@@ -1225,8 +1225,8 @@ fn own_incoming_universe(
 /// channel names, prefixed with the instance name) plus the targets of
 /// the socket statement's `where` clauses (already module-local
 /// paths).  A channel is in its driving role when the socket is
-/// instantiated as `client` and the channel is `cosi`, or as `server`
-/// and the channel is `soci`.
+/// instantiated as `client` and the channel is `outgoing`, or as `server`
+/// and the channel is `incoming`.
 fn own_socket_drives(
     builder: &mut Builder,
     ast: &AstNode<'_>,
@@ -1397,7 +1397,7 @@ fn declared_entry_region(
 
 /// Check the `dependson` lists of every socketdef's channels: an
 /// entry must be a channel of the *same* socketdef with the opposite
-/// direction word (`cosi` entries for `soci` channels and vice versa).
+/// direction word (`outgoing` entries for `incoming` channels and vice versa).
 pub(crate) fn check_socketdefs(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
     let symboltable = builder.get_symboltable();
     for item in symboltable.items() {
@@ -1420,7 +1420,7 @@ pub(crate) fn check_socketdefs(builder: &mut Builder, diagnostics: &mut Vec<Diag
                             entry: entry.clone(),
                             reason: format!(
                                 "is not a channel of the same socket; a `{}` channel may only `dependson` channels of the opposite direction word",
-                                if decl.dir == ChannelDir::Cosi { "cosi" } else { "soci" },
+                                if decl.dir == ChannelDir::Outgoing { "outgoing" } else { "incoming" },
                             ).into(),
                         },
                     ));
@@ -1433,7 +1433,7 @@ pub(crate) fn check_socketdefs(builder: &mut Builder, diagnostics: &mut Vec<Diag
                             entry: entry.clone(),
                             reason: format!(
                                 "a `{}` channel may only `dependson` channels of the opposite direction word",
-                                if decl.dir == ChannelDir::Cosi { "cosi" } else { "soci" },
+                                if decl.dir == ChannelDir::Outgoing { "outgoing" } else { "incoming" },
                             ).into(),
                         },
                     ));

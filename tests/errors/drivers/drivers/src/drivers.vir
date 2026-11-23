@@ -20,8 +20,8 @@ socket Chan {
     incoming ack : Bit
 }
 
-// A client drives cosi (req) — that is correct.
-// But it also drives soci (ack) — soci is a source for the client, not a sink.
+// A client drives outgoing (req) — that is correct.
+// But it also drives incoming (ack) — incoming is a source for the client, not a sink.
 pub mod BadClient {
     forward socket ch of Chan
     unused ch.ack
@@ -30,8 +30,8 @@ pub mod BadClient {
     ch.ack := true
 }
 
-// A server drives soci (ack) — that is correct.
-// But it also drives cosi (req) — cosi is a source for the server, not a sink.
+// A server drives incoming (ack) — that is correct.
+// But it also drives outgoing (req) — outgoing is a source for the server, not a sink.
 pub mod BadServer {
     reverse socket ch of Chan
     unused ch.req

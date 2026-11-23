@@ -12,8 +12,8 @@
 
 //> A clockless socket: `req`/`rsp` are flexible.
 socket Flex {
-    cosi req : Word[8]
-    soci rsp : Word[8]
+    outgoing req : Word[8]
+    incoming rsp : Word[8]
 }
 
 //> Client end of the flexible socket: drives `req` from a clocked reg
@@ -60,8 +60,8 @@ pub mod FlexServer {
 //> clocked logic and the socket share one domain; the server's only
 //> clock is the received `link.clk`, so its logic does too.
 socket Clocked {
-    cosi clk : Clock
-    soci data : Word[8]
+    outgoing clk : Clock
+    incoming data : Word[8]
 }
 
 pub mod SyncClient {
@@ -100,8 +100,8 @@ pub mod ClockedServer {
 //> `async` overrides the implicit `on clk`: `evt` accepts a driver from
 //> a different clock's domain.
 socket Mixed {
-    cosi clk : Clock
-    cosi evt : Bit async
+    outgoing clk : Clock
+    outgoing evt : Bit async
 }
 
 pub mod MixedUser {

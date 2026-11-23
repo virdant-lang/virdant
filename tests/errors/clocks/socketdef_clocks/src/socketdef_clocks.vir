@@ -5,26 +5,26 @@
 // instance touched by two clocks is a conflict.
 
 pub socket TwoClocks {
-    cosi clk_a : Clock
-    cosi clk_b : Clock
+    outgoing clk_a : Clock
+    outgoing clk_b : Clock
     // CHECK: Missing `on` or `async` clause for data: the socket has multiple Clock channels
-    soci data : Word[8]
+    incoming data : Word[8]
 }
 
 //> Explicit clauses satisfy the rule.
 pub socket TwoClocksOk {
-    cosi clk_a : Clock
-    cosi clk_b : Clock
-    soci data : Word[8] on clk_a
-    soci evt : Bit async
+    outgoing clk_a : Clock
+    outgoing clk_b : Clock
+    incoming data : Word[8] on clk_a
+    incoming evt : Bit async
 }
 
 //> A clockless socket: its channels are flexible, so this instance is
 //> touched by `clk_a` (driving `req`) and by `clk_b` (reading `rsp`)
 //> — one instantiation cannot serve both.
 socket Flex {
-    cosi req : Word[4]
-    soci rsp : Word[4]
+    outgoing req : Word[4]
+    incoming rsp : Word[4]
 }
 
 pub mod ConflictUser {

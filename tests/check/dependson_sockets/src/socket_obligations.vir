@@ -1,6 +1,6 @@
-// Socket channels may declare `dependson` too.  A list on a `cosi`
+// Socket channels may declare `dependson` too.  A list on a `outgoing`
 // channel applies when the socket is instantiated as a `client`, and a
-// list on a `soci` channel as a `server`; it places the same
+// list on a `incoming` channel as a `server`; it places the same
 // obligation on the containing module as if the `dependson` were
 // declared on the resulting port.  In the receiving role the list is
 // inert.
@@ -37,9 +37,9 @@ mod Client {
     unused c.ack
 }
 
-// In the receiving role, a list is inert: `Respond`'s `soci ack`
+// In the receiving role, a list is inert: `Respond`'s `incoming ack`
 // list says nothing about a `client` instantiation, and `Wish`'s
-// `cosi req` list says nothing about a `server` instantiation.
+// `outgoing req` list says nothing about a `server` instantiation.
 mod InertServer {
     reverse socket w of Wish {
         it.ack := true

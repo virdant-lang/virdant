@@ -58,7 +58,7 @@ mod LoopC {
 }
 
 // A socket-link cycle: both sides of the socket declare same-cycle
-// response (`cosi req dependson ack` for the client, `soci ack
+// response (`outgoing req dependson ack` for the client, `incoming ack
 // dependson req` for the server), which composes into a cycle at the
 // module containing both instances.
 //

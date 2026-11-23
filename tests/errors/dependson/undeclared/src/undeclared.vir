@@ -45,7 +45,7 @@ mod Sub {
 
 // CHECK: `out` could combinationally depend on `inp` but does not declare it
 // Through a submodule's socket obligation: `out` reads the submodule's
-// `cosi` channel, whose drive may depend on the socket's `soci`
+// `outgoing` channel, whose drive may depend on the socket's `incoming`
 // channel (declared in the socketdef), which the parent drives from
 // `inp`.
 pub mod ThroughObligation {

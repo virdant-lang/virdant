@@ -74,17 +74,9 @@ BuiltinDef := DocString? Annotations "pub"? "builtin" "type" Ident Generics? "{"
 
 SocketDef := DocString? Annotations "pub"? "builtin"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
-CosiKw :=
-      "cosi"
-    | "outgoing"
-
-SociKw :=
-      "soci"
-    | "incoming"
-
 SocketDefStmt :=
-      DocString? Annotations CosiKw Ident ":" Type OnClause? DependsonList?
-    | DocString? Annotations SociKw Ident ":" Type OnClause? DependsonList?
+      DocString? Annotations "outgoing" Ident ":" Type OnClause? DependsonList?
+    | DocString? Annotations "incoming" Ident ":" Type OnClause? DependsonList?
 
 DependsonList := "dependson" DependsonPathList
 
@@ -454,7 +446,6 @@ Tokens:
   "builtin"
   "bus"
   "client"
-  "cosi"
   "default"
   "dependson"
   "dontcare"
@@ -483,7 +474,6 @@ Tokens:
   "reg"
   "reverse"
   "server"
-  "soci"
   "socket"
   "struct"
   "tap"

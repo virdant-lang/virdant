@@ -5,7 +5,7 @@
 // just as ambiguous as two declared `incoming` clocks.
 
 socket ClkBus {
-    cosi clk : Clock
+    outgoing clk : Clock
 }
 
 pub mod DualDomain {

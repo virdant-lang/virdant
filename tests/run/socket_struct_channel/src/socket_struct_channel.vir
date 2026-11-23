@@ -1,8 +1,8 @@
 //! Self-checking `kind = "run"` test for a socket channel of struct
 //! type: field-wise integrity across a socket.
 //!
-//! `Chan` carries two struct-typed channels: a `Req` cosi channel
-//! (client -> server) and a `Resp` soci channel (server -> client).
+//! `Chan` carries two struct-typed channels: a `Req` outgoing channel
+//! (client -> server) and a `Resp` incoming channel (server -> client).
 //! The client streams four request vectors through the socket; the
 //! server reads the request's fields (`a`, `b`), computes
 //! `sum = a + b` and `eq = a == b` into a response struct, and sends
@@ -21,13 +21,13 @@
 
 import virt
 
-//> Request carried on the cosi channel: operands `a` and `b`.
+//> Request carried on the outgoing channel: operands `a` and `b`.
 struct type Req {
     a : Word[4]
     b : Word[4]
 }
 
-//> Response carried on the soci channel: `sum = a + b` and `eq`
+//> Response carried on the incoming channel: `sum = a + b` and `eq`
 //> from the server.
 struct type Resp {
     sum : Word[5]

@@ -9,12 +9,12 @@
 // unset and the read silently unchecked.
 
 socket WithOwnClock {
-    cosi clk : Clock
+    outgoing clk : Clock
     // An explicit `on` naming the socket's unique Clock channel is
     // redundant (clause-less channels are implicitly `on` it), but
     // still resolves: the probe below proves `data` is `Sync(b.clk)`.
     // CHECK: Redundant `on` clause: `data`
-    cosi data : Word[8] on clk
+    outgoing data : Word[8] on clk
 }
 
 pub mod UsesOwnClockChannel {
@@ -32,7 +32,7 @@ pub mod UsesOwnClockChannel {
 
 socket OnModuleClock {
     // CHECK: Unknown component clock
-    cosi data : Word[8] on clock
+    outgoing data : Word[8] on clock
 }
 
 pub mod OnModuleClockUser {

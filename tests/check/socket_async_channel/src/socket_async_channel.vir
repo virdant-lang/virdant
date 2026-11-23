@@ -6,7 +6,7 @@
 
 socket AsyncBus {
     //> Declared `async`: `Async` in every instantiating module.
-    cosi data : Word[8] async
+    outgoing data : Word[8] async
 }
 
 pub mod Source {

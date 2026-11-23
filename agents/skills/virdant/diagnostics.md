@@ -125,12 +125,12 @@ module's incoming clock ports. See ./driver-blocks.md and ./memory.md.
   * ``` `dependson` is not allowed on `X`: `incoming` ports may not declare `dependson` ```
 * Socket channel lists: a channel may only `dependson` channels of the
   opposite direction word of the same socket, and vice versa:
-  ``a `cosi` channel may only `dependson` channels of the opposite direction word``
+  ``a `outgoing` channel may only `dependson` channels of the opposite direction word``
 * `where` clauses on socket instance declarations (the moddef-local way to
   declare a driven channel's dependency on other sockets' channels or plain
   `incoming` ports — see ./dependson.md):
   * ``` `dependson` is not allowed on `X`: is not a driven channel of socket
-    instance `Y`: a `client` socket drives `cosi` channels, not `soci` ``` —
+    instance `Y`: a `client` socket drives `outgoing` channels, not `incoming` ``` —
     the carrier named a receiving channel (or a nonexistent channel, or
     another socket instance: ``names socket `Z`, but this `where` clause is
     attached to socket instance `Y```).

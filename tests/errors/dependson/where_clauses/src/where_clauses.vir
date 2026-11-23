@@ -1,11 +1,11 @@
 // `where` clauses on socket instance declarations must be well-formed:
 // the carrier must name a driven channel of the attached socket
-// instance (`client` + `cosi`, or `server` + `soci`), and each entry
+// instance (`client` + `outgoing`, or `server` + `incoming`), and each entry
 // must resolve to an incoming component of the module (a plain
 // `incoming` port or a receiving channel of one of the module's own
 // socket instances).
 
-// CHECK: `dependson` is not allowed on `it.ready`: is not a driven channel of socket instance `c`: a `client` socket drives `cosi` channels, not `soci`
+// CHECK: `dependson` is not allowed on `it.ready`: is not a driven channel of socket instance `c`: a `client` socket drives `outgoing` channels, not `incoming`
 // CHECK: Bad `dependson` entry `d.req`: is not a receiving channel or `incoming` port of this module
 // CHECK: Bad `dependson` entry `out_port`: is not a receiving channel or `incoming` port of this module
 // CHECK: Bad `dependson` entry `nowhere`: could not be resolved to a component of this module
@@ -21,8 +21,8 @@ pub mod CarrierChecks {
     outgoing out_port : Bit dependson some_in
     out_port := some_in
 
-    // Carrier on a receiving channel: a `client` socket drives `cosi`,
-    // not `soci`.  The second clause is well-formed, so the module
+    // Carrier on a receiving channel: a `client` socket drives `outgoing`,
+    // not `incoming`.  The second clause is well-formed, so the module
     // still declares the dependency its driver actually has.
     forward socket c of Chan
         where it.ready dependson some_in

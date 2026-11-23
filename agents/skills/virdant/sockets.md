@@ -20,9 +20,6 @@ socket Mem {
 }
 ```
 
-The legacy spellings `cosi` (for `outgoing`) and `soci` (for `incoming`)
-still parse but are deprecated; write `outgoing`/`incoming`.
-
 Socket names begin with an uppercase letter and use camel case,
 just like module and type names.
 

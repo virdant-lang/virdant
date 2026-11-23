@@ -322,38 +322,26 @@ SocketDef: AstNodeId = {
     },
 }
 
-/// Alternative spellings: in socket definitions, `cosi` may be
-/// written `outgoing`, and `soci` may be written `incoming`.
-CosiKw: () = {
-    "cosi" => (),
-    "outgoing" => (),
-}
-
-SociKw: () = {
-    "soci" => (),
-    "incoming" => (),
-}
-
 SocketDefStmt: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> CosiKw <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <rr:@R> => {
         let (on, is_async) = match on {
             Some(OnClause::Clock(expr)) => (Some(expr), false),
             Some(OnClause::Async) => (None, true),
             None => (None, false),
         };
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Cosi, doc_string: docstring, is_async });
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Outgoing, doc_string: docstring, is_async });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if dependson_list.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> SociKw <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "incoming" <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <rr:@R> => {
         let (on, is_async) = match on {
             Some(OnClause::Clock(expr)) => (Some(expr), false),
             Some(OnClause::Async) => (None, true),
             None => (None, false),
         };
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Soci, doc_string: docstring, is_async });
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Incoming, doc_string: docstring, is_async });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if dependson_list.is_none() { 0u16 } else { 1u16 };
 
@@ -1536,8 +1524,6 @@ extern {
         "server" => Token::KwServer,
         "forward" => Token::KwForward,
         "reverse" => Token::KwReverse,
-        "cosi" => Token::KwCosi,
-        "soci" => Token::KwSoci,
         "if" => Token::KwIf,
         "it" => Token::KwIt,
         "else" => Token::KwElse,

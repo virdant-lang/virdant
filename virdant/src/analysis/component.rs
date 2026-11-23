@@ -327,7 +327,7 @@ impl ComponentAnalysis {
 fn drives_channel(role: SocketRole, dir: ChannelDir) -> bool {
     matches!(
         (role, dir),
-        (SocketRole::Client, ChannelDir::Cosi) | (SocketRole::Server, ChannelDir::Soci)
+        (SocketRole::Client, ChannelDir::Outgoing) | (SocketRole::Server, ChannelDir::Incoming)
     )
 }
 
@@ -1036,7 +1036,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
                     );
                     // The channel in its driving role (`client` for
-                    // `cosi`, `server` for `soci`) is an outgoing port of
+                    // `outgoing`, `server` for `incoming`) is an outgoing port of
                     // this module; in the receiving role it is an incoming
                     // one.  (The submodule-socket arm below assigns the
                     // same kinds from the parent's opposite perspective.)

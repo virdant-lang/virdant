@@ -1,7 +1,7 @@
 //! Self-checking `kind = "run"` test for a socket channel of union
 //! type: a `Valid[Word[8]]`-style handshake crossing a socket.
 //!
-//! A client module drives the socket's `cosi` channel with a sequence
+//! A client module drives the socket's `outgoing` channel with a sequence
 //! of `@Valid(payload)` beats separated by `@Invalid()` gaps; a server
 //! module samples the channel and latches every valid payload.  The
 //! top folds a per-cycle payload-integrity check into a running

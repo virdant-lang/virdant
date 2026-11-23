@@ -222,8 +222,8 @@ fn collect_driver_edges(
                     // A socket link transfers values along each channel:
                     // the receiving side combinationally depends on the
                     // driving side.  The driving side is the one whose
-                    // *owner* drives the channel (client for `cosi`, server
-                    // for `soci`), which is exactly the side with component
+                    // *owner* drives the channel (client for `outgoing`, server
+                    // for `incoming`), which is exactly the side with component
                     // kind `Outgoing`; the receiving side has kind
                     // `Incoming`.  `Flow` cannot decide the direction: it is
                     // module-centric (Source = the value enters this
