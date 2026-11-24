@@ -9,7 +9,7 @@
 
 pub mod HexRom {
     incoming addr : Word[8] async
-    outgoing read_data : Word[32] async
+    outgoing read_data : Word[32] async dependson addr
 
     @image_hex("rom_image.hex")
     memory rom[256] : Word[32] {
@@ -19,7 +19,7 @@ pub mod HexRom {
 
 pub mod RawRom {
     incoming addr : Word[3] async
-    outgoing read_data : Word[16] async
+    outgoing read_data : Word[16] async dependson addr
 
     @image("rom_raw.bin")
     memory rom[8] : Word[16] {

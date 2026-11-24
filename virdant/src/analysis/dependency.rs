@@ -310,17 +310,17 @@ fn collect_driver_edges(
             }
             AstNodePayload::Component(component) => {
                 let name = stmt.parsing.string(component.name);
+                let name_with_context = if let Some(ctx) = it_context {
+                    let mut new_name = BString::from(ctx);
+                    new_name.push(b'.');
+                    new_name.extend_from_slice(name);
+                    new_name
+                } else {
+                    BString::from(name)
+                };
                 for child in stmt.children() {
                     if matches!(child.payload(), AstNodePayload::It) {
                         let block = &child.children()[0];
-                        let name_with_context = if let Some(ctx) = it_context {
-                            let mut new_name = BString::from(ctx);
-                            new_name.push(b'.');
-                            new_name.extend_from_slice(name);
-                            new_name
-                        } else {
-                            BString::from(name)
-                        };
                         collect_driver_edges(
                             &block.children(),
                             component_analysis,
@@ -329,7 +329,87 @@ fn collect_driver_edges(
                             cond_refs,
                             let_env,
                         );
+                    } else if component.kind == ComponentKind::Memory
+                        && matches!(child.payload(), AstNodePayload::ModDefStmtBlock)
+                    {
+                        // A memory body: `it` refers to the memory.
+                        // Its drivers (read ports driving other
+                        // components, and writes under `on` regions)
+                        // contribute edges like any other driver;
+                        // `dependson` and the combinational-cycle
+                        // check both read this graph.
+                        collect_driver_edges(
+                            &child.children(),
+                            component_analysis,
+                            edges,
+                            Some(name_with_context.as_bstr()),
+                            cond_refs,
+                            let_env,
+                        );
                     }
+                }
+            }
+            AstNodePayload::OnRegion => {
+                // An `on <CLOCK> { ... }` region of a memory body: the
+                // writes inside are `IndexedDriver` statements handled
+                // below; like a register's commit, the clock edge is
+                // implicit in the sequential edge kind, so the clock
+                // itself is not recorded as a dependee.
+                let children = stmt.children();
+                if let Some(block) = children.get(1) {
+                    collect_driver_edges(
+                        &block.children(),
+                        component_analysis,
+                        edges,
+                        it_context,
+                        cond_refs,
+                        let_env,
+                    );
+                }
+            }
+            AstNodePayload::IndexedDriver(_) => {
+                // A write to one word of a memory
+                // (`mem[dyn addr] <= data`): the memory's *next* value
+                // depends on the index expression, the written
+                // expression, and the guards of enclosing `if`/`match`
+                // statements — a sequential dependency, committed at
+                // the clock edge.  The `:=` spelling of a memory write
+                // is diagnosed (`assign_instead_of_lassign`) but parses
+                // and behaves as a write site too, so the edge kind is
+                // sequential regardless of spelling.
+                let Some(target) = stmt.target() else { continue };
+                let mut target_str = stmt.parsing.string(target).to_owned();
+                resolve_it_path(&mut target_str, it_context);
+                let Some(target_component) =
+                    component_analysis.resolve(target_str.as_bstr())
+                else {
+                    continue;
+                };
+
+                let edge_kind = EdgeKind::Sequential;
+
+                if let Some(index_node) = stmt.driver_index() {
+                    for dependee in collect_cond_refs_in_expr(
+                        &index_node,
+                        component_analysis,
+                        it_context,
+                        let_env,
+                    ) {
+                        add_edge(edges, target_component.id(), dependee, edge_kind);
+                    }
+                }
+                if let Some(rhs_node) = stmt.driver() {
+                    for dependee in collect_cond_refs_in_expr(
+                        &rhs_node,
+                        component_analysis,
+                        it_context,
+                        let_env,
+                    ) {
+                        add_edge(edges, target_component.id(), dependee, edge_kind);
+                    }
+                }
+                for cond in cond_refs {
+                    add_edge(edges, target_component.id(), *cond, edge_kind);
                 }
             }
             AstNodePayload::If => {

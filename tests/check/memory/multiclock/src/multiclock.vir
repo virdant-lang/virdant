@@ -10,7 +10,7 @@ pub mod DualClockRam {
 
     incoming addr : Word[6] on clk_a
     incoming write_data : Word[16] on clk_a
-    outgoing read_data : Word[16] on clk_a
+    outgoing read_data : Word[16] on clk_a dependson addr
 
     unused clk_b
 

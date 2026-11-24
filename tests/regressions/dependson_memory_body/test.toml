@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Drivers inside a `memory` body must contribute edges to the DependencyGraph: a read port driven there combinationally depends on the ports its RHS references, so an undeclared `dependson` is an error, not silently absent"
+filecheck = "src/dependson_memory_body.vir"

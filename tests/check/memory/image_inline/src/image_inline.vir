@@ -6,7 +6,7 @@
 
 pub mod EscRom {
     incoming addr : Word[4] async
-    outgoing read_data : Word[8] async
+    outgoing read_data : Word[8] async dependson addr
 
     @image_inline("Hello, world!\r\n\0")
     memory rom[16] : Word[8] {
@@ -16,7 +16,7 @@ pub mod EscRom {
 
 pub mod HexEscRom {
     incoming addr : Word[4] async
-    outgoing read_data : Word[8] async
+    outgoing read_data : Word[8] async dependson addr
 
     @image_inline("Hello, world!\x0d\x0a\x00")
     memory rom[16] : Word[8] {
@@ -26,7 +26,7 @@ pub mod HexEscRom {
 
 pub mod QuoteRom {
     incoming addr : Word[3] async
-    outgoing read_data : Word[8] async
+    outgoing read_data : Word[8] async dependson addr
 
     // The escapes for quote, backslash, and question mark, plus an
     // octal escape: `\a` rings (0x07), `\?` is '?', `\101` is 'A'.
@@ -38,7 +38,7 @@ pub mod QuoteRom {
 
 pub mod WordRom {
     incoming addr : Word[1] async
-    outgoing read_data : Word[16] async
+    outgoing read_data : Word[16] async dependson addr
 
     // Two bytes per word, most-significant byte first: 0x4142, 0x0102.
     @image_inline("AB\x01\x02")

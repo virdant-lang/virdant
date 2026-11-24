@@ -1,0 +1,37 @@
+// Regression test: drivers inside a `memory` body must contribute
+// edges to the module's DependencyGraph.
+//
+// `collect_driver_edges` (virdant/src/analysis/dependency.rs) used to
+// walk only it-blocks of Component statements, so every driver written
+// inside a `memory { ... }` body — read ports driving `outgoing`
+// components, and indexed writes — contributed no edges at all.  The
+// `dependson` analysis then saw no actual dependencies for such ports:
+// a port that *did* declare its dependees was warned as unused, and a
+// port whose memory-body driver read an *undeclared* incoming port
+// passed silently instead of erroring.
+//
+// `good` declares exactly what its memory-body read depends on and
+// must produce no diagnostics.  `bad` reads `other` inside the memory
+// body but declares nothing, which must be the undeclared-dependency
+// error.
+
+pub mod Test {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming other : Word[4]
+
+    outgoing good : Word[8] dependson addr
+    outgoing bad : Word[8]
+
+    memory mem[16] : Word[8] {
+        it[dyn addr] <= 0
+        good := it[dyn addr]
+        // CHECK: could combinationally depend on `other` but does not declare it
+        bad := mux(other == 0, 0, it[dyn other])
+    }
+}
+
+// CHECK: FAILED with
+// CHECK: 1 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

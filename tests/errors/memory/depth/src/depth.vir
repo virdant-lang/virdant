@@ -6,7 +6,7 @@ pub mod NotPow2 {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Word[8]
-    outgoing read_data : Word[8]
+    outgoing read_data : Word[8] dependson addr
 
     // 12 is not a power of two.
     memory mem[12] : Word[8] {
@@ -19,7 +19,7 @@ pub mod NotALiteral {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Word[8]
-    outgoing read_data : Word[8]
+    outgoing read_data : Word[8] dependson addr
 
     // A depth must be a literal constant, not an expression.
     memory mem[8 + 8] : Word[8] {

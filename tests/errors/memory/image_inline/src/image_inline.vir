@@ -4,7 +4,7 @@
 
 pub mod TooLong {
     incoming addr : Word[2]
-    outgoing read_data : Word[8]
+    outgoing read_data : Word[8] dependson addr
 
     // The string decodes to eight bytes; the depth is four.
     @image_inline("12345678")

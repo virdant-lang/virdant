@@ -5,7 +5,7 @@ pub mod NotPow2Width {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Word[12]
-    outgoing read_data : Word[12]
+    outgoing read_data : Word[12] dependson addr
 
     // 12 is not a power of two.
     memory mem[16] : Word[12] {
@@ -18,7 +18,7 @@ pub mod NotAWord {
     incoming clock : Clock
     incoming addr : Word[4]
     incoming write_data : Bit
-    outgoing read_data : Bit
+    outgoing read_data : Bit dependson addr
 
     // `Bit` is not a Word type.
     memory mem[16] : Bit {
