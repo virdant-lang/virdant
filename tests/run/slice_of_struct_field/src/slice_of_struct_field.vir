@@ -47,14 +47,14 @@ pub mod SliceOfStructFieldTest for virt::Virt {
     //> lower).  `red` is `0b00011000`: bits 4 and 3 set, bit 2 clear.
     reg color : Color on clock {
         initial it <= ${
-            red = 0b00011000,
-            green = 0xff,
-            blue = 0b10101010,
+            red=0b00011000,
+            green=0xff,
+            blue=0b10101010,
         }
         it <= ${
-            red = 0b00011000,
-            green = 0xff,
-            blue = 0b10101010,
+            red=0b00011000,
+            green=0xff,
+            blue=0b10101010,
         }
     }
 

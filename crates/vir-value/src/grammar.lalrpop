@@ -9,7 +9,7 @@
 // GRAMMAR.txt and plans/vir-value/PLAN.md §3): literals (all forms,
 // including `0b`/`0x` prefixes, `_` separators, and `w<N>` suffixes),
 // constructor and enumerant applications (`@Valid(0w8)`, `@Invalid`),
-// struct literals (`${a = 1, b = 2}`), parentheses, and type ascription
+// struct literals (`${a=1, b=2}`), parentheses, and type ascription
 // (`0 : Word[8]`).  No operators, paths, `if`/`match`/`let`,
 // `dontcare`, or `?`.
 

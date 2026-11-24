@@ -39,11 +39,11 @@ pub mod MuxStructsTest for virt::Virt {
     //> The `mux` under test: picks between two `${}` struct literals.
     wire chosen : Pair {
         it := mux(sel, ${
-            fst = 42,
-            snd = 7,
+            fst=42,
+            snd=7,
         }, ${
-            fst = 99,
-            snd = 200,
+            fst=99,
+            snd=200,
         })
     }
 

@@ -41,12 +41,12 @@ pub mod StructInRegTest for virt::Virt {
     //> struct literal built from those fields.
     reg p : Point on clock {
         initial it <= ${
-            x = 3,
-            y = 5,
+            x=3,
+            y=5,
         }
         it <= ${
-            x = it->x + 1,
-            y = it->y + 2,
+            x=it->x + 1,
+            y=it->y + 2,
         }
     }
 

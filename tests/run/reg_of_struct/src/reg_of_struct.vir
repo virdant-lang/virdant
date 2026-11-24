@@ -39,30 +39,30 @@ pub mod Top for virt::Virt {
     //> untouched fields carry over from `it`.
     reg c : Color on clock {
         initial it <= ${
-            red = 0,
-            green = 0,
-            blue = 0,
+            red=0,
+            green=0,
+            blue=0,
         }
         if {
             when cycle == 0 {
                 it <= ${
-                    red = 10,
-                    green = it->green,
-                    blue = it->blue,
+                    red=10,
+                    green=it->green,
+                    blue=it->blue,
                 }
             }
             when cycle == 1 {
                 it <= ${
-                    red = it->red,
-                    green = 20,
-                    blue = it->blue,
+                    red=it->red,
+                    green=20,
+                    blue=it->blue,
                 }
             }
             when cycle == 2 {
                 it <= ${
-                    red = it->red,
-                    green = it->green,
-                    blue = 30,
+                    red=it->red,
+                    green=it->green,
+                    blue=30,
                 }
             }
         }

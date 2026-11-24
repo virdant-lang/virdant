@@ -160,7 +160,7 @@ fn invalid_reason(
 /// - pure enums (every member zero-param) as `#Red`;
 /// - unions as constructor syntax, recursively: `@Some(0)`,
 ///   `@Idle()`;
-/// - structs as `${f = value, ...}`.
+/// - structs as `${f=value, ...}`.
 pub fn render(layouts: &TypeLayoutIndex, typ: &Type, bits: &BitPat) -> String {
     match typ {
         Type::Bit => {
@@ -177,7 +177,7 @@ pub fn render(layouts: &TypeLayoutIndex, typ: &Type, bits: &BitPat) -> String {
                     .zip(field_bits.iter())
                     .map(|(field, pat)| {
                         format!(
-                            "{} = {}",
+                            "{}={}",
                             field.name.to_str_lossy(),
                             render(layouts, &field.param_types[0], pat)
                         )

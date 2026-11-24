@@ -2,7 +2,7 @@
 // `Valid[T]`.
 //
 // A `Color` struct rides in the payload of a `Valid[Color]`: the
-// register `v` alternates between `@Valid(${ ... })` built with a
+// register `v` alternates between `@Valid(${...})` built with a
 // struct literal and `@Invalid()`.  After `match`ing the union, each
 // arm projects the payload's fields with the `->` operator.  The test
 // asserts that the extracted `red` field and the sum of all three
@@ -37,11 +37,11 @@ pub mod ValidOfStructTest for virt::Virt {
     //> struct literal; while `sel` is 1, `@Invalid()`.
     reg v : Valid[Color] on clock {
         initial it <= @Valid(${
-            red = 10,
-            green = 20,
-            blue = 30,
+            red=10,
+            green=20,
+            blue=30,
         })
-        it <= mux(sel == 0, @Valid(${ red = 10, green = 20, blue = 30 }), @Invalid())
+        it <= mux(sel == 0, @Valid(${red=10, green=20, blue=30}), @Invalid())
     }
 
     //> Lags `sel` by one cycle: at any cycle after the first it holds

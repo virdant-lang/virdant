@@ -51,7 +51,7 @@ builtin type Word[n : Nat] {}
 ```virdant
 wire pair : Pair[Word[4], Bit]
 reg pair : Pair[Word[4], Bit] {
-    it <= ${ fst = a, snd = b }
+    it <= ${fst=a, snd=b}
 }
 ```
 
@@ -60,7 +60,7 @@ expression:
 
 ```virdant
 wire nested : Valid[Pair[Word[4], Bit]]
-nested := @Valid(${ fst = a, snd = b })
+nested := @Valid(${fst=a, snd=b})
 ```
 
 Enum payload construction uses `@Name(...)` for payload variants and

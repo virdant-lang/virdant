@@ -56,7 +56,7 @@ pub mod CrossStruct {
     // CHECK: Domain mismatch: cannot combine clocked by `clk_a` with clocked by `clk_b`
     unused bad_struct
     wire bad_struct : Pair on clk_a {
-        it := ${ hi = a_data[3..1], lo = b_data[2..0] }
+        it := ${hi=a_data[3..1], lo=b_data[2..0]}
     }
 
     // A memory on clk_a indexed by a clk_b signal.

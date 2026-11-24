@@ -400,7 +400,7 @@ fn render_expr(expr: &Expr) -> String {
         Expr::StructLit { fields } => {
             let rendered: Vec<String> = fields
                 .iter()
-                .map(|(field, expr)| format!("{} = {}", field, render_expr(expr)))
+                .map(|(field, expr)| format!("{}={}", field, render_expr(expr)))
                 .collect();
             format!("${{{}}}", rendered.join(", "))
         }

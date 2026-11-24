@@ -21,7 +21,7 @@ pub platform Buttons {
     incoming clk_in : Bit
     outgoing easy_default : Bit default true
     outgoing word_default : Word[4] default 0w4
-    outgoing struct_default : Point default ${ x = 1w8, y = 2w8 }
+    outgoing struct_default : Point default ${x=1w8, y=2w8}
     outgoing enum_default : Color default #Blue
     outgoing valid_default : Valid[Word[4]] default @Valid(3w4)
     outgoing must_declare : Bit

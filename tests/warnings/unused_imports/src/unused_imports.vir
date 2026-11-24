@@ -15,7 +15,7 @@ pub mod Top {
     outgoing out : Word[8] async dependson inp
 
     wire used : helper::UsedStruct async
-    used := ${ x = inp }
+    used := ${x=inp}
 
     out := used->x
 }

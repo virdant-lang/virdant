@@ -4,7 +4,7 @@
 // garbage on both sides of the round trip.
 //
 // Write 42 into register 3, then read it back through the memory.
-poke write @Valid(${ addr = 3w5, data = 42w32 })
+poke write @Valid(${addr=3w5, data=42w32})
 tick
 poke write @Invalid()
 
@@ -14,7 +14,7 @@ assert data == 42
 
 // Round-trip the value back out through a peek: the display and the
 // design must agree on the field order.
-poke write @Valid(${ addr = 7w5, data = 4294967295w32 })
+poke write @Valid(${addr=7w5, data=4294967295w32})
 tick
 poke write @Invalid()
 poke addr 7w5

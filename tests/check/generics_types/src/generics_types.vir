@@ -29,16 +29,16 @@ pub mod Top {
     // Generic struct as a reg type: driven, flattened, field-projected.
     reg pair : Pair[Word[4], Bit] {
         it <= ${
-            fst = a,
-            snd = b,
+            fst=a,
+            snd=b,
         }
     }
 
     // Nested type arguments: the argument to Valid is itself a full type.
     wire nested : Valid[Pair[Word[4], Bit]]
     nested := @Valid(${
-        fst = a,
-        snd = b,
+        fst=a,
+        snd=b,
     })
 
     // A generic enum instantiated at two different arguments in one module.

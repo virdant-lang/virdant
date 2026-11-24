@@ -20,7 +20,7 @@ pub mod Top {
     }
 
     wire vec_ref : types::Vector {
-        it := ${ elements = 1024w16, scale = true }
+        it := ${elements=1024w16, scale=true}
     }
 
     final_result := last + b.result

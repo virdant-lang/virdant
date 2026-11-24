@@ -10,6 +10,87 @@ use std::path::{Path, PathBuf};
 use vir_common::help_json;
 
 // ---------------------------------------------------------------------------
+// Struct-literal normalization
+// ---------------------------------------------------------------------------
+
+/// Normalize struct literals to the normative style
+/// `${field=value, ...}`: no space just inside `${` or `}`, no space
+/// around `=`, and a single space after `,`.  Layout is otherwise
+/// untouched, so one-field-per-line literals keep their shape.
+fn normalize_struct_literals(input: &str) -> String {
+    let b = input.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut i = 0;
+    let mut depth: usize = 0;
+    while i < b.len() {
+        let c = b[i];
+        if c == b'$' && i + 1 < b.len() && b[i + 1] == b'{' {
+            i += 2;
+            let mut k = i;
+            while k < b.len() && (b[k] == b' ' || b[k] == b'\t') {
+                k += 1;
+            }
+            // A newline just inside `${` is layout, not filler space.
+            if k < b.len() && b[k] != b'\n' {
+                i = k;
+            }
+            out.extend_from_slice(b"${");
+            depth += 1;
+            continue;
+        }
+        if c == b'}' && depth > 0 {
+            while out.last() == Some(&b' ') || out.last() == Some(&b'\t') {
+                out.pop();
+            }
+            out.push(b'}');
+            depth -= 1;
+            i += 1;
+            continue;
+        }
+        if depth > 0 && (c.is_ascii_alphanumeric() || c == b'_') {
+            // A word inside a struct literal: if followed by `=`, it is
+            // a field name — tighten the spacing around the `=`.
+            let start = i;
+            let mut j = i;
+            while j < b.len() && (b[j].is_ascii_alphanumeric() || b[j] == b'_') {
+                j += 1;
+            }
+            let mut k = j;
+            while k < b.len() && (b[k] == b' ' || b[k] == b'\t') {
+                k += 1;
+            }
+            if k < b.len() && b[k] == b'=' {
+                let mut m = k + 1;
+                while m < b.len() && (b[m] == b' ' || b[m] == b'\t') {
+                    m += 1;
+                }
+                out.extend_from_slice(&b[start..j]);
+                out.push(b'=');
+                i = m;
+                continue;
+            }
+            out.extend_from_slice(&b[start..j]);
+            i = j;
+            continue;
+        }
+        if depth > 0 && c == b',' {
+            let mut j = i + 1;
+            while j < b.len() && (b[j] == b' ' || b[j] == b'\t') {
+                j += 1;
+            }
+            if j < b.len() && b[j] != b'\n' {
+                out.extend_from_slice(b", ");
+                i = j;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+// ---------------------------------------------------------------------------
 // Line classification
 // ---------------------------------------------------------------------------
 
@@ -433,6 +514,7 @@ fn format_line(
 // ---------------------------------------------------------------------------
 
 fn format_vir_text(input: &str) -> String {
+    let input = normalize_struct_literals(input);
     let lines: Vec<&str> = input.lines().collect();
     if lines.is_empty() {
         return String::new();
@@ -624,7 +706,8 @@ fn main() {
             .long_about(
                 "Formats `.vir` files with 4-space indentation, preserving vertical \
                  alignment of consecutive driver operators (`:=`, `<=`, `:=:`) and \
-                 type-annotation colons (`:`) within the same block.\
+                 type-annotation colons (`:`) within the same block. \
+                 Struct literals are normalized to `${field=value, ...}`.\
                  \n\nWith no files, formats every `src/*.vir` in the project.",
             )
             .arg(

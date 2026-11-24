@@ -11,7 +11,7 @@
 //!   `tick`, not by values); `Reset` renders as `0b0` / `0b1`;
 //! - enums and unions render as their constructor syntax, recursively:
 //!   `@Valid(0b00000000)`, `@Invalid`;
-//! - structs render as struct literals, recursively: `${f = value, ...}`;
+//! - structs render as struct literals, recursively: `${f=value, ...}`;
 //! - a bit pattern that is not a valid inhabitant of its type prints
 //!   as `<invalid>`.
 
@@ -120,7 +120,7 @@ fn render_default(sim: &Sim, value: &Value) -> String {
             } else if let Some(fields) = sim.decode_struct_fields(value) {
                 let rendered: Vec<String> = fields
                     .iter()
-                    .map(|(name, field)| format!("{} = {}", name, render(sim, field)))
+                    .map(|(name, field)| format!("{}={}", name, render(sim, field)))
                     .collect();
                 format!("${{{}}}", rendered.join(", "))
             } else {

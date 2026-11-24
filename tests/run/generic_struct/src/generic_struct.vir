@@ -30,8 +30,8 @@ pub mod Top for virt::Virt {
     //> Holds the `Pair[Word[4]]` from power-on.
     reg pair4 : Pair[Word[4]] on clock {
         initial it <= ${
-            fst = 5,
-            snd = 9,
+            fst=5,
+            snd=9,
         }
         it <= it
     }
@@ -39,8 +39,8 @@ pub mod Top for virt::Virt {
     //> Struct literal at `Word[8]`, built combinationally.
     wire pair8 : Pair[Word[8]] {
         it := ${
-            fst = 100,
-            snd = 200,
+            fst=100,
+            snd=200,
         }
     }
 

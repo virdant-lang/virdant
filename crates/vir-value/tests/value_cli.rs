@@ -168,7 +168,7 @@ fn struct_round_trip() {
     let (_dir, files) = project_dir();
     // Struct literals encode.
     let (code, out, err) = run_value(
-        &["encode", "${first = 0b1010, second = true}", ":", "scratch::Pair[Word[4], Bit]"],
+        &["encode", "${first=0b1010, second=true}", ":", "scratch::Pair[Word[4], Bit]"],
         &files,
     );
     assert_eq!(code, 0, "stderr: {err}");
@@ -179,7 +179,7 @@ fn struct_round_trip() {
         &files,
     );
     assert_eq!(code, 0, "stderr: {err}");
-    assert_eq!(out.trim(), "${first = 10, second = true}");
+    assert_eq!(out.trim(), "${first=10, second=true}");
 }
 
 #[test]

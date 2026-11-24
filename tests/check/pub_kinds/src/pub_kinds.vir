@@ -53,7 +53,7 @@ pub mod Top[W : Type] {
     }
 
     wire hidden : Hidden
-    hidden := ${ x = inp }
+    hidden := ${x=inp}
     unused hidden
 
     forward socket c of Chan

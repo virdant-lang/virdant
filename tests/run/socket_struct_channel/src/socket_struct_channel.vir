@@ -50,8 +50,8 @@ mod Server {
     //> 5-bit sum of `a` and `b`, `eq` their equality.
     reverse socket chan of Chan {
         it.resp := ${
-            sum = word(false, it.req->a) + word(false, it.req->b),
-            eq = it.req->a == it.req->b,
+            sum=word(false, it.req->a) + word(false, it.req->b),
+            eq=it.req->a== it.req->b,
         }
     }
 }
@@ -83,26 +83,26 @@ mod Stim {
     //> steps through `(7, 7)`, `(1, 2)`, and `(0, 0)`, one per cycle.
     reg req : Req on clock {
         initial it <= ${
-            a = 0b0101,
-            b = 0b0011,
+            a=0b0101,
+            b=0b0011,
         }
         if {
             when phase == 1 {
                 it <= ${
-                    a = 0b0111,
-                    b = 0b0111,
+                    a=0b0111,
+                    b=0b0111,
                 }
             }
             when phase == 2 {
                 it <= ${
-                    a = 0b0001,
-                    b = 0b0010,
+                    a=0b0001,
+                    b=0b0010,
                 }
             }
             when phase == 3 {
                 it <= ${
-                    a = 0b0000,
-                    b = 0b0000,
+                    a=0b0000,
+                    b=0b0000,
                 }
             }
         }

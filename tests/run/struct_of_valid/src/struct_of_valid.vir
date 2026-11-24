@@ -33,10 +33,10 @@ pub mod StructOfValidTest for virt::Virt {
     //> The struct value under test.  Cycle 0 holds `@Valid(42w8)`, then
     //> it switches to `@Invalid()` so the `else`-branch is covered too.
     reg chan : Chan on clock {
-        initial it <= ${ data = @Valid(42w8) }
+        initial it <= ${data=@Valid(42w8)}
         if {
             when cycle == 0 {
-                it <= ${ data = @Invalid() }
+                it <= ${data=@Invalid()}
             }
         }
     }

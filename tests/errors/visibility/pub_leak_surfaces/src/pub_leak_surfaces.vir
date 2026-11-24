@@ -38,13 +38,13 @@ pub mod PubMod {
 
     unused inp
     unused lane
-    outp := ${ x = 0w8 }
+    outp := ${x=0w8}
 }
 
 pub platform PubPlat {
     incoming clk_in : Priv
     // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubPlat` must be transitively pub
-    outgoing led : Priv default ${ x = 0w8 }
+    outgoing led : Priv default ${x=0w8}
     // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubPlat` must be transitively pub
 }
 

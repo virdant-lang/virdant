@@ -46,12 +46,12 @@ pub mod StructFieldSliceTest for virt::Virt {
     //> lower).  `addr` is `0b00011000`: bits 4 and 3 set, bit 2 clear.
     reg p : Point on clock {
         initial it <= ${
-            addr = 0b00011000,
-            data = 0xff,
+            addr=0b00011000,
+            data=0xff,
         }
         it <= ${
-            addr = 0b00011000,
-            data = 0xff,
+            addr=0b00011000,
+            data=0xff,
         }
     }
 

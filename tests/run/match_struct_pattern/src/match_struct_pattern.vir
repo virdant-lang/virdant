@@ -32,7 +32,7 @@ pub mod MatchStructPatternTest for virt::Virt {
     //> The struct value under test, built once by field-wise updates
     //> and then held.
     reg p : Point on clock {
-        initial it <= ${ x = 3, y = 7 }
+        initial it <= ${x=3, y=7}
     }
 
     //> The `match` scrutinee: 0 selects the `x` arm, 1 selects the

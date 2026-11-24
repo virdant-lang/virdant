@@ -653,7 +653,7 @@ mod tests {
                 outgoing b : State
                 outgoing c : Cell[Word[4]]
 
-                a := ${first = inp, second = true}
+                a := ${first=inp, second=true}
                 b := @Run(inp)
                 c := @Full(inp)
             }

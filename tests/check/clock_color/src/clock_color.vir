@@ -69,7 +69,7 @@ pub mod Mixed {
     // Struct construction: all field expressions join; the field
     // access takes the struct's domain.
     wire pair : Pair async {
-        it := ${ hi = ext_data[3..1], lo = ext_data[2..0] }
+        it := ${hi=ext_data[3..1], lo=ext_data[2..0]}
     }
 
     outgoing pair_hi : Word[2] async dependson ext_data {

@@ -35,18 +35,18 @@ pub mod StructEqualityTest for virt::Virt {
     //> The reference struct.  It changes every cycle, so equality is
     //> re-exercised against fresh values instead of one frozen value.
     reg p : Pair on clock {
-        initial it <= ${ a = 0w8, b = false }
-        it <= ${ a = it->a + 1w8, b = !it->b }
+        initial it <= ${a=0w8, b=false}
+        it <= ${a=it->a + 1w8, b=!it->b}
     }
 
     //> A struct built field-by-field from `p`, hence equal to `p`.
     wire q : Pair {
-        it := ${ a = p->a, b = p->b }
+        it := ${a=p->a, b=p->b}
     }
 
     //> A struct differing from `p` in exactly one field (`b`).
     wire r : Pair {
-        it := ${ a = p->a, b = !p->b }
+        it := ${a=p->a, b=!p->b}
     }
 
     //> Direct struct equality: `p == q` must hold.

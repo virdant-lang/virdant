@@ -1,6 +1,6 @@
 // Self-checking `kind = "run"` test for the struct field-update
 // idiom: building a new struct from an old one's fields with a struct
-// literal (`${ a = p->a, b = !p->b }`), carrying one field over
+// literal (`${a=p->a, b=!p->b}`), carrying one field over
 // unchanged and updating the other.  Then the simulator exits with
 // code 0.
 
@@ -19,14 +19,14 @@ pub mod StructCopyFieldTest for virt::Virt {
     //> The source struct.  It changes every cycle, so the copy is
     //> re-exercised against fresh values instead of one frozen value.
     reg p : Pair on clock {
-        initial it <= ${ a = 0w8, b = false }
-        it <= ${ a = it->a + 1w8, b = !it->b }
+        initial it <= ${a=0w8, b=false}
+        it <= ${a=it->a + 1w8, b=!it->b}
     }
 
     //> The copy: `a` carried over from `p`, `b` updated as the
     //> complement of `p`'s field.
     wire q : Pair {
-        it := ${ a = p->a, b = !p->b }
+        it := ${a=p->a, b=!p->b}
     }
 
     //> The carried-over field must equal the source's field, cycle

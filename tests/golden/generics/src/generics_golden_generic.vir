@@ -20,8 +20,8 @@ pub mod Top {
 
     reg pair : Pair[Word[4], Bit] on clock {
         it <= ${
-            fst = a,
-            snd = b,
+            fst=a,
+            snd=b,
         }
     }
 

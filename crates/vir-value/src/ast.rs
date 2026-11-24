@@ -40,7 +40,7 @@ pub enum ValueExpr {
     /// A constructor or enumerant application: `@Valid(0w8)`,
     /// `@Invalid`.
     Ctor { name: String, args: Vec<ValueExpr> },
-    /// A struct literal: `${a = 1, b = 2}`.
+    /// A struct literal: `${a=1, b=2}`.
     StructLit {
         fields: Vec<(String, ValueExpr)>,
     },

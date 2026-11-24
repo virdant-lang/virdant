@@ -41,20 +41,20 @@ pub mod StructNestedTest for virt::Virt {
     //> nested struct is overwritten with a nested literal.
     reg o : Outer on clock {
         initial it <= ${
-            inner = ${
-                value = 0,
-                tag = 0,
+            inner=${
+                value=0,
+                tag=0,
             },
-            extra = 0,
+            extra=0,
         }
         if {
             when cycle == 0 {
                 it <= ${
-                    inner = ${
-                        value = 42,
-                        tag = 7,
+                    inner=${
+                        value=42,
+                        tag=7,
                     },
-                    extra = 99,
+                    extra=99,
                 }
             }
         }

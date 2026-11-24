@@ -369,7 +369,7 @@ ExprPrimary: Expr = {
     "@" <name: Name> "(" <args: CtorArgs?> ")" => Expr::Ctor { name, args: args.unwrap_or_default() },
     "#" <name: Name> => Expr::Ctor { name, args: vec![] },
     "#" <name: Name> "(" <args: CtorArgs?> ")" => Expr::Ctor { name, args: args.unwrap_or_default() },
-    // Struct literals: `${f = expr, ...}`; a trailing comma is
+    // Struct literals: `${f=expr, ...}`; a trailing comma is
     // allowed, and the empty `${}` covers fieldless structs.
     "$" "{" <fields: StructFields> "}" =>
         Expr::StructLit { fields },

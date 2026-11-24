@@ -172,19 +172,21 @@ Struct field names begin with a lowercase letter (snake case).
 ### Struct literals (`${}`)
 
 Create a struct value with `${}` syntax.
-Inside, assign each field with `field = expr`.
+Inside, assign each field with `field=expr` — no spaces
+around the `=`, no spaces just inside the `${` and `}`.
 
 ```virdant
 color := ${
-    red   = 0,
-    green = 128,
-    blue  = 255,
+    red=0,
+    green=128,
+    blue=255,
 }
 ```
 
+On one line: `${red=0, green=128, blue=255}`.
+
 Trailing commas are allowed but not required.
 Put each field on its own line for readability.
-Align the `=` signs if it makes the values easier to scan.
 
 ### Field access (`->`)
 

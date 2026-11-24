@@ -32,9 +32,9 @@ pub mod Top {
     }
 
     color := ${
-        red = x,
-        green = 128,
-        blue = 255,
+        red=x,
+        green=128,
+        blue=255,
     }
 
     red := color->green
