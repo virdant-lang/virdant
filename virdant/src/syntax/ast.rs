@@ -74,6 +74,18 @@ impl<'p> AstNode<'p> {
             .is_some_and(|body| matches!(body.payload(), AstNodePayload::ArmBlock))
     }
 
+    /// The `Str`-literal argument of an `Annotation` node: its unquoted
+    /// text (the interned span includes the quotes as written) and the
+    /// argument's region (for diagnostics).  `None` when the argument
+    /// is not a `Str` literal.
+    pub fn annotation_str_arg(&self) -> Option<(BString, Region)> {
+        let arg = self.children().into_iter().next()?;
+        let AstNodePayload::ExprStrLit(strlit) = arg.payload() else {
+            return None;
+        };
+        Some((unquote(self.parsing.string(strlit.literal)), arg.region()))
+    }
+
     /// The name of a `LetBinding` node.
     pub fn let_binding_name(&self) -> Option<InternedString> {
         match &self.payload {
@@ -971,7 +983,7 @@ pub enum AnnotationValue {
 
 /// Strips the surrounding double quotes from a `Str` token's interned
 /// span (`Str` values keep their quotes as written in the source).
-fn unquote(s: &BStr) -> BString {
+pub(crate) fn unquote(s: &BStr) -> BString {
     let s = s.as_bytes();
     let s = s.strip_prefix(b"\"").unwrap_or(s);
     let s = s.strip_suffix(b"\"").unwrap_or(s);

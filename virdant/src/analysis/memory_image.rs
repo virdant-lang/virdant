@@ -16,7 +16,6 @@ use crate::common::Width;
 use crate::common::WordValue;
 use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;
-use crate::syntax::payload::AstNodePayload;
 
 /// The image format declared by the annotation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,37 +102,20 @@ pub fn memory_image_annotation(
     parsing: &Parsing,
     decl: &AstNode<'_>,
 ) -> Option<(MemoryImageKind, BString, Region)> {
-    let children = decl.children();
-    let annotations = children.first()?;
-    if !matches!(annotations.payload(), AstNodePayload::Annotations(_)) {
-        return None;
-    }
-    for annotation in annotations.children() {
-        let AstNodePayload::Annotation(payload) = annotation.payload() else {
+    for annotation in decl.annotations() {
+        let Some(name) = annotation.annotation_name() else {
             continue;
         };
-        let kind = match parsing.string(payload.name).as_bytes() {
+        let kind = match parsing.string(name).as_bytes() {
             b"image" => MemoryImageKind::Raw,
             b"image_hex" => MemoryImageKind::Hex,
             b"image_inline" => MemoryImageKind::Inline,
             _ => continue,
         };
-        // The path argument: a `Str` literal child.
-        let arg = annotation.children().into_iter().next()?;
-        let AstNodePayload::ExprStrLit(strlit) = arg.payload() else {
+        let Some((path, region)) = annotation.annotation_str_arg() else {
             return None;
         };
-        // The string literal's interned text includes its quotes;
-        // the path is the text between them.
-        let raw = parsing.string(strlit.literal);
-        let path: BString = raw
-            .as_bytes()
-            .strip_prefix(b"\"")
-            .and_then(|rest| rest.strip_suffix(b"\""))
-            .unwrap_or(raw.as_bytes())
-            .to_owned()
-            .into();
-        return Some((kind, path, arg.region()));
+        return Some((kind, path, region));
     }
     None
 }

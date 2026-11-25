@@ -149,6 +149,14 @@ pub enum DiagnosticPayload {
     /// A memory image on a `@noinitial` platform: image initialization
     /// is disallowed, exactly like `initial` statements.
     MemoryImageNoinitial(MemoryImageNoinitial),
+    /// A `@memory_style` annotation's value is not `"block"` or
+    /// `"ff"`.
+    MemoryStyleInvalid(MemoryStyleInvalid),
+    /// `@memory_style("block")` on a memory that is read
+    /// combinationally: block RAM cannot serve asynchronous reads, so
+    /// the mapping would be impossible (Yosys's late `no valid mapping
+    /// found` error, caught here at check time).
+    MemoryStyleBlockAsyncRead(MemoryStyleBlockAsyncRead),
     /// A `bus`/`net` component was referenced without `tap`.
     NetReadWithoutTap(NetReadWithoutTap),
     /// `tap` was applied to a component that is not a `bus` or `net`.
@@ -630,6 +638,19 @@ pub struct MemoryImageNoinitial {
     /// Fully-qualified module names, from the top module bound to the
     /// platform down to the module declaring the memory.
     pub path: Vec<BString>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryStyleInvalid {
+    pub component: BString,
+    pub value: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryStyleBlockAsyncRead {
+    pub component: BString,
+    /// Paths of the components that read the memory combinationally.
+    pub readers: Vec<BString>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1227,6 +1248,15 @@ impl Diagnostic {
                 d.platform,
                 d.path.iter().map(|m| m.to_str_lossy().into_owned()).collect::<Vec<_>>().join(" -> "),
             ).into(),
+            DiagnosticPayload::MemoryStyleInvalid(d) => format!(
+                "unknown @memory_style value \"{}\" for memory {}; expected \"block\" or \"ff\"",
+                d.value, d.component,
+            ).into(),
+            DiagnosticPayload::MemoryStyleBlockAsyncRead(d) => format!(
+                "memory {} is @memory_style(\"block\"), but block RAM cannot serve combinational reads; it is read combinationally by {}",
+                d.component,
+                d.readers.iter().map(|r| format!("'{}'", r)).collect::<Vec<_>>().join(", "),
+            ).into(),
             DiagnosticPayload::DriverForSink(d) => format!("Driver for sink {}", d.target).into(),
             DiagnosticPayload::UnresolvedComponent(d) => format!("Unresolved component {}", d.path).into(),
             DiagnosticPayload::ItNotInItBlock => "'it' used outside of an it block".into(),
@@ -1624,6 +1654,8 @@ impl Diagnostic {
             DiagnosticPayload::MemoryImageTooLong(_) => "MemoryImageTooLong",
             DiagnosticPayload::MemoryImageNotSupported(_) => "MemoryImageNotSupported",
             DiagnosticPayload::MemoryImageNoinitial(_) => "MemoryImageNoinitial",
+            DiagnosticPayload::MemoryStyleInvalid(_) => "MemoryStyleInvalid",
+            DiagnosticPayload::MemoryStyleBlockAsyncRead(_) => "MemoryStyleBlockAsyncRead",
             DiagnosticPayload::NetReadWithoutTap(_) => "NetReadWithoutTap",
             DiagnosticPayload::TapNotOnNet(_) => "TapNotOnNet",
             DiagnosticPayload::DriverForSink(_) => "DriverForSink",
@@ -1770,6 +1802,7 @@ from_diagnostic! {
     MemoryOnRegionClockMismatch, MemoryOnRegionNonWrite, MemoryInitialUnsupported,
     MemoryImageTooLong, MemoryImageNotSupported,
     MemoryImageNoinitial,
+    MemoryStyleInvalid, MemoryStyleBlockAsyncRead,
     NetReadWithoutTap, TapNotOnNet,
     DriverForSink, UnresolvedComponent, NotIt, IrrelevantDriverBlock, UnresolvedCtor, UnusedSource, ReadFromSink,
     UnfilledHole, ModuleCycle, UnresolvedMethod, WrongType, Unknown, DoesntFit, NotWordType,

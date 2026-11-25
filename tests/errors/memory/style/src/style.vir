@@ -1,0 +1,54 @@
+// `@memory_style` errors (MEMORY_STYLE_ANNOT.md): an unknown value,
+// and "block" on a memory read combinationally — block RAM cannot
+// serve asynchronous reads, so Yosys's late, location-free `no valid
+// mapping found` is caught here at check time.
+
+pub mod BadValue {
+    incoming clock : Clock
+    incoming write_enable : Bit
+    incoming write_addr : Word[4]
+    incoming write_data : Word[16]
+    incoming read_addr : Word[4]
+
+    @memory_style("distributed")
+    memory mem[16] : Word[16] {
+        if {
+            when write_enable {
+                it[dyn write_addr] <= write_data
+            }
+        }
+    }
+
+    outgoing reg read_data : Word[16] {
+        initial it <= 0w16
+        it <= mem[dyn read_addr]
+    }
+}
+
+pub mod BlockAsyncRead {
+    incoming clock : Clock
+    incoming write_enable : Bit
+    incoming write_addr : Word[4]
+    incoming write_data : Word[16]
+    incoming read_addr : Word[4]
+
+    @memory_style("block")
+    memory mem[16] : Word[16] {
+        if {
+            when write_enable {
+                it[dyn write_addr] <= write_data
+            }
+        }
+    }
+
+    outgoing read_data : Word[16] dependson read_addr {
+        it := mem[dyn read_addr]
+    }
+}
+
+// CHECK: unknown @memory_style value "distributed" for memory mem; expected "block" or "ff"
+// CHECK: memory mem is @memory_style("block"), but block RAM cannot serve combinational reads; it is read combinationally by 'read_data'
+// CHECK: FAILED with
+// CHECK: 2 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

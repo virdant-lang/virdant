@@ -1,0 +1,61 @@
+// Golden master for `@memory_style` lowering (MEMORY_STYLE_ANNOT.md):
+// the Virdant annotation lowers to the Yosys attribute `ram_style` on
+// the memory's `reg` declaration — `"block"` verbatim, `"ff"` spelled
+// `"logic"` (Yosys's name for the flip-flop mapping) — and no
+// attribute at all when the memory carries no annotation (Yosys
+// decides).
+//
+// forced_block is synchronously read (a clocked driver), so the
+// mapping is realizable; unforced is left to Yosys.
+
+pub mod Top {
+    incoming clock : Clock
+    incoming write_enable : Bit
+    incoming write_addr : Word[4]
+    incoming write_data : Word[16]
+    incoming read_addr : Word[4]
+
+    @memory_style("block")
+    memory forced_block[16] : Word[16] {
+        if {
+            when write_enable {
+                it[dyn write_addr] <= write_data
+            }
+        }
+    }
+
+    @memory_style("ff")
+    memory forced_ff[16] : Word[16] {
+        if {
+            when write_enable {
+                it[dyn write_addr] <= write_data
+            }
+        }
+    }
+
+    memory unforced[16] : Word[16] {
+        if {
+            when write_enable {
+                it[dyn write_addr] <= write_data
+            }
+        }
+    }
+
+    outgoing reg read_data : Word[16] {
+        initial it <= 0w16
+        it <= forced_block[dyn read_addr]
+    }
+
+    outgoing reg ff_read_data : Word[16] {
+        initial it <= 0w16
+        it <= forced_ff[dyn read_addr]
+    }
+
+    outgoing reg unforced_read_data : Word[16] {
+        initial it <= 0w16
+        it <= unforced[dyn read_addr]
+    }
+}
+
+// CHECK: (* ram_style = "block" *)
+// CHECK: (* ram_style = "logic" *)

@@ -101,6 +101,12 @@ pub struct Memory {
     /// Number of words (a power of two).
     pub depth: u32,
     pub init: Option<MemoryInit>,
+    /// The `@memory_style` mapping intent, lowered to a
+    /// `(* ram_style = ... *)` attribute on the declaration (Yosys's
+    /// `memory_libmap` reads it to steer block-RAM-vs-flip-flop
+    /// mapping).  `None` when the memory carries no `@memory_style`
+    /// annotation: the attribute is omitted and Yosys decides.
+    pub memory_style: Option<crate::analysis::annotations::MemoryStyle>,
 }
 
 /// How a memory's contents are initialized at simulation start.
@@ -406,6 +412,15 @@ impl Memory {
         let name = &self.name;
         let width = display_width(self.width);
         let last = self.depth - 1;
+        // The mapping-intent attribute precedes the `reg` declaration,
+        // on the declaration itself (not the module): the placement
+        // Yosys's Verilog frontend reads it from.  The attribute name
+        // and value are Yosys's spellings — `ram_style` (honored on
+        // RAMs and ROMs alike) and `"logic"` for the flip-flop
+        // mapping — not Virdant's `@memory_style`/`"ff"`.
+        if let Some(style) = &self.memory_style {
+            verilog_writeln!(f, "(* ram_style = \"{}\" *)", style.yosys_value())?;
+        }
         // The array range renders in the zero column: the memory is a
         // declaration, not a driven signal.
         verilog_writeln!(f, "reg {width:>WIDTH_WIDTH$}  {name} [0:{last}];")?;

@@ -1,0 +1,71 @@
+// Positive tests for `@memory_style` (MEMORY_STYLE_ANNOT.md): forcing
+// block RAM on a synchronously-read memory, forcing flip-flops, and
+// forcing block RAM on a ROM (a memory with no write site), whose
+// sparse auto-mapped default would be logic.
+
+// `@memory_style("block")` on a memory whose only read is inside a
+// clocked driver: a synchronous read port, which block RAM serves.
+pub mod ForcedBlock {
+    incoming clock : Clock
+    incoming write_enable : Bit
+    incoming write_addr : Word[4]
+    incoming write_data : Word[16]
+    incoming read_addr : Word[4]
+
+    @memory_style("block")
+    memory mem[16] : Word[16] {
+        if {
+            when write_enable {
+                it[dyn write_addr] <= write_data
+            }
+        }
+    }
+
+    outgoing reg read_data : Word[16] {
+        initial it <= 0w16
+        it <= mem[dyn read_addr]
+    }
+}
+
+// `@memory_style("ff")`: force the flip-flop mapping.  The read here
+// is combinational, which only the flip-flop mapping can serve.
+pub mod ForcedFf {
+    incoming clock : Clock
+    incoming write_enable : Bit
+    incoming write_addr : Word[4]
+    incoming write_data : Word[16]
+    incoming addr : Word[4]
+
+    @memory_style("ff")
+    memory mem[16] : Word[16] {
+        if {
+            when write_enable {
+                it[dyn write_addr] <= write_data
+            }
+        }
+    }
+
+    outgoing read_data : Word[16] dependson addr {
+        it := mem[dyn addr]
+    }
+}
+
+// `@memory_style("block")` on a ROM (no write site) is permitted: it
+// overrides the sparse-ROM auto-logic default.  The read must still be
+// synchronous for block RAM to serve it.
+pub mod ForcedBlockRom {
+    incoming clock : Clock
+    incoming addr : Word[4]
+
+    @memory_style("block")
+    memory rom[16] : Word[16]
+
+    outgoing reg read_data : Word[16] {
+        initial it <= 0w16
+        it <= rom[dyn addr]
+    }
+}
+
+// CHECK-NOT: ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check OK

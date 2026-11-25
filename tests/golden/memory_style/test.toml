@@ -1,0 +1,6 @@
+kind = "golden"
+description = "@memory_style lowers to the Yosys ram_style attribute on the memory's reg declaration: \"block\" verbatim, \"ff\" as \"logic\", and no attribute when unannotated"
+grep = [
+  { path = "build/memory_style_golden.sv", pattern = "(* ram_style = \"block\" *)" },
+  { path = "build/memory_style_golden.sv", pattern = "(* ram_style = \"logic\" *)" },
+]

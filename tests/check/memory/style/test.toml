@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Positive tests for @memory_style: block on a sync-read memory, ff on any memory, and block on a synchronous-read ROM"
+filecheck = "src/style.vir"

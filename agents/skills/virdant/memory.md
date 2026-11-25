@@ -110,6 +110,34 @@ memory rom[256] : Word[32] {
 * On platforms annotated `@noinitial`, memory images are disallowed, exactly
   like `initial` statements.
 
+## Mapping intent: `@memory_style`
+
+```virdant
+@memory_style("block")
+memory rf[32] : Word[32] on clock {
+    it[addr] <= when wr { data }
+}
+```
+
+By default the synthesis tool decides silently how each memory is mapped
+(hard block RAM vs distributed flip-flops).  A memory with combinational
+(`dependson`) read ports cannot fit in a synchronous-read block RAM and
+silently falls back to flip-flops — a large register file can blow up to
+many times its block-RAM footprint with no warning.  `@memory_style`
+expresses intent:
+
+* `@memory_style("block")` — force the hard block-RAM mapping.
+* `@memory_style("ff")` — force the flip-flop (distributed-logic) mapping.
+* `"distributed"` is deliberately not accepted: on iCE40 it is a hard
+  synthesis error with no fallback, so Virdant never emits it.
+
+* `"block"` on a memory with combinational reads is rejected at check time
+  (`MemoryStyleBlockAsyncRead`): block RAM cannot serve asynchronous reads.
+* `"block"` on a write-site-less memory (a ROM) is permitted: it overrides
+  the sparse-ROM auto-logic default, and a dense ROM may be cheaper in
+  block RAM.
+* An invalid value is rejected (`MemoryStyleInvalid`).
+
 ## Lowering
 
 Memories lower to behavioral Verilog (inferred as block RAM by synthesis
@@ -129,6 +157,10 @@ assign read_data = mem[addr];
 
 `@image_hex` emits an `initial $readmemh(...)`; `@image` and
 `@image_inline` emit explicit per-word initial assignments.
+`@memory_style("block")` / `@memory_style("ff")` lower to a
+`(* ram_style = "block" *)` / `(* ram_style = "logic" *)` attribute on
+the `reg` declaration (Yosys's spellings — `"logic"` is its name for the
+flip-flop mapping).
 
 ## Idioms
 

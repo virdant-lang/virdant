@@ -265,6 +265,15 @@ The `memory` statement: shape, indexing, write-site, and image rules.  See
     the combination is supported is a toolchain property, checked
     late-binding when a bitstream build resolves the FPGA family — not
     at `vir check` time.
+* `@memory_style` errors (see ./memory.md#mapping-intent-memory_style):
+  * `unknown @memory_style value "X" for memory mem; expected "block" or
+    "ff"` — only `"block"` and `"ff"` are accepted (`"distributed"` is
+    never emitted: it is a hard synthesis error on iCE40).
+  * `memory mem is @memory_style("block"), but block RAM cannot serve
+    combinational reads; it is read combinationally by ...` — `"block"`
+    is rejected on a memory with combinational (`dependson`) read ports;
+    drop the annotation or make the reads synchronous (read inside the
+    memory's `on` region).
 
 ### naming
 

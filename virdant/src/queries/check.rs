@@ -12,6 +12,7 @@ use bstr::ByteSlice;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 
+use crate::analysis::annotations::{memory_style_annotation, MemoryStyle};
 use crate::analysis::memory_image::{self, memory_image_annotation, MemoryImage, MemoryImageKind};
 use crate::analysis::dependency::resolve_it_path_to_owned;
 use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
@@ -567,6 +568,11 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // Memory image validation: the image file must be
     // readable, well-formed, and no longer than the declared depth.
     check_memory_images(builder, &mut diagnostics);
+
+    // `@memory_style` validation: the value must be "block" or "ff",
+    // and "block" is rejected on memories with combinational reads
+    // (block RAM cannot serve asynchronous reads).
+    check_memory_styles(builder, &mut diagnostics);
 
     // Check for combinational loops in module dependency graphs.
     // The check runs over each module's potentiality graph: local
@@ -1604,6 +1610,94 @@ fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>)
                         component: component.path(),
                         path: image_arg,
                         depth,
+                    },
+                ));
+            }
+        }
+    }
+}
+
+/// Validate every `@memory_style` memory annotation.
+///
+/// The value must be `"block"` or `"ff"` (`"distributed"` is
+/// deliberately not accepted: on iCE40 it is a hard Yosys error with no
+/// fallback, so Virdant never emits it).  `"block"` is rejected on a
+/// memory that is read combinationally — block RAM cannot serve
+/// asynchronous reads, so Yosys's mapping would fail with its late,
+/// location-free `no valid mapping found` error; this check turns that
+/// into a source-level diagnostic anchored at the annotation.
+///
+/// `"block"` on a write-site-less memory (a ROM) is permitted: it
+/// overrides the sparse-ROM auto-logic default, and a dense ROM may be
+/// cheaper in block RAM.
+fn check_memory_styles(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind() != SymbolKind::ModDef {
+            continue;
+        }
+        let component_analysis = builder.get_component_analysis(item.id());
+        let dependency_graph = builder.get_dependency_graph(item.id());
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        // Component paths by id, to name the combinational readers in
+        // diagnostics.
+        let mut paths: IndexMap<crate::analysis::component::ComponentId, BString> =
+            IndexMap::new();
+        for (_path, component) in component_analysis.components() {
+            paths.insert(component.id(), component.path());
+        }
+        for (_path, component) in component_analysis.components() {
+            if component.kind() != Some(crate::common::ComponentKind::Memory) {
+                continue;
+            }
+            let Some((value, arg_region)) = memory_style_annotation(
+                &parsing,
+                &parsing.ast_node(component.location().ast_node_id()),
+            ) else {
+                continue;
+            };
+            let Some(style) = MemoryStyle::from_annotation_value(value.as_bstr()) else {
+                diagnostics.push(Diagnostic::new(
+                    arg_region,
+                    diagnostics::MemoryStyleInvalid {
+                        component: component.path(),
+                        value,
+                    },
+                ));
+                continue;
+            };
+            if style != MemoryStyle::Block {
+                continue;
+            }
+            // Combinational readers: every dependency edge pointing at
+            // this memory with combinational kind.  A read inside a
+            // clocked driver (`on`/`when clock`) is a sequential edge —
+            // a synchronous read port, which block RAM serves; a read
+            // in any combinational driver (`it := mem[addr]`, guards of
+            // combinational drivers, platform `default` expressions) is
+            // an asynchronous read port, which it cannot.
+            let memory_id = component.id();
+            let readers: Vec<BString> = dependency_graph
+                .edges()
+                .iter()
+                .flat_map(|(reader, edges)| {
+                    edges
+                        .iter()
+                        .filter(|edge| {
+                            edge.dependee == memory_id
+                                && edge.kind == crate::analysis::dependency::EdgeKind::Combinational
+                        })
+                        .map(move |_| *reader)
+                })
+                .map(|reader| paths.get(&reader).cloned().unwrap_or_else(|| BString::from("?")))
+                .collect();
+            if !readers.is_empty() {
+                diagnostics.push(Diagnostic::new(
+                    arg_region,
+                    diagnostics::MemoryStyleBlockAsyncRead {
+                        component: component.path(),
+                        readers,
                     },
                 ));
             }

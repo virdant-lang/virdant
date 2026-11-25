@@ -10,6 +10,7 @@ use std::sync::Arc;
 use bstr::ByteSlice;
 
 use crate::analysis::drivers::{Driver, DriverIf, DriverMatch, WriteIndex};
+use crate::analysis::annotations::{memory_style_annotation, MemoryStyle};
 use crate::analysis::memory_image::{self, memory_image_annotation, MemoryImage, MemoryImageKind};
 use crate::analysis::location::Location;
 use crate::analysis::symbols::{Symbol, SymbolId, SymbolTable};
@@ -589,6 +590,14 @@ impl<'d> Converter<'d> {
                                 width,
                                 depth,
                                 init: self.memory_image_init(package, &stmt, &name),
+                                // `@memory_style`: the check phase has
+                                // already validated the value, so an
+                                // unparseable one is silently dropped
+                                // here rather than mis-emitted.
+                                memory_style: memory_style_annotation(&parsing, &stmt)
+                                    .and_then(|(value, _)| {
+                                        MemoryStyle::from_annotation_value(value.as_bstr())
+                                    }),
                             }));
                             // A raw-binary `@image` file or an
                             // `@image_inline` string cannot be emitted

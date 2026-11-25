@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MemoryStyleInvalid and MemoryStyleBlockAsyncRead: the @memory_style value must be \"block\" or \"ff\", and \"block\" is rejected on a combinationally-read memory"
+filecheck = "src/style.vir"
