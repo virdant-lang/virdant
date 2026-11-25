@@ -67,8 +67,8 @@ fn collect_match_nodes(
         out.push((node.id(), it_context.map(bstr::BString::from)));
     }
     let instantiation_name = match node.payload() {
-        AstNodePayload::Submodule(submodule) => Some(node.parsing.string(submodule.name)),
-        AstNodePayload::Component(component) => Some(node.parsing.string(component.name)),
+        AstNodePayload::Submodule(submodule) => Some(node.parsing.string(submodule.name.text)),
+        AstNodePayload::Component(component) => Some(node.parsing.string(component.name.text)),
         AstNodePayload::Socket(socket) => Some(node.parsing.string(socket.name)),
         _ => None,
     };

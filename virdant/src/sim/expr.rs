@@ -597,9 +597,9 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeIntern
                 if needs_it_rewrite && it_target.is_none() {
                     match current.payload() {
                         AstNodePayload::Submodule(m) =>
-                            it_target = Some(parsing.string(m.name).to_owned()),
+                            it_target = Some(parsing.string(m.name.text).to_owned()),
                         AstNodePayload::Component(c) =>
-                            it_target = Some(parsing.string(c.name).to_owned()),
+                            it_target = Some(parsing.string(c.name.text).to_owned()),
                         AstNodePayload::Socket(s) =>
                             it_target = Some(parsing.string(s.name).to_owned()),
                         _ => {}

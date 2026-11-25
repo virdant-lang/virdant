@@ -92,7 +92,7 @@ pub(super) fn declaration_symbol_at(db: &Db, parsing: &Parsing, package: Package
                 "{}::{}::{}",
                 db.get_packages().name(package).to_str_lossy(),
                 item_name,
-                parsing.string(component.name).to_str_lossy(),
+                parsing.string(component.name.text).to_str_lossy(),
             ).into();
             if let Some(symbol) = symboltable.resolve(fqn.as_bstr()) {
                 return Some(symbol.clone());

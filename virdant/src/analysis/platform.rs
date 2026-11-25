@@ -79,7 +79,7 @@ pub fn platform_ports_detailed(
             .and_then(|on| on.path())
             .map(|interned| parsing.string(interned).to_owned());
         result.push(PlatformPortInfo {
-            name: parsing.string(component.name).to_owned(),
+            name: parsing.string(component.name.text).to_owned(),
             dir,
             typ,
             is_async: component.is_async,
@@ -252,7 +252,7 @@ fn platform_ports<T>(
         {
             continue;
         }
-        let port_name: BString = parsing.string(component.name).to_owned();
+        let port_name: BString = parsing.string(component.name.text).to_owned();
         if let Some(entry) = f(&parsing, &child, port_name) {
             result.push(entry);
         }

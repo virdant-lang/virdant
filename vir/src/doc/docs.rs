@@ -742,7 +742,7 @@ fn collect_submodule_refs(
         let AstNodePayload::Ofness(ofness) = child.child(1).payload() else {
             continue;
         };
-        let instance = parsing.string(submodule.name).to_str_lossy().into_owned();
+        let instance = parsing.string(submodule.name.text).to_str_lossy().into_owned();
         let written = match ofness.package {
             Some(q) => format!(
                 "{}::{}",
@@ -1159,7 +1159,7 @@ fn render_moddef_page_with_sidebar(
                 .doc_string()
                 .map(|doc| docstring_body(doc.clone(), &parsing))
                 .unwrap_or_default();
-            doc_by_component.insert(parsing.string(component.name).to_owned(), doc);
+            doc_by_component.insert(parsing.string(component.name.text).to_owned(), doc);
         }
     }
 

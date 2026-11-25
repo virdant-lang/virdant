@@ -272,7 +272,7 @@ fn check_socketdef_domains(builder: &mut Builder, diagnostics: &mut Vec<Diagnost
                 .and_then(|on| on.path())
                 .map(|interned| parsing.string(interned).to_owned());
             channels.push((
-                parsing.string(channel.name).to_owned(),
+                parsing.string(channel.name.text).to_owned(),
                 typ,
                 channel.is_async,
                 on_path,
@@ -347,7 +347,7 @@ fn check_socketdef_and_platform_on_clauses(
         for child in node.children() {
             let (name, typ, on_clause) = match child.payload() {
                 AstNodePayload::Channel(channel) => (
-                    parsing.string(channel.name).to_owned(),
+                    parsing.string(channel.name.text).to_owned(),
                     child.typ(),
                     child.on_clause(),
                 ),
@@ -355,7 +355,7 @@ fn check_socketdef_and_platform_on_clauses(
                     // Platform ports: component declarations.  (Moddefs
                     // are separate items with their own namespace, and
                     // their `on` clauses are checked by typing.)
-                    parsing.string(component.name).to_owned(),
+                    parsing.string(component.name.text).to_owned(),
                     child.typ(),
                     child.on_clause(),
                 ),
@@ -820,7 +820,7 @@ fn check_default_clauses_in(
                 diagnostics.push(Diagnostic::new(
                     clause.region(),
                     diagnostics::DefaultOutsidePlatformPort {
-                        port: parsing.string(component.name).to_owned(),
+                        port: parsing.string(component.name.text).to_owned(),
                     },
                 ));
             }
@@ -853,7 +853,7 @@ fn check_platform_outgoing_kinds(builder: &mut Builder, diagnostics: &mut Vec<Di
             diagnostics.push(Diagnostic::new(
                 child.region(),
                 diagnostics::PlatformWireRegPort {
-                    port: parsing.string(component.name).to_owned(),
+                    port: parsing.string(component.name.text).to_owned(),
                     declared: BString::from(declared),
                 },
             ));
@@ -1133,7 +1133,7 @@ fn flag_module_initials(
             diagnostics.push(Diagnostic::new(
                 arg_region,
                 diagnostics::MemoryImageNoinitial {
-                    component: parsing.string(component.name).to_owned(),
+                    component: parsing.string(component.name.text).to_owned(),
                     platform: platform_name.clone(),
                     path: module_path.to_owned(),
                 },
@@ -1363,7 +1363,7 @@ fn check_connection_nodes(
             // instance name as the new `it`-context so `it.foo` paths
             // inside resolve to the instance.
             let parsing = node.parsing();
-            let name = parsing.string(submodule.name);
+            let name = parsing.string(submodule.name.text);
             let new_context = match it_context {
                 Some(ctx) => {
                     let mut joined = bstr::BString::from(ctx);
@@ -1430,7 +1430,7 @@ pub(crate) fn resolve_mono_socket(
             matches!(
                 stmt.payload(),
                 AstNodePayload::Submodule(submodule)
-                    if parsing.string(submodule.name) == *instance_name
+                    if parsing.string(submodule.name.text) == *instance_name
             )
         })?;
         let (target_symbol, written_args) =

@@ -74,6 +74,11 @@ pub struct Component {
     id: ComponentId,
     path: BString,
     location: Location,
+    /// The region of just the declared name token, when the component
+    /// came from a written declaration (None for synthesized
+    /// components).  Lets diagnostics point at the name rather than
+    /// the whole declaration.
+    name_region: Option<Region>,
     flow: Flow,
     kind: Option<ComponentKind>,
 
@@ -200,6 +205,14 @@ impl Component {
 
     pub fn location(&self) -> Location {
         self.location.clone()
+    }
+
+    /// The region of just the declared name token, when the component
+    /// came from a written declaration.  Diagnostics about the
+    /// component itself (e.g. unused warnings) use this so only the
+    /// name is underlined, not the whole declaration.
+    pub fn name_region(&self) -> Option<Region> {
+        self.name_region.clone()
     }
 
     pub fn synthetic(&self) -> bool {
@@ -549,7 +562,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     item_id: moddef,
                     index: component_analysis.components.len(),
                 };
-                let path = parsing.string(component.name).to_owned();
+                let path = parsing.string(component.name.text).to_owned();
                 let typ_node = stmt.typ().unwrap();
                 let typ = match builder.get_type_at(typ_node.location()) {
                     Ok(typ) => Some(typ),
@@ -593,6 +606,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     id,
                     path: path.clone(),
                     location: stmt.location(),
+                    name_region: Some(Region::new(stmt.package(), component.name.span)),
                     typ: typ.clone(),
                     flow,
                     kind: Some(component_kind),
@@ -657,7 +671,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 }
             }
             AstNodePayload::Submodule(module) => {
-                let instance_name = parsing.string(module.name);
+                let instance_name = parsing.string(module.name.text);
                 let Some(ofness_node) = stmt.ofness() else {
                     continue;
                 };
@@ -722,7 +736,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 item_id: moddef,
                                 index: component_analysis.components.len(),
                             };
-                            let port_name = submodule_parsing.string(component.name);
+                            let port_name = submodule_parsing.string(component.name.text);
                             let path = bstr::BString::from(
                                 format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
                             );
@@ -753,6 +767,11 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 id,
                                 path: path.clone(),
                                 location: stmt.location(),
+                                // A submodule port's declaration lives
+                                // in the submodule; keep the warning
+                                // instance-local by pointing at the
+                                // instance's name in the parent.
+                                name_region: Some(Region::new(stmt.package(), module.name.span)),
                                 typ,
                                 flow,
                                 kind: Some(component_kind),
@@ -851,7 +870,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                         join_paths(&[
                                             instance_name.as_bstr(),
                                             socket_instance_name.as_bstr(),
-                                            socket_def_parsing.string(channel.name).as_bstr(),
+                                            socket_def_parsing.string(channel.name.text).as_bstr(),
                                         ])
                                     })
                             } else {
@@ -863,7 +882,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     index: component_analysis.components.len(),
                                 };
 
-                                let channel_name = socket_def_parsing.string(channel.name);
+                                let channel_name = socket_def_parsing.string(channel.name.text);
                                 let path = bstr::BString::from(
                                     format!("{}.{}.{}",
                                         instance_name.to_str_lossy(),
@@ -923,6 +942,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     id,
                                     path: path.clone(),
                                     location: stmt.location(),
+                                    name_region: Some(Region::new(
+                                        channel_stmt.package(),
+                                        channel.name.span,
+                                    )),
                                     typ,
                                     flow,
                                     kind,
@@ -1019,7 +1042,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         .map(|(_, channel, _)| {
                             join_paths(&[
                                 instance_name.as_bstr(),
-                                socket_parsing.string(channel.name).as_bstr(),
+                                socket_parsing.string(channel.name.text).as_bstr(),
                             ])
                         })
                 } else {
@@ -1031,7 +1054,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         index: component_analysis.components.len(),
                     };
 
-                    let port_name = socket_parsing.string(channel.name);
+                    let port_name = socket_parsing.string(channel.name.text);
                     let path = bstr::BString::from(
                         format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
                     );
@@ -1086,6 +1109,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         id,
                         path: path.clone(),
                         location: stmt.location(),
+                        name_region: Some(Region::new(
+                            socket_stmt.package(),
+                            channel.name.span,
+                        )),
                         typ,
                         flow,
                         kind,
@@ -1163,6 +1190,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         id,
                         path: platform_port.name.clone(),
                         location: platform_port.location,
+                        name_region: None,
                         typ: platform_port.typ,
                         flow,
                         kind,
@@ -2013,7 +2041,7 @@ fn check_clock_provenance(
         ) {
             continue;
         }
-        let name = parsing.string(payload.name);
+        let name = parsing.string(payload.name.text);
         let Some(component) = component_analysis.resolve(name.as_bstr()) else {
             continue;
         };
@@ -2310,7 +2338,7 @@ fn collect_references(
                 }
             }
             AstNodePayload::Submodule(submodule) => {
-                let name = stmt.parsing.string(submodule.name);
+                let name = stmt.parsing.string(submodule.name.text);
                 let children = stmt.children();
                 // The It-block is found by payload rather than by index,
                 // so the optional GenericsParams child of a type-argument
@@ -2337,7 +2365,7 @@ fn collect_references(
                 }
             }
             AstNodePayload::Component(component) => {
-                let name = stmt.parsing.string(component.name);
+                let name = stmt.parsing.string(component.name.text);
                 // Walk clock/reset expressions embedded in the component
                 // declaration (e.g., `reg state : State on clock`).
                 for child in stmt.children() {

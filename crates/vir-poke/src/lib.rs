@@ -1048,7 +1048,7 @@ fn top_socket_channel(session: &Session, signal_id: SignalId) -> Option<(SocketR
     let socketdef_ast = parsing.ast_node(session.db.get_symbol_ast(socketdef));
     for stmt in socketdef_ast.children() {
         if let AstNodePayload::Channel(channel) = stmt.payload() {
-            if parsing.string(channel.name).as_bytes() == chan.as_bytes() {
+            if parsing.string(channel.name.text).as_bytes() == chan.as_bytes() {
                 return Some((role, channel.dir));
             }
         }

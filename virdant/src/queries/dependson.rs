@@ -175,7 +175,7 @@ pub(crate) fn build_dependson_analysis(
         let AstNodePayload::Component(component_payload) = stmt.payload() else {
             continue;
         };
-        let carrier_name: BString = parsing.string(component_payload.name).to_owned();
+        let carrier_name: BString = parsing.string(component_payload.name.text).to_owned();
         if component_analysis.resolve(carrier_name.as_bstr()).is_none() {
             // Duplicate or unregistered declaration: diagnosed elsewhere.
             continue;
@@ -390,7 +390,7 @@ pub(crate) fn socketdef_channel_decls(
         let AstNodePayload::Channel(channel) = stmt.payload() else {
             continue;
         };
-        let name: BString = parsing.string(channel.name).to_owned();
+        let name: BString = parsing.string(channel.name.text).to_owned();
         let entries: Vec<BString> = stmt
             .dependson_entries()
             .iter()
@@ -811,7 +811,7 @@ fn collect_imported_edges(
         let AstNodePayload::Submodule(submodule) = stmt.payload() else {
             continue;
         };
-        let instance_name: BString = parsing.string(submodule.name).to_owned();
+        let instance_name: BString = parsing.string(submodule.name.text).to_owned();
         let ofness_node = stmt.child(1);
         let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
             continue;
@@ -855,7 +855,7 @@ fn collect_imported_edges(
             let AstNodePayload::Component(child_component) = child_stmt.payload() else {
                 continue;
             };
-            let carrier: BString = child_parsing.string(child_component.name).to_owned();
+            let carrier: BString = child_parsing.string(child_component.name.text).to_owned();
             let Some(carrier_component) =
                 child_component_analysis.resolve(carrier.as_bstr())
             else {
@@ -1376,7 +1376,7 @@ fn declared_entry_region(
         let AstNodePayload::Component(component_payload) = stmt.payload() else {
             continue;
         };
-        let name: BString = parsing.string(component_payload.name).to_owned();
+        let name: BString = parsing.string(component_payload.name.text).to_owned();
         if name != port {
             continue;
         }
@@ -1458,7 +1458,7 @@ fn socketdef_entry_region(
         let AstNodePayload::Channel(channel_payload) = stmt.payload() else {
             continue;
         };
-        let name: BString = parsing.string(channel_payload.name).to_owned();
+        let name: BString = parsing.string(channel_payload.name.text).to_owned();
         if name != channel {
             continue;
         }

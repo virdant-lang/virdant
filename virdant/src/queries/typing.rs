@@ -62,9 +62,9 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
                 if ancestor.is_item() { break; }
                 if lhs_path.starts_with(b"it.") || lhs_path == b"it" {
                     if let AstNodePayload::Submodule(module) = ancestor.payload() {
-                        resolved_it_name = Some(parsing.string(module.name));
+                        resolved_it_name = Some(parsing.string(module.name.text));
                     } else if let AstNodePayload::Component(component) = ancestor.payload() {
-                        resolved_it_name = Some(parsing.string(component.name));
+                        resolved_it_name = Some(parsing.string(component.name.text));
                     } else if let AstNodePayload::Socket(socket) = ancestor.payload() {
                         resolved_it_name = Some(parsing.string(socket.name));
                     }
@@ -111,9 +111,9 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
                 if ancestor.is_item() { break; }
                 if lhs_path.starts_with(b"it.") || lhs_path == b"it" {
                     if let AstNodePayload::Submodule(module) = ancestor.payload() {
-                        resolved_it_name = Some(parsing.string(module.name));
+                        resolved_it_name = Some(parsing.string(module.name.text));
                     } else if let AstNodePayload::Component(component) = ancestor.payload() {
-                        resolved_it_name = Some(parsing.string(component.name));
+                        resolved_it_name = Some(parsing.string(component.name.text));
                     } else if let AstNodePayload::Socket(socket) = ancestor.payload() {
                         resolved_it_name = Some(parsing.string(socket.name));
                     }

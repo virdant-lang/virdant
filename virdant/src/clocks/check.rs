@@ -161,7 +161,7 @@ impl Clocking {
             let AstNodePayload::Submodule(module) = stmt.payload() else {
                 continue;
             };
-            let instance_name = parsing.string(module.name).to_owned();
+            let instance_name = parsing.string(module.name.text).to_owned();
             let Some(ofness_node) = stmt.ofness() else {
                 continue;
             };
@@ -287,7 +287,7 @@ impl Clocking {
                     ComponentKind::Reg | ComponentKind::OutgoingReg | ComponentKind::Memory
                 )
             {
-                let name = parsing.string(payload.name).to_owned();
+                let name = parsing.string(payload.name.text).to_owned();
                 self.diagnostics.push(Diagnostic::new(
                     component.region(),
                     diagnostics::AsyncRegister { component: name },
@@ -343,7 +343,7 @@ impl Clocking {
                 if let Some(clause) = node.on_clause() {
                     self.infer(&clause);
                 }
-                let name = node.parsing().string(payload.name);
+                let name = node.parsing().string(payload.name.text);
                 let context = self
                     .component_analysis()
                     .resolve(name.as_bstr())
@@ -872,7 +872,7 @@ impl Clocking {
     ) -> Vec<DriverScan<'p>> {
         match node.payload() {
             AstNodePayload::Component(payload) => {
-                let name = node.parsing().string(payload.name);
+                let name = node.parsing().string(payload.name.text);
                 let context = self
                     .component_analysis()
                     .resolve(name.as_bstr())
@@ -1049,7 +1049,7 @@ fn unclad_components(
             ) {
                 return None;
             }
-            let name = parsing.string(payload.name).to_owned();
+            let name = parsing.string(payload.name.text).to_owned();
             // The declared domain is no guide here: unique-clock
             // inference has already filled every unset domain in a
             // unique-clock module.  The annotation itself is the test.

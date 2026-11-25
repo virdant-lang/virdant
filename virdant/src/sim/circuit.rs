@@ -586,8 +586,8 @@ fn rewrite_it_in_name(parsing: &Parsing, ast_id: AstNodeId, raw: &bstr::BStr) ->
             return raw.to_owned();
         }
         let target: Option<BString> = match current.payload() {
-            AstNodePayload::Submodule(m) => Some(parsing.string(m.name).to_owned()),
-            AstNodePayload::Component(c) => Some(parsing.string(c.name).to_owned()),
+            AstNodePayload::Submodule(m) => Some(parsing.string(m.name.text).to_owned()),
+            AstNodePayload::Component(c) => Some(parsing.string(c.name.text).to_owned()),
             AstNodePayload::Socket(s) => Some(parsing.string(s.name).to_owned()),
             _ => None,
         };

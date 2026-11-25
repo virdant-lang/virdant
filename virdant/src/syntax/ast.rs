@@ -231,7 +231,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::FnDef(_fn_def) => format!("FnDef"),
             AstNodePayload::SocketDef(socket_def) => format!("SocketDef{}{}{}", pub_prefix(socket_def.is_pub), builtin_prefix(socket_def.is_builtin), parsing.string(socket_def.name.clone())),
             AstNodePayload::Platform(platform) => format!("Platform {}{}{}", pub_prefix(platform.is_pub), builtin_prefix(platform.is_builtin), parsing.string(platform.name.clone())),
-            AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.clone())),
+            AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.text.clone())),
             AstNodePayload::DefaultClause => format!("DefaultClause"),
             AstNodePayload::Driver(_driver) => format!("Driver"),
             AstNodePayload::IndexedDriver(driver) => format!("IndexedDriver {:?}", driver.index),

@@ -510,8 +510,8 @@ impl<'d> Converter<'d> {
         for stmt in item_ast.children() {
             match stmt.payload() {
                 AstNodePayload::Component(component) => {
-                    let name = parsing.string(component.name.clone()).to_str_lossy().into_owned();
-                    let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
+                    let name = parsing.string(component.name.text.clone()).to_str_lossy().into_owned();
+                    let typ = component_analysis.type_of(parsing.string(component.name.text)).unwrap();
                     let typ = self.mono_substitute(typ);
                     let width = type_width(&typ, self.db);
                     match component.kind {
@@ -579,7 +579,7 @@ impl<'d> Converter<'d> {
                             // from the driver analysis; reads are
                             // ordinary index expressions over the name.
                             let component_info =
-                                component_analysis.resolve(parsing.string(component.name));
+                                component_analysis.resolve(parsing.string(component.name.text));
                             let Some(depth) = component_info.and_then(|c| c.depth()) else {
                                 // Invalid depth: already diagnosed.
                                 continue;
@@ -639,7 +639,7 @@ impl<'d> Converter<'d> {
                     }
                 }
                 AstNodePayload::Submodule(module) => {
-                    let raw_name = parsing.string(module.name).to_str_lossy().into_owned();
+                    let raw_name = parsing.string(module.name.text).to_str_lossy().into_owned();
                     // Resolve the target and this instance's type
                     // arguments.  A generic target refers to its
                     // discovered mono module, with the written arguments
@@ -1826,9 +1826,9 @@ impl<'d> Converter<'d> {
                         let parent = node.parsing.ast_node(parent_id);
                         let mut resolved_name = None;
                         if let AstNodePayload::Submodule(module) = parent.payload() {
-                            resolved_name = Some(node.parsing.string(module.name).to_str_lossy().into_owned());
+                            resolved_name = Some(node.parsing.string(module.name.text).to_str_lossy().into_owned());
                         } else if let AstNodePayload::Component(component) = parent.payload() {
-                            resolved_name = Some(node.parsing.string(component.name).to_str_lossy().into_owned());
+                            resolved_name = Some(node.parsing.string(component.name.text).to_str_lossy().into_owned());
                         } else if let AstNodePayload::Socket(socket) = parent.payload() {
                             resolved_name = Some(node.parsing.string(socket.name).to_str_lossy().into_owned());
                         }
@@ -2674,7 +2674,7 @@ fn collect_bidirectional_assigns<'a>(
                 // Recurse into the It-block body, using the submodule instance name
                 // as the new `it` context so that nested `it.*` references resolve
                 // to the correct wire prefix (e.g. `it.instr_mem` -> `cpu.instr_mem`).
-                let name = stmt.parsing.string(submodule.name);
+                let name = stmt.parsing.string(submodule.name.text);
                 let children = stmt.children();
                 // A Submodule with a body has an Ofness child, an optional
                 // Annotations child, and an It child.  Find the It-block by

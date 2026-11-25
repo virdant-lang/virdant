@@ -356,7 +356,7 @@ fn elaborate_module(
     for stmt in item_ast.children() {
         match stmt.payload() {
             AstNodePayload::Component(component) => {
-                let name = parsing.string(component.name);
+                let name = parsing.string(component.name.text);
                 handled.insert(name.to_owned());
                 let path: BString = format!("{prefix}.{}", name.to_str_lossy()).into();
 
@@ -453,7 +453,7 @@ fn elaborate_module(
                 });
             }
             AstNodePayload::Submodule(module) => {
-                let instance_name = parsing.string(module.name).to_str_lossy().into_owned();
+                let instance_name = parsing.string(module.name.text).to_str_lossy().into_owned();
                 handled.insert(instance_name.clone().into());
                 let ofness_node = stmt.child(1);
                 let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
@@ -576,7 +576,7 @@ fn elaborate_module(
                     let AstNodePayload::Channel(channel) = channel_stmt.payload() else {
                         continue;
                     };
-                    let channel_name = socket_def_parsing.string(channel.name);
+                    let channel_name = socket_def_parsing.string(channel.name.text);
                     let path: BString = format!(
                         "{prefix}.{}.{}",
                         instance_name.to_str_lossy(),
@@ -857,7 +857,7 @@ fn collect_connects(
                 }
             }
             AstNodePayload::Submodule(submodule) => {
-                let name = stmt.parsing.string(submodule.name).to_str_lossy().into_owned();
+                let name = stmt.parsing.string(submodule.name.text).to_str_lossy().into_owned();
                 recurse_it_block(
                     component_analysis,
                     stmt,

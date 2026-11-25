@@ -259,7 +259,7 @@ fn collect_driver_edges(
                 // (`mod chain of RegChain { it.clock := clock }`).  Locate
                 // the block by payload: the node's children also carry
                 // the annotations and the `of` clause.
-                let name = stmt.parsing.string(submodule.name);
+                let name = stmt.parsing.string(submodule.name.text);
                 let it_block = stmt
                     .children()
                     .into_iter()
@@ -309,7 +309,7 @@ fn collect_driver_edges(
                 }
             }
             AstNodePayload::Component(component) => {
-                let name = stmt.parsing.string(component.name);
+                let name = stmt.parsing.string(component.name.text);
                 let name_with_context = if let Some(ctx) = it_context {
                     let mut new_name = BString::from(ctx);
                     new_name.push(b'.');
@@ -698,10 +698,10 @@ pub(crate) fn find_it_context(node: &AstNode<'_>) -> Option<BString> {
         let parent = parsing.ast_node(parent_id);
         match parent.payload() {
             AstNodePayload::Submodule(module) => {
-                return Some(parsing.string(module.name).to_owned());
+                return Some(parsing.string(module.name.text).to_owned());
             }
             AstNodePayload::Component(component) => {
-                return Some(parsing.string(component.name).to_owned());
+                return Some(parsing.string(component.name.text).to_owned());
             }
             AstNodePayload::Socket(socket) => {
                 return Some(parsing.string(socket.name).to_owned());

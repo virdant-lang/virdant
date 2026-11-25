@@ -745,7 +745,7 @@ fn collect_block_drivers(
                 }
             }
             AstNodePayload::Submodule(submodule) => {
-                let name = stmt.parsing.string(submodule.name);
+                let name = stmt.parsing.string(submodule.name.text);
                 let children = stmt.children();
                 // The It-block is found by payload rather than by index, so
                 // the optional GenericsParams child of a type-argument
@@ -812,7 +812,7 @@ fn collect_block_drivers(
                 }
             }
             AstNodePayload::Component(component) => {
-                let name = stmt.parsing.string(component.name);
+                let name = stmt.parsing.string(component.name.text);
                 for child in stmt.children() {
                     if matches!(child.payload(), AstNodePayload::It) {
                         let block = &child.children()[0];

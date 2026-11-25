@@ -373,7 +373,11 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
                         | Some(ComponentKind::Net)
                 )
             {
-                let region = builder.get_location_region(component.location());
+                // Underline just the declared name, not the whole
+                // declaration (which can include a driver block).
+                let region = component
+                    .name_region()
+                    .unwrap_or_else(|| builder.get_location_region(component.location()));
                 diagnostics.push(Diagnostic::new(
                     region,
                     diagnostics::UnusedSource {
@@ -528,8 +532,8 @@ fn collect_irrelevant_driver_blocks(
     ) {
         let parsing = node.parsing();
         let name = match node.payload() {
-            AstNodePayload::Component(component) => parsing.string(component.name).to_owned(),
-            AstNodePayload::Submodule(module) => parsing.string(module.name).to_owned(),
+            AstNodePayload::Component(component) => parsing.string(component.name.text).to_owned(),
+            AstNodePayload::Submodule(module) => parsing.string(module.name.text).to_owned(),
             AstNodePayload::Socket(socket) => parsing.string(socket.name).to_owned(),
             _ => unreachable!(),
         };
@@ -755,9 +759,9 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
                     if ancestor.is_item() { break; }
                     if lhs_path.starts_with(b"it.") || lhs_path == b"it" {
                         if let AstNodePayload::Submodule(module) = ancestor.payload() {
-                            resolved_it_name = Some(parsing.string(module.name));
+                            resolved_it_name = Some(parsing.string(module.name.text));
                         } else if let AstNodePayload::Component(component) = ancestor.payload() {
-                            resolved_it_name = Some(parsing.string(component.name));
+                            resolved_it_name = Some(parsing.string(component.name.text));
                         } else if let AstNodePayload::Socket(socket) = ancestor.payload() {
                             resolved_it_name = Some(parsing.string(socket.name));
                         }

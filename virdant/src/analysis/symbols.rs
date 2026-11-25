@@ -379,11 +379,11 @@ fn build_symboltable_moddef_slot(
     for child in node.children() {
         let (component_name, component_ast_node_id, kind) = match child.payload() {
             AstNodePayload::Component(component) => {
-                let name: BString = parsing.string(component.name).to_owned();
+                let name: BString = parsing.string(component.name.text).to_owned();
                 (name, child.id(), SymbolKind::Component)
             }
             AstNodePayload::Submodule(module) => {
-                let name: BString = parsing.string(module.name).to_owned();
+                let name: BString = parsing.string(module.name.text).to_owned();
                 (name, child.id(), SymbolKind::Submodule)
             }
             AstNodePayload::Socket(socket) => {
@@ -454,7 +454,7 @@ fn build_symboltable_platform_slot(
             continue;
         }
 
-        let port_name: BString = parsing.string(component.name).to_owned();
+        let port_name: BString = parsing.string(component.name.text).to_owned();
         let port_region = Region::new(package, child.span());
 
         if seen.contains_key(&port_name) {

@@ -3,8 +3,19 @@
 //! expression/pattern payloads) carried by AST nodes, each holding
 //! interned identifiers and flags produced by the parser.
 
+use crate::common::source::Span;
 use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, Strength, UnOp};
 use crate::syntax::parsing::InternedString;
+
+/// An identifier occurrence as written in the source: the interned
+/// text plus the span of the occurrence itself.  Interning stays
+/// pure — equal names alias — while the occurrence carries where it
+/// was written, so diagnostics can point at just the name.
+#[derive(Clone, Copy, Debug)]
+pub struct Ident {
+    pub text: InternedString,
+    pub span: Span,
+}
 
 #[derive(Debug, Clone)]
 pub enum AstNodePayload {
@@ -280,7 +291,10 @@ pub struct FnDef {
 
 #[derive(Clone, Debug)]
 pub struct Component {
-    pub name: InternedString,
+    /// The declared name, as an `Ident` occurrence: its span is just
+    /// the name token, so diagnostics can point at the name rather
+    /// than the whole declaration.
+    pub name: Ident,
     pub kind: ComponentKind,
     pub doc_string: Option<InternedString>,
     /// Whether the component was declared with the `async` modifier.
@@ -316,7 +330,8 @@ pub enum IndexedDriverIndex {
 
 #[derive(Clone, Debug)]
 pub struct Submodule {
-    pub name: InternedString,
+    /// The instance name; see `Component::name`.
+    pub name: Ident,
     pub doc_string: Option<InternedString>,
 }
 
@@ -377,7 +392,8 @@ pub struct Enumerant {
 
 #[derive(Clone, Debug)]
 pub struct Channel {
-    pub name: InternedString,
+    /// The declared name; see `Component::name`.
+    pub name: Ident,
     pub dir: ChannelDir,
     pub doc_string: Option<InternedString>,
     /// Whether the channel was declared with the `async` modifier.
