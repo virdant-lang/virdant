@@ -31,6 +31,11 @@ test: virdant/target/lib build
 	@echo "RUNNING CARGO TESTS"
 	@echo "########################################"
 	@echo
+	# The debug build is needed for integration tests that spawn the
+	# companion binaries from the same directory (e.g. vir-value's
+	# companion-discovery test): `cargo test` only guarantees the test's
+	# own package's binary in the debug profile.
+	cargo build --workspace
 	cargo test
 	@echo
 	@echo
