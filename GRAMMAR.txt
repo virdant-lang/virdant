@@ -10,6 +10,8 @@ DocString := ("DocComment")+
 
 DocBang := ("DocBang")+
 
+SlotComment := "SlotComment"
+
 Annotations := Annotation*
 
 Annotation :=
@@ -35,11 +37,11 @@ PlatformDef := DocString? Annotations "pub"? "builtin"? "platform" Ident "{" Pla
 
 PlatformStmt := ModDefStmtComponent
 
-StructDefStmt := DocString? Annotations Ident ":" Type
+StructDefStmt := DocString? Annotations Ident ":" Type SlotComment?
 
 UnionDef := DocString? Annotations "pub"? "builtin"? "union" "type" Ident Generics? "{" UnionDefStmt* "}"
 
-UnionDefStmt := DocString? Annotations Ident ParamList?
+UnionDefStmt := DocString? Annotations Ident ParamList? SlotComment?
 
 ParamList := "(" Params? ")"
 
@@ -47,7 +49,7 @@ Params :=
       Param
     | Params "," Param
 
-Param := DocString? Annotations Ident ":" Type
+Param := DocString? Annotations Ident ":" Type SlotComment?
 
 GenericsParams := "[" GenericsArgList "]"
 
@@ -66,17 +68,17 @@ KindParam := Ident ":" Kind
 EnumDef := DocString? Annotations "pub"? "builtin"? "enum" "type" Ident Generics? "{" EnumDefStmt* "}"
 
 EnumDefStmt :=
-      DocString? Annotations Ident "=" Expr
-    | DocString? Annotations Ident ParamList?
-    | DocString? Annotations Ident ParamList "=" Expr
+      DocString? Annotations Ident "=" Expr SlotComment?
+    | DocString? Annotations Ident ParamList? SlotComment?
+    | DocString? Annotations Ident ParamList "=" Expr SlotComment?
 
 BuiltinDef := DocString? Annotations "pub"? "builtin" "type" Ident Generics? "{" "}"
 
 SocketDef := DocString? Annotations "pub"? "builtin"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
 SocketDefStmt :=
-      DocString? Annotations "outgoing" Ident ":" Type OnClause? DependsonList?
-    | DocString? Annotations "incoming" Ident ":" Type OnClause? DependsonList?
+      DocString? Annotations "outgoing" Ident ":" Type OnClause? DependsonList? SlotComment?
+    | DocString? Annotations "incoming" Ident ":" Type OnClause? DependsonList? SlotComment?
 
 DependsonList := "dependson" DependsonPathList
 
@@ -112,7 +114,7 @@ LetBinding :=
       Ident ":" Type "=" Expr
     | Ident "=" Expr
 
-ModDefStmtComponent := DocString? Annotations ComponentKind Ident ":" Type OnClause? DependsonList? DefaultClause? ItBlock?
+ModDefStmtComponent := DocString? Annotations ComponentKind Ident ":" Type OnClause? DependsonList? DefaultClause? ItBlock? SlotComment?
 
 ComponentKind :=
       "incoming"
@@ -128,7 +130,7 @@ OnClause :=
       "on" Expr
     | "async"
 
-ModDefStmtMemory := DocString? Annotations "memory" Ident "[" Expr "]" ":" Type OnClause? MemoryBlock?
+ModDefStmtMemory := DocString? Annotations "memory" Ident "[" Expr "]" ":" Type OnClause? MemoryBlock? SlotComment?
 
 DefaultClause := "default" Expr
 
@@ -146,7 +148,7 @@ ModDefStmtIndexedDriver :=
     | Path "[" Nat "]" "<=" Expr
     | Path "[" Nat "]" ":=" Expr
 
-ModDefStmtInstance := DocString? Annotations "mod" Ident "of" Ofness GenericsParams? ItBlock?
+ModDefStmtInstance := DocString? Annotations "mod" Ident "of" Ofness GenericsParams? ItBlock? SlotComment?
 
 ItBlock := ModDefStmtBlock
 
@@ -159,10 +161,10 @@ ServerKw :=
     | "reverse"
 
 ModDefStmtSocket :=
-      DocString? Annotations ClientKw "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause?
-    | DocString? Annotations ServerKw "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause?
-    | DocString? Annotations ClientKw "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock
-    | DocString? Annotations ServerKw "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock
+      DocString? Annotations ClientKw "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause? SlotComment?
+    | DocString? Annotations ServerKw "socket" Ident "of" Ofness GenericsParams? ItBlock? WhereClause? SlotComment?
+    | DocString? Annotations ClientKw "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock SlotComment?
+    | DocString? Annotations ServerKw "socket" Ident "of" Ofness GenericsParams? WhereClause ItBlock SlotComment?
 
 WhereClause := WhereClauseList
 
@@ -436,6 +438,7 @@ Tokens:
   "DocComment"
   "Ident"
   "Nat"
+  "SlotComment"
   "Str"
   "Word"
   "["

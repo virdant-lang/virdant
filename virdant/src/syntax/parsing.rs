@@ -167,12 +167,12 @@ pub fn parse(source: &Source) -> Parsing {
             parsing.trailing_space_diagnostics.push(diagnostic);
         }
 
-        // A doccomment line (`//>` or `//!`) with text after the marker but
-        // no space is malformed. Scan the raw source so the check applies
-        // even when parser error recovery swallows the DocComment token
-        // without running its grammar action.
+        // A doccomment line (`//>`, `//!`, or slotcomment `//<`) with text
+        // after the marker but no space is malformed. Scan the raw source so
+        // the check applies even when parser error recovery swallows the
+        // token without running its grammar action.
         let rest = &line[spaces..];
-        let marker_len = if rest.starts_with(b"//>") || rest.starts_with(b"//!") {
+        let marker_len = if rest.starts_with(b"//>") || rest.starts_with(b"//!") || rest.starts_with(b"//<") {
             3
         } else {
             0
@@ -181,16 +181,70 @@ pub fn parse(source: &Source) -> Parsing {
             let start = SourceOffset(line_start + spaces as u32);
             let end = SourceOffset(line_start + line.len() as u32);
             let region = source.to_region(start, end);
+            let kind = if rest.starts_with(b"//<") { "Slotcomment" } else { "Doccomment" };
             let diagnostic = Diagnostic::new(
                 region,
                 diagnostics::FormattingError {
                     message: format!(
-                        "Doccomment must be followed by a space (or end of line), got {:?}",
+                        "{} must be followed by a space (or end of line), got {:?}",
+                        kind,
                         BStr::new(&rest[..4.min(rest.len())]),
                     ).into(),
                 },
             );
             parsing.docstring_diagnostics.push(diagnostic);
+        }
+
+        // A slotcomment (`//<`) appearing after code on a line must still
+        // be followed by a space (or end of line). The line-start check
+        // above only sees the marker when it opens the line, so scan the
+        // rest of the line here, skipping string literals so `//<` inside
+        // a string is not flagged, and stopping at the first plain `//`
+        // comment, whose prose is inert. Lines opening with any `//`
+        // marker were already handled by the line-start check above.
+        if !rest.starts_with(b"//") {
+            let mut i = 0;
+            while i + 3 <= line.len() {
+                if line[i] == b'"' {
+                    i += 1;
+                    while i < line.len() {
+                        if line[i] == b'\\' {
+                            i += 2;
+                            continue;
+                        }
+                        if line[i] == b'"' {
+                            i += 1;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    continue;
+                }
+                if line[i] == b'/' && line[i + 1] == b'/' {
+                    // A slotcomment marker: check its spacing. Anything
+                    // else starting a `//` comment is inert prose; stop.
+                    if line[i + 2] == b'<' {
+                        let after = i + 3;
+                        if after < line.len() && line[after] != b' ' {
+                            let start = SourceOffset(line_start + i as u32);
+                            let end = SourceOffset(line_start + line.len() as u32);
+                            let region = source.to_region(start, end);
+                            let diagnostic = Diagnostic::new(
+                                region,
+                                diagnostics::FormattingError {
+                                    message: format!(
+                                        "Slotcomment must be followed by a space (or end of line), got {:?}",
+                                        BStr::new(&line[after..(after + 4).min(line.len())]),
+                                    ).into(),
+                                },
+                            );
+                            parsing.docstring_diagnostics.push(diagnostic);
+                        }
+                    }
+                    break;
+                }
+                i += 1;
+            }
         }
 
         // Doc-comment block layout checks. A line whose leading whitespace
@@ -431,6 +485,44 @@ impl Parsing {
     pub fn text(&self, span: Span) -> &BStr {
         let text = &self.source[span];
         BStr::new(text)
+    }
+
+    /// Validate a slot's optional trailing slotcomment (`//< ...`)
+    /// against the two slotcomment exclusivity rules, returning the
+    /// interned text to store in the payload (or `None`):
+    ///
+    /// - a slot cannot have both a doccomment and a slotcomment;
+    /// - a slot cannot have both a driver block and a slotcomment.
+    ///
+    /// Both violations are flagged as formatting errors pointing at
+    /// the slotcomment itself.
+    pub(super) fn check_slotcomment(
+        &mut self,
+        doc_string: Option<InternedString>,
+        slot_comment: Option<(InternedString, SourceOffset, SourceOffset)>,
+        has_driver_block: bool,
+    ) -> Option<InternedString> {
+        let Some((text, ll, rr)) = slot_comment else { return None };
+        let region = self.source.to_region(ll, rr);
+        if doc_string.is_some() {
+            let diagnostic = Diagnostic::new(
+                region,
+                diagnostics::FormattingError {
+                    message: "Slot cannot have both a doccomment and a slotcomment".into(),
+                },
+            );
+            self.docstring_diagnostics.push(diagnostic);
+        }
+        if has_driver_block {
+            let diagnostic = Diagnostic::new(
+                region,
+                diagnostics::FormattingError {
+                    message: "Slot cannot have both a driver block and a slotcomment".into(),
+                },
+            );
+            self.docstring_diagnostics.push(diagnostic);
+        }
+        Some(text)
     }
 
     // TODO check to make sure string table is deduplicated

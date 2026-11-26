@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Slotcomments: trailing `//< ...` doc comments on slots (struct fields, components, enumerants, ctors) parse and attach."
+filecheck = "src/slotcomments.vir"

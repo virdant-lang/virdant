@@ -188,6 +188,30 @@ Write one `//>` line per sentence.
 Keep line length under 100 characters.
 Put a blank `//>` line between paragraphs.
 
+### Slotcomments (`//<`)
+
+A *slotcomment* is a trailing doc comment for slots: struct fields, union
+constructors, enum enumerants, mod components, submodules, socket
+instances, socket channels, and payload parameters. It comes *after* the
+slot it affects, on the same line:
+
+```virdant
+pub struct type Point {
+    x : Word[8] //< The x-coordinate
+    y : Word[8] //< The y-coordinate
+}
+```
+
+* A slotcomment goes to the end of the line, like every `//` comment.
+* The marker must be followed by a space or a newline: `//< text`,
+  never `//<text`.
+* A slot cannot have both a doccomment and a slotcomment — pick one.
+* A slot cannot have both a driver block and a slotcomment; a memory's
+  `{ ... }` block counts as a driver block too.
+* A slotcomment must be the last thing on the slot's line. Place it after
+  `dependson`/`on` clauses, `default` clauses, and closing braces — not
+  between them and the next line.
+
 Doc comments are appropriate for:
 - Module-level descriptions (purpose, ports, behavior)
 - Type definitions (what each variant or field means)

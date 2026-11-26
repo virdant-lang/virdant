@@ -355,6 +355,12 @@ The `memory` statement: shape, indexing, write-site, and image rules.  See
   token starts at 0/4/8/... columns. Comment-only lines are exempt.
 * `Doccomment must be followed by a space` — `//>Baz` and `//!>Bar` are
   invalid; write `//> Baz` / `//! Bar`.
+* `Slotcomment must be followed by a space` — same rule for the trailing
+  slotcomment marker: `//< text`, never `//<text`.
+* `Slot cannot have both a doccomment and a slotcomment` /
+  `Slot cannot have both a driver block and a slotcomment` — a `//<`
+  slotcomment excludes a `//>` doccomment on the same slot, and excludes a
+  driver block on a mod component. See ./coding-conventions.md.
 * `Syntax Error` / `Unexpected token` — general parser errors (e.g. `@` in a
   type annotation). A valid module next to broken ones does not gain extra
   diagnostics from the breakage.

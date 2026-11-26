@@ -1,0 +1,51 @@
+// Slotcomment error rules:
+//
+// * A slot cannot have both a doccomment and a slotcomment.
+// * A slot cannot have both a driver block and a slotcomment.
+// * The marker must be followed by a space (or end of line):
+//   `//< text`, never `//<text`.
+
+// CHECK: Formatting Error: Slot cannot have both a doccomment and a slotcomment
+pub struct type BothDocs {
+    //> The x-coordinate, written as a doccomment.
+    x : Word[8] //< The x-coordinate, written as a slotcomment.
+    y : Word[8]
+}
+
+pub mod DriverBlock {
+    incoming inp : Bit
+    // CHECK: Formatting Error: Slot cannot have both a driver block and a slotcomment
+    outgoing out : Bit dependson inp
+    {
+        it := inp
+    } //< A slotcomment may not follow a driver block.
+}
+
+// CHECK: Formatting Error: Slotcomment must be followed by a space (or end of line), got "//<n"
+// CHECK: Syntax Error: Unexpected token: "//<no space after the marker"
+pub struct type NoSpaceLeading {
+    //<no space after the marker
+    x : Word[8]
+    y : Word[8]
+}
+
+// CHECK: Formatting Error: Slotcomment must be followed by a space (or end of line), got "no s"
+pub struct type NoSpaceTrailing {
+    x : Word[8] //<no space after the marker
+    y : Word[8]
+}
+
+// A plain `//` comment is inert prose: mentioning `//<text` in one —
+// whole-line or trailing after code — produces no diagnostic.
+pub mod PlainCommentMentions {
+    incoming inp : Bit
+    outgoing out : Bit dependson inp
+    // CHECK-NOT: got "text"
+    // Mentioning //<text in a plain comment is fine.
+    out := inp // A trailing plain comment mentioning //<text is also fine.
+}
+
+// CHECK: FAILED with
+// CHECK: 5 ERROR
+// CHECK-NOT: WARNING
+// CHECK: Check failed

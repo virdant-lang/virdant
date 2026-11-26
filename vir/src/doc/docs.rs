@@ -940,10 +940,22 @@ fn node_kind(node: &AstNode<'_>) -> SymbolKind {
 /// Extract the body of a docstring (//> ...) from an AST node.
 /// Returns the text with the `//> ` prefix stripped from each line.
 fn extract_doc_body(node: &AstNode<'_>, parsing: &Parsing) -> BString {
-    match node.doc_string() {
-        Some(doc) => docstring_body(doc.clone(), parsing),
-        None => BString::default(),
+    if let Some(doc) = node.doc_string() {
+        return docstring_body(doc.clone(), parsing);
     }
+    if let Some(slot_comment) = node.slot_comment() {
+        return slotcomment_body(slot_comment.clone(), parsing);
+    }
+    BString::default()
+}
+
+/// Extract the body of a slotcomment (`//< ...`): the text after the
+/// `//< ` marker.
+fn slotcomment_body(doc: InternedString, parsing: &Parsing) -> BString {
+    let raw = parsing.string(doc);
+    let stripped = raw.strip_prefix(&b"//<"[..]).unwrap_or(raw);
+    let stripped = stripped.strip_prefix(&b" "[..]).unwrap_or(stripped);
+    BString::from(stripped.to_vec())
 }
 
 /// Extract the body of a `//> ...` docstring: the text with the
@@ -987,10 +999,7 @@ fn collect_type_slots(node: &AstNode<'_>, parsing: &Parsing) -> Vec<SlotCtx> {
             AstNodePayload::Enumerant(enumerant) => ("enumerant", enumerant.name.clone()),
             _ => continue,
         };
-        let doc_body = child
-            .doc_string()
-            .map(|doc| docstring_body(doc.clone(), parsing))
-            .unwrap_or_default();
+        let doc_body = extract_doc_body(&child, &parsing);
 
         // A constructor's or enumerant's children are the Annotations
         // wrapper, then one `Param` node per payload parameter, then
@@ -1002,10 +1011,7 @@ fn collect_type_slots(node: &AstNode<'_>, parsing: &Parsing) -> Vec<SlotCtx> {
                 AstNodePayload::Param(param) => params.push(SlotParamCtx {
                     name: parsing.string(param.name.clone()).to_str_lossy().into_owned(),
                     type_str: sub.child(1).spelling().to_str_lossy().into_owned(),
-                    doc_body: sub
-                        .doc_string()
-                        .map(|doc| docstring_body(doc.clone(), parsing))
-                        .unwrap_or_default()
+                    doc_body: extract_doc_body(&sub, &parsing)
                         .to_str_lossy()
                         .into_owned(),
                 }),
@@ -1155,10 +1161,7 @@ fn render_moddef_page_with_sidebar(
     let mut doc_by_component: HashMap<BString, BString> = HashMap::new();
     for child in node.children() {
         if let AstNodePayload::Component(component) = child.payload() {
-            let doc = child
-                .doc_string()
-                .map(|doc| docstring_body(doc.clone(), &parsing))
-                .unwrap_or_default();
+            let doc = extract_doc_body(&child, &parsing);
             doc_by_component.insert(parsing.string(component.name.text).to_owned(), doc);
         }
     }

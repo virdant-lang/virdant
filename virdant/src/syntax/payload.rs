@@ -297,6 +297,9 @@ pub struct Component {
     pub name: Ident,
     pub kind: ComponentKind,
     pub doc_string: Option<InternedString>,
+    /// A trailing slotcomment (`//< ...`), if the slot was documented
+    /// with one instead of a leading docstring.
+    pub slot_comment: Option<InternedString>,
     /// Whether the component was declared with the `async` modifier.
     pub is_async: bool,
 }
@@ -333,6 +336,8 @@ pub struct Submodule {
     /// The instance name; see `Component::name`.
     pub name: Ident,
     pub doc_string: Option<InternedString>,
+    /// A trailing slotcomment (`//< ...`); see `Component::slot_comment`.
+    pub slot_comment: Option<InternedString>,
 }
 
 /// A `let` statement/expression (`let x = e { ... }` or `let x = e => ...`).
@@ -356,12 +361,16 @@ pub struct Socket {
     pub name: InternedString,
     pub role: SocketRole,
     pub doc_string: Option<InternedString>,
+    /// A trailing slotcomment (`//< ...`); see `Component::slot_comment`.
+    pub slot_comment: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Field {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
+    /// A trailing slotcomment (`//< ...`); see `Component::slot_comment`.
+    pub slot_comment: Option<InternedString>,
 }
 
 /// The `where` clause(s) of a socket instance declaration.  Children:
@@ -382,12 +391,16 @@ pub struct WhereClauseItem;
 pub struct Ctor {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
+    /// A trailing slotcomment (`//< ...`); see `Component::slot_comment`.
+    pub slot_comment: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Enumerant {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
+    /// A trailing slotcomment (`//< ...`); see `Component::slot_comment`.
+    pub slot_comment: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
@@ -396,6 +409,8 @@ pub struct Channel {
     pub name: Ident,
     pub dir: ChannelDir,
     pub doc_string: Option<InternedString>,
+    /// A trailing slotcomment (`//< ...`); see `Component::slot_comment`.
+    pub slot_comment: Option<InternedString>,
     /// Whether the channel was declared with the `async` modifier.
     pub is_async: bool,
 }
@@ -418,6 +433,8 @@ pub struct GenericsNat {
 pub struct Param {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
+    /// A trailing slotcomment (`//< ...`); see `Component::slot_comment`.
+    pub slot_comment: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]

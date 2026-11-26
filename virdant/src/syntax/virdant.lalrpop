@@ -59,6 +59,18 @@ DocBang: InternedString = {
     },
 }
 
+/// A trailing slotcomment (`//< text`): a single line, attached to
+/// the slot statement it follows.  Returned with the token's offsets
+/// so exclusivity violations (doccomment+slotcomment, driver-block+
+/// slotcomment) can be flagged pointing at the comment.
+SlotComment: (InternedString, SourceOffset, SourceOffset) = {
+    <ll:@L> "SlotComment" <rr:@R> => {
+        let span = parser.span(ll, rr);
+        let text = parser.intern(span);
+        (text, ll, rr)
+    },
+}
+
 Annotations: AstNodeId = {
     <ll:@L> <annotations:Annotation*> <rr:@R> => {
         let payload = AstNodePayload::Annotations(payload::AnnotationsPayload);
@@ -155,8 +167,9 @@ PlatformStmt: AstNodeId = {
 }
 
 StructDefStmt: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> ":" Type <rr:@R> => {
-        let payload = AstNodePayload::Field(payload::Field { name: name.text, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> ":" Type <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Field(payload::Field { name: name.text, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16;
 
@@ -177,8 +190,9 @@ UnionDef: AstNodeId = {
 }
 
 UnionDefStmt: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> <paramlist:ParamList?> <rr:@R> => {
-        let payload = AstNodePayload::Ctor(payload::Ctor { name: name.text, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> <paramlist:ParamList?> <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Ctor(payload::Ctor { name: name.text, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children = 1u16 + paramlist.unwrap_or(0);
 
@@ -196,8 +210,9 @@ Params: u16 = {
 }
 
 Param: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> ":" Type <rr:@R> => {
-        let payload = AstNodePayload::Param(payload::Param { name: name.text, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> ":" Type <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Param(payload::Param { name: name.text, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16;
 
@@ -276,22 +291,25 @@ EnumDef: AstNodeId = {
 // are the Annotations wrapper, then the `Param` nodes (if any), then
 // the value `Expr` (if any).
 EnumDefStmt: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> "=" <expr:Expr> <rr:@R> => {
-        let payload = AstNodePayload::Enumerant(payload::Enumerant { name: name.text, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> "=" <expr:Expr> <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Enumerant(payload::Enumerant { name: name.text, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16;
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> <paramlist:ParamList?> <rr:@R> => {
-        let payload = AstNodePayload::Enumerant(payload::Enumerant { name: name.text, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> <paramlist:ParamList?> <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Enumerant(payload::Enumerant { name: name.text, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children = 1u16 + paramlist.unwrap_or(0);
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> <paramlist:ParamList> "=" <expr:Expr> <rr:@R> => {
-        let payload = AstNodePayload::Enumerant(payload::Enumerant { name: name.text, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> <paramlist:ParamList> "=" <expr:Expr> <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Enumerant(payload::Enumerant { name: name.text, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children = 1u16 + paramlist + 1u16;
 
@@ -323,25 +341,27 @@ SocketDef: AstNodeId = {
 }
 
 SocketDefStmt: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <slot_comment:SlotComment?> <rr:@R> => {
         let (on, is_async) = match on {
             Some(OnClause::Clock(expr)) => (Some(expr), false),
             Some(OnClause::Async) => (None, true),
             None => (None, false),
         };
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Outgoing, doc_string: docstring, is_async });
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Outgoing, doc_string: docstring, slot_comment, is_async });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if dependson_list.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "incoming" <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "incoming" <name:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <slot_comment:SlotComment?> <rr:@R> => {
         let (on, is_async) = match on {
             Some(OnClause::Clock(expr)) => (Some(expr), false),
             Some(OnClause::Async) => (None, true),
             None => (None, false),
         };
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Incoming, doc_string: docstring, is_async });
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Incoming, doc_string: docstring, slot_comment, is_async });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if dependson_list.is_none() { 0u16 } else { 1u16 };
 
@@ -444,16 +464,18 @@ LetBinding: AstNodeId = {
 }
 
 ModDefStmtComponent: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <kind:ComponentKind> <ident:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <default:DefaultClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <kind:ComponentKind> <ident:Ident> ":" <typ:Type> <on:OnClause?> <dependson_list:DependsonList?> <default:DefaultClause?> <it:ItBlock?> <slot_comment:SlotComment?> <rr:@R> => {
         let (on, is_async) = match on {
             Some(OnClause::Clock(expr)) => (Some(expr), false),
             Some(OnClause::Async) => (None, true),
             None => (None, false),
         };
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, it.is_some());
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind,
             doc_string: docstring,
+            slot_comment,
             is_async,
         });
         let span = parser.span(ll, rr);
@@ -484,16 +506,20 @@ OnClause: OnClause = {
 /// the Annotations wrapper; the element type is the next child; the
 /// optional `on <CLOCK>` clause and body follow.
 ModDefStmtMemory: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "memory" <ident:Ident> "[" <depth:Expr> "]" ":" <typ:Type> <on:OnClause?> <it:MemoryBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "memory" <ident:Ident> "[" <depth:Expr> "]" ":" <typ:Type> <on:OnClause?> <it:MemoryBlock?> <slot_comment:SlotComment?> <rr:@R> => {
         let (on, is_async) = match on {
             Some(OnClause::Clock(expr)) => (Some(expr), false),
             Some(OnClause::Async) => (None, true),
             None => (None, false),
         };
+        // A memory's `{ ... }` block holds its drivers (`initial`,
+        // indexed writes), so it counts as a driver block here.
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, it.is_some());
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Memory,
             doc_string: docstring,
+            slot_comment,
             is_async,
         });
         let span = parser.span(ll, rr);
@@ -638,8 +664,12 @@ ModDefStmtIndexedDriver: AstNodeId = {
 }
 
 ModDefStmtInstance: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <rr:@R> => {
-        let payload = AstNodePayload::Submodule(payload::Submodule { name, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <slot_comment:SlotComment?> <rr:@R> => {
+        // A submodule's `{ ... }` block is an instantiation (port
+        // connection) block, not a driver block, so a slotcomment may
+        // still document the instance slot.
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Submodule(payload::Submodule { name, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
@@ -672,8 +702,9 @@ ServerKw: () = {
 }
 
 ModDefStmtSocket: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> ClientKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Client, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> ClientKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Client, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
@@ -682,8 +713,9 @@ ModDefStmtSocket: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> ServerKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Server, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> ServerKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Server, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
@@ -695,8 +727,9 @@ ModDefStmtSocket: AstNodeId = {
     // A `where` clause may also precede the driver block: it reads
     // better before the `{ ... }` it annotates, and the two are
     // unambiguous (`where` starts a clause, `{` starts a block).
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> ClientKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Client, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> ClientKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Client, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
@@ -705,8 +738,9 @@ ModDefStmtSocket: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> ServerKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Server, doc_string: docstring });
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> ServerKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <slot_comment:SlotComment?> <rr:@R> => {
+        let slot_comment = parser.check_slotcomment(docstring, slot_comment, false);
+        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Server, doc_string: docstring, slot_comment });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
@@ -1548,6 +1582,7 @@ extern {
         "Str" => Token::Str,
         "DocComment" => Token::DocComment,
         "DocBang" => Token::DocBang,
+        "SlotComment" => Token::SlotComment,
         "/*" => Token::StarSlash,
         "*/" => Token::SlashStar,
 

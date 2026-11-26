@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Slotcomment exclusivity and spacing rules."
+filecheck = "src/slotcomment.vir"

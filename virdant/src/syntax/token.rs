@@ -36,6 +36,10 @@ pub enum Token {
     DocComment,
     #[regex(br"//![^\n]*")]
     DocBang,
+    // Slotcomment: a trailing doc comment for slots (struct fields,
+    // components, ...), written `//< text` at the end of the slot's line.
+    #[regex(br"//<[^\n]*")]
+    SlotComment,
 
     // Word: Nat with w<width> suffix (width does NOT allow underscores)
     #[regex(br"[0-9]([_]?[0-9])*w[0-9]+")]

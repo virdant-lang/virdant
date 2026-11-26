@@ -346,6 +346,24 @@ impl<'p> AstNode<'p> {
         }
     }
 
+    /// The trailing slotcomment (`//< ...`) attached to a slot
+    /// (struct field, component, submodule, socket instance, socket
+    /// channel, ctor, enumerant, or payload param), if it was
+    /// documented with one instead of a leading docstring.
+    pub fn slot_comment(&self) -> Option<&InternedString> {
+        match &self.payload {
+            AstNodePayload::Component(c) => c.slot_comment.as_ref(),
+            AstNodePayload::Socket(s) => s.slot_comment.as_ref(),
+            AstNodePayload::Field(f) => f.slot_comment.as_ref(),
+            AstNodePayload::Ctor(c) => c.slot_comment.as_ref(),
+            AstNodePayload::Enumerant(e) => e.slot_comment.as_ref(),
+            AstNodePayload::Channel(c) => c.slot_comment.as_ref(),
+            AstNodePayload::Param(p) => p.slot_comment.as_ref(),
+            AstNodePayload::Submodule(s) => s.slot_comment.as_ref(),
+            _ => None,
+        }
+    }
+
     pub fn name(&self) -> Option<InternedString> {
         match &self.payload {
             AstNodePayload::ModDef(mod_def) => Some(mod_def.name.clone()),

@@ -10,6 +10,12 @@ pub struct type Reading {
     humidity : Word[8]
 }
 
+//> A struct type documented with slotcomments instead of doccomments.
+pub struct type Reading2 {
+    temperature : Word[16] //< The temperature, in hundredths of a degree Celsius.
+    humidity : Word[8] //< The relative humidity, in percent.
+}
+
 //> A union type with a doccomment on every constructor and payload.
 pub union type Shape {
     //> A circle with the given radius.
@@ -56,7 +62,8 @@ mod Blink {
 mod Top {
     incoming clock : Clock
 
-    outgoing led : Bit
+    outgoing led : Bit dependson clock //< The blinking LED.
+    outgoing tick : Bit dependson clock //< A second output, documented with a slotcomment.
 
     reg counter : Word[32]
     counter <= counter + 1
@@ -66,4 +73,5 @@ mod Top {
     }
 
     led := blinker.blink
+    tick := counter[31]
 }

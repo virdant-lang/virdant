@@ -1,0 +1,18 @@
+// Positive tests for slotcomments: a trailing `//< ...` doc comment
+// documenting a slot.  A slotcomment comes after the slot it affects
+// and may not be combined with a leading doccomment or (for mod
+// components) a driver block.
+
+//> A point in 2D space.
+pub struct type Point {
+    x : Word[8] //< The x-coordinate
+    y : Word[8] //< The y-coordinate
+}
+
+pub mod Slotcommented {
+    //> The input bit.
+    incoming inp : Bit
+    outgoing out : Bit dependson inp //< The passthrough output
+    out := inp
+}
+// CHECK: Check OK
