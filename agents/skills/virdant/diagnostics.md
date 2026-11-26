@@ -204,7 +204,7 @@ module's incoming clock ports. See ./driver-blocks.md and ./memory.md.
   * `Non-exhaustive match` (Word subject — add `else` or cover all values)
 * `Overlapping match arm: X` — a later arm covers an already-covered case:
   duplicate literal (`with true` twice, `with 0` twice, duplicate `@Foo`),
-  or an open pattern (`with x`, `with dontcare`) shadowing or shadowed by
+  or an open pattern (`with x`, `with ?`) shadowing or shadowed by
   anything.
 * `else` placement:
   * `else arm must be the last arm of the match` (no `with` after `else`).

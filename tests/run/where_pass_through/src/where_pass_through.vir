@@ -97,7 +97,7 @@ pub mod PassThroughTest for virt::Virt {
     //> High while the adapter presents a payload.
     wire presenting : Bit {
         it := match adapter.out.data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }

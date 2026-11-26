@@ -345,8 +345,8 @@ it := @Valid(3) : Valid[Word[8]]
 
 ## Patterns that parse but are not supported
 
-* The grammar also admits bare `Ident` and `dontcare` patterns, but
+* The grammar also admits bare `Ident` and `?` patterns, but
   the match-coverage checker does not yet handle them correctly.
-* Do NOT use bare-Ident or bare-`dontcare` patterns in `match` arms.
+* Do NOT use bare-Ident or bare-`?` patterns in `match` arms.
 * To discard a payload value in a constructor pattern, use `_`:
   `with @Some(_) => true`.

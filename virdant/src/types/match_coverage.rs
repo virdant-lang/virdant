@@ -101,7 +101,7 @@ pub(crate) fn check_match_coverage(
             AstNodePayload::PatDontcare => {
                 // Dontcare patterns match everything, so they overlap with any prior pattern.
                 if any_pattern_seen {
-                    overlap = Some((pat.region(), "dontcare".into()));
+                    overlap = Some((pat.region(), "?".into()));
                 }
                 any_pattern_seen = true;
             }

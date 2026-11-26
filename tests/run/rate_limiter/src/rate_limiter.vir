@@ -133,7 +133,7 @@ pub mod RateLimiterTest for virt::Virt {
     //> payload and this consumer is always ready.
     wire fires : Bit {
         it := match limiter.out.data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }

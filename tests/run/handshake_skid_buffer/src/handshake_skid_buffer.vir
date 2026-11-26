@@ -63,7 +63,7 @@ mod SkidBuffer {
     //> `inp.ready` high.
     wire inp_fires : Bit {
         it := match inp.data {
-            with @Valid(dontcare) => count != 2
+            with @Valid(?) => count != 2
             with @Invalid() => false
         }
     }
@@ -72,7 +72,7 @@ mod SkidBuffer {
     //> `out.ready` high.
     wire out_fires : Bit {
         it := match out_data {
-            with @Valid(dontcare) => out.ready
+            with @Valid(?) => out.ready
             with @Invalid() => false
         }
     }
@@ -193,7 +193,7 @@ pub mod Top for virt::Virt {
     //> a valid head and `downstream_ready` accepts it.
     wire out_fires : Bit {
         it := match buf.out.data {
-            with @Valid(dontcare) => downstream_ready
+            with @Valid(?) => downstream_ready
             with @Invalid() => false
         }
     }

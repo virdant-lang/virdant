@@ -84,7 +84,7 @@ pub mod ValidPassthroughTest for virt::Virt {
     //> Validity flag on the far side of the module boundary.
     wire out_valid : Bit {
         it := match passthrough.outp {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }
@@ -102,7 +102,7 @@ pub mod ValidPassthroughTest for virt::Virt {
     //> applied to the driven vector.
     wire in_valid : Bit {
         it := match d {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }

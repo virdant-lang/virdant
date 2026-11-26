@@ -14,7 +14,7 @@ pub mod OverlapDontcare {
     // CHECK: Overlapping match arm
     out := match b {
         with true  => false
-        with dontcare => true
+        with ? => true
     }
 }
 

@@ -60,7 +60,7 @@ mod Join {
     //> Whether stream A offers a valid payload this cycle.
     wire a_valid : Bit async {
         it := match inA.data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }
@@ -68,7 +68,7 @@ mod Join {
     //> Whether stream B offers a valid payload this cycle.
     wire b_valid : Bit async {
         it := match inB.data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }
@@ -180,7 +180,7 @@ pub mod StreamJoinTest for virt::Virt {
     //> Whether A offers a valid payload this cycle.
     wire a_valid : Bit {
         it := match a_data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }
@@ -188,7 +188,7 @@ pub mod StreamJoinTest for virt::Virt {
     //> Whether B offers a valid payload this cycle.
     wire b_valid : Bit {
         it := match b_data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }
@@ -220,7 +220,7 @@ pub mod StreamJoinTest for virt::Virt {
     wire ok_no_premature_fire : Bit {
         it := if {
             when !both_valid => match join.out.data {
-                with @Valid(dontcare) => false
+                with @Valid(?) => false
                 with @Invalid() => true
             }
             else => true

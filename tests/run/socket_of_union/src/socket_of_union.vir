@@ -42,7 +42,7 @@ mod Receiver {
 
     wire fires : Bit {
         it := match hs.data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }
@@ -188,7 +188,7 @@ pub mod SocketOfUnionTest for virt::Virt {
     //> hold its old value.
     wire pending_valid : Bit {
         it := match pending {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }
@@ -202,7 +202,7 @@ pub mod SocketOfUnionTest for virt::Virt {
 
     wire actual_valid : Bit {
         it := match receiver.last {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }

@@ -133,7 +133,7 @@ its channels via `it`.
 ```virdant
 reverse socket inp of Pipe {
     it.ready := match out_data {
-        with @Valid(dontcare) => true
+        with @Valid(?) => true
         with @Invalid() => !is_full
     }
 

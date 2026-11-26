@@ -4,7 +4,7 @@ mod Fifo {
 
     reverse socket inp of Pipe[Word[8]] {
         it.ready := match out_data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => !is_full
         }
 
@@ -74,14 +74,14 @@ mod Fifo {
 
     wire out_fires : Bit {
         it := match out_data {
-            with @Valid(dontcare) => out.ready
+            with @Valid(?) => out.ready
             with @Invalid() => false
         }
     }
 
     wire inp_fires : Bit {
         it := match inp.data {
-            with @Valid(dontcare) => !is_full || out_fires
+            with @Valid(?) => !is_full || out_fires
             with @Invalid() => false
         }
     }

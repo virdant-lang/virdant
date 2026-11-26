@@ -124,7 +124,7 @@ mod Light {
   the consumer (reverse side) drives `ready`.
 * Connect a forward socket to a reverse socket with `:=:` (see `./sockets.md`).
 * The "fires" idiom: a transfer fires when the payload is `@Valid` AND the peer
-  is ready.  Use `@Valid(dontcare)` when the payload value is irrelevant.
+  is ready.  Use `@Valid(?)` when the payload value is irrelevant.
 * Gate `ready` on available capacity; advance bookkeeping counters only in
   cycles where a transfer actually fires.
 
@@ -200,14 +200,14 @@ mod SkidBuffer {
 
     wire inp_fires : Bit {
         it := match inp.data {
-            with @Valid(dontcare) => count != 2
+            with @Valid(?) => count != 2
             with @Invalid() => false
         }
     }
 
     wire out_fires : Bit {
         it := match out_data {
-            with @Valid(dontcare) => out.ready
+            with @Valid(?) => out.ready
             with @Invalid() => false
         }
     }

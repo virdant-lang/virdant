@@ -100,7 +100,7 @@ mod StreamSplitter {
     //> selected output ready.
     wire inp_fires : Bit async {
         it := match inp.data {
-            with @Valid(dontcare) => mux(route, out_b.ready, out_a.ready)
+            with @Valid(?) => mux(route, out_b.ready, out_a.ready)
             with @Invalid() => false
         }
     }
@@ -195,7 +195,7 @@ pub mod StreamSplitterTest for virt::Virt {
     //> An item is consumed on output `a` this cycle.
     wire fires_a : Bit {
         it := match splitter.out_a.data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }
@@ -203,7 +203,7 @@ pub mod StreamSplitterTest for virt::Virt {
     //> An item is consumed on output `b` this cycle.
     wire fires_b : Bit {
         it := match splitter.out_b.data {
-            with @Valid(dontcare) => true
+            with @Valid(?) => true
             with @Invalid() => false
         }
     }
