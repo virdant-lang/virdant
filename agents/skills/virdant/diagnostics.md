@@ -219,7 +219,17 @@ module's incoming clock ports. See ./driver-blocks.md and ./memory.md.
   * Enumerant pattern on a Word subject: `PatEnumerant expects an enum type`.
   * Constructor pattern on a Word subject: `Unresolved constructor Foo`.
   * Bit pattern on an enum subject: `Wrong type`.
+  * Unknown constructor name in a pattern:
+    `Unresolved constructor Nope`.
 * Payload-bearing constructors match with `@Some(x)`, never `#Some`.
+* A ctor pattern needs exactly one sub-pattern per payload parameter,
+  too few or too many:
+  `Pattern @Bar has wrong number of arguments: expected 1, but found 0`.
+  Bind or discard each payload with a name or `_`
+  (`with @Bar(value)`, `with @Bar(_)`).
+* Literal sub-patterns must fit the payload's type and width
+  (`with @Val(1w8)` against a `Word[4]` payload:
+  `Wrong type: Expected Word[4] but found Word[8]`).
 
 ### memory
 

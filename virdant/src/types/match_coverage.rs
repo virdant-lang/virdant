@@ -18,6 +18,7 @@ use crate::syntax::ast::{AstNode, match_arm_children};
 use crate::syntax::payload::AstNodePayload;
 use crate::types::substitute::substitute;
 use crate::types::Type;
+use crate::util::min_word_width;
 
 pub(crate) fn check_match_coverage(
     builder: &mut Builder,
@@ -75,10 +76,21 @@ pub(crate) fn check_match_coverage(
         return;
     }
 
-    // Coverage pass.  For statement-level matches the typing pass does not
-    // validate arm patterns against the subject type, so emit shape mismatch
-    // diagnostics inline; expression matches are already covered by check_pat.
-    let is_stmt_match = matches!(match_node.payload(), AstNodePayload::Match);
+    // Shape pass: validate every arm pattern against the subject type,
+    // in both match positions.  The typing pass validates arm patterns
+    // only when a match fails to infer its type (and never for
+    // statement-level matches), so this pass is the single authority
+    // for pattern shape: ctor patterns must name a variant of a
+    // union/enum subject with exactly one sub-pattern per payload
+    // parameter, each sub-pattern itself well-formed, and literal
+    // patterns must match the subject's type.
+    for (pat_opt, _body) in &arms {
+        let Some(pat) = pat_opt else { continue };
+        check_pat_shape(builder, pat, subject_typ, diagnostics);
+    }
+
+    // Coverage pass: record what each arm covers to report overlapping
+    // arms and non-exhaustive matches.
     let mut overlap: Option<(Region, BString)> = None;
     let mut covered_syms: IndexMap<SymbolId, (&AstNode<'_>, Region)> = IndexMap::new();
     let mut covered_words: IndexMap<WordValue, Region> = IndexMap::new();
@@ -107,14 +119,6 @@ pub(crate) fn check_match_coverage(
             }
             AstNodePayload::PatCtor(pat_ctor) => {
                 let Type::Usual(typedef_id, _args) = subject_typ else {
-                    if is_stmt_match {
-                        diagnostics.push(Diagnostic::new(
-                            pat.region(),
-                            diagnostics::UnresolvedCtor {
-                                ctor: parsing.string(pat_ctor.name).to_owned(),
-                            },
-                        ));
-                    }
                     continue;
                 };
                 let symboltable = builder.get_symboltable();
@@ -136,14 +140,6 @@ pub(crate) fn check_match_coverage(
             }
             AstNodePayload::PatEnumerant(pat_enum) => {
                 let Type::Usual(typedef_id, _args) = subject_typ else {
-                    if is_stmt_match {
-                        diagnostics.push(Diagnostic::new(
-                            pat.region(),
-                            diagnostics::Unknown {
-                                message: "PatEnumerant expects an enum type".into(),
-                            },
-                        ));
-                    }
                     continue;
                 };
                 let symboltable = builder.get_symboltable();
@@ -153,14 +149,6 @@ pub(crate) fn check_match_coverage(
                 // matched with `@Name(...)`, not `#Name`; it is not
                 // covered by a `#Name` pattern.
                 if !builder.get_ctor_signature(sym.id()).parameters.is_empty() {
-                    if is_stmt_match {
-                        diagnostics.push(Diagnostic::new(
-                            pat.region(),
-                            diagnostics::CtorRequiresArgs {
-                                ctor: name.to_owned(),
-                            },
-                        ));
-                    }
                     continue;
                 }
                 let sym_id = sym.id();
@@ -173,19 +161,6 @@ pub(crate) fn check_match_coverage(
             }
             AstNodePayload::PatWordLit(pat_word) => {
                 if !matches!(subject_typ, Type::Word(_)) {
-                    if is_stmt_match {
-                        diagnostics.push(Diagnostic::new(
-                            pat.region(),
-                            diagnostics::NotWordType {
-                                typ: crate::types::render::render_type_in_package(
-                                    builder.db(),
-                                    pat.region().package(),
-                                    subject_typ,
-                                )
-                                .into(),
-                            },
-                        ));
-                    }
                     continue;
                 }
                 let literal = parsing.string(pat_word.literal).to_str_lossy().into_owned();
@@ -199,25 +174,6 @@ pub(crate) fn check_match_coverage(
             }
             AstNodePayload::PatBitLit(pat_bit) => {
                 if !matches!(subject_typ, Type::Bit | Type::Reset) {
-                    if is_stmt_match {
-                        diagnostics.push(Diagnostic::new(
-                            pat.region(),
-                            diagnostics::WrongType {
-                                expected: crate::types::render::render_type_in_package(
-                                    builder.db(),
-                                    pat.region().package(),
-                                    subject_typ,
-                                )
-                                .into(),
-                                actual: crate::types::render::render_type_in_package(
-                                    builder.db(),
-                                    pat.region().package(),
-                                    &Type::Bit,
-                                )
-                                .into(),
-                            },
-                        ));
-                    }
                     continue;
                 }
                 let value = pat_bit.literal;
@@ -278,6 +234,172 @@ pub(crate) fn check_match_coverage(
     }
 }
 
+/// Validate a (sub-)pattern of a ctor pattern against the type it is
+/// matched against.  The typing pass validates arm patterns only when
+/// a match fails to infer its type (and never for statement-level
+/// matches), so the coverage pass performs the shape checks for every
+/// arm pattern: nested ctor patterns must name a variant of the
+/// payload type with one sub-pattern per payload parameter,
+/// enumerant patterns must not carry parameters, and literal
+/// patterns must match the payload's type.
+fn check_pat_shape(
+    builder: &mut Builder,
+    node: &AstNode<'_>,
+    typ: &Type,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    match node.payload() {
+        AstNodePayload::PatCtor(pat_ctor) => {
+            let Type::Usual(typedef_id, args) = typ else {
+                diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::UnresolvedCtor {
+                        ctor: node.parsing().string(pat_ctor.name).to_owned(),
+                    },
+                ));
+                return;
+            };
+            let symboltable = builder.get_symboltable();
+            let name = node.parsing().string(pat_ctor.name);
+            let Some(sym) = symboltable.slot(*typedef_id, name) else {
+                diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::UnresolvedCtor {
+                        ctor: name.to_owned(),
+                    },
+                ));
+                return;
+            };
+            let sig = builder.get_ctor_signature(sym.id());
+            let parameters: Vec<Type> = sig
+                .parameters
+                .iter()
+                .map(|(_param_name, param_typ)| substitute(param_typ, args))
+                .collect();
+            let children = node.children();
+            if children.len() != parameters.len() {
+                diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::PatCtorArity {
+                        ctor: name.to_owned(),
+                        expected: parameters.len(),
+                        actual: children.len(),
+                    },
+                ));
+            } else {
+                for (child, param_typ) in children.iter().zip(parameters.iter()) {
+                    check_pat_shape(builder, child, param_typ, diagnostics);
+                }
+            }
+        }
+        AstNodePayload::PatEnumerant(pat_enumerant) => {
+            let Type::Usual(typedef_id, _args) = typ else {
+                diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::Unknown {
+                        message: "PatEnumerant expects an enum type".into(),
+                    },
+                ));
+                return;
+            };
+            let symboltable = builder.get_symboltable();
+            let name = node.parsing().string(pat_enumerant.name);
+            let Some(sym) = symboltable.slot(*typedef_id, name) else {
+                diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::Unknown {
+                        message: "Unknown enumerant name in pattern".into(),
+                    },
+                ));
+                return;
+            };
+            if !builder.get_ctor_signature(sym.id()).parameters.is_empty() {
+                diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::CtorRequiresArgs {
+                        ctor: name.to_owned(),
+                    },
+                ));
+            }
+        }
+        AstNodePayload::PatWordLit(_) => {
+            let Type::Word(width) = typ else {
+                diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::NotWordType {
+                        typ: crate::types::render::render_type_in_package(
+                            builder.db(),
+                            node.region().package(),
+                            typ,
+                        )
+                        .into(),
+                    },
+                ));
+                return;
+            };
+            let (value, explicit_width) =
+                crate::util::parse_word_literal(node.spelling().to_str_lossy().as_ref());
+            if let Some(explicit_width) = explicit_width {
+                let actual = Type::Word(explicit_width);
+                if actual != *typ {
+                    diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        diagnostics::WrongType {
+                            expected: crate::types::render::render_type_in_package(
+                                builder.db(),
+                                node.region().package(),
+                                typ,
+                            )
+                            .into(),
+                            actual: crate::types::render::render_type_in_package(
+                                builder.db(),
+                                node.region().package(),
+                                &actual,
+                            )
+                            .into(),
+                        },
+                    ));
+                    return;
+                }
+            }
+            let minwidth = min_word_width(value);
+            if minwidth > *width {
+                diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::DoesntFit {
+                        value,
+                        width: *width,
+                        minwidth,
+                    },
+                ));
+            }
+        }
+        AstNodePayload::PatBitLit(_) => {
+            if !matches!(typ, Type::Bit | Type::Reset) {
+                diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::WrongType {
+                        expected: crate::types::render::render_type_in_package(
+                            builder.db(),
+                            node.region().package(),
+                            typ,
+                        )
+                        .into(),
+                        actual: crate::types::render::render_type_in_package(
+                            builder.db(),
+                            node.region().package(),
+                            &Type::Bit,
+                        )
+                        .into(),
+                    },
+                ));
+            }
+        }
+        // Ident and dontcare sub-patterns match any payload type.
+        _ => {}
+    }
+}
+
 /// True when two ctor (`@Name(...)`) patterns on the same subject type
 /// can both match a single value.  Arms with different ctors are
 /// disjoint; arms with the same ctor overlap exactly when their
@@ -303,7 +425,8 @@ fn ctor_pats_overlap(
     let a_children = a.children();
     let b_children = b.children();
     if a_children.len() != b_children.len() {
-        // Arity mismatch is a typing error; stay conservative.
+        // Arity mismatch is reported by the shape pass; stay
+        // conservative.
         return true;
     }
     for ((child_a, child_b), (_param_name, param_typ)) in

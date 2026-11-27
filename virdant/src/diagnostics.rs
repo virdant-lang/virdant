@@ -355,6 +355,10 @@ pub enum DiagnosticPayload {
     /// A ctor or enumerant carries payload parameters but was used
     /// without them (e.g. `#Name` where `@Name(...)` is required).
     CtorRequiresArgs(CtorRequiresArgs),
+    /// A ctor pattern `@Name(...)` supplies the wrong number of
+    /// sub-patterns for the variant's payload parameters: too few
+    /// (e.g. `@Bar()` on a one-parameter variant) or too many.
+    PatCtorArity(PatCtorArity),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1057,6 +1061,13 @@ pub struct CtorRequiresArgs {
     pub ctor: BString,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PatCtorArity {
+    pub ctor: BString,
+    pub expected: usize,
+    pub actual: usize,
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl Diagnostic {
@@ -1598,6 +1609,12 @@ impl Diagnostic {
                     d.ctor, d.ctor,
                 ).into()
             }
+            DiagnosticPayload::PatCtorArity(d) => {
+                format!(
+                    "Pattern @{} has wrong number of arguments: expected {}, but found {}",
+                    d.ctor, d.expected, d.actual,
+                ).into()
+            }
         }
     }
 
@@ -1738,6 +1755,7 @@ impl Diagnostic {
             DiagnosticPayload::TypeArgKind(_) => "TypeArgKind",
             DiagnosticPayload::UnknownKind(_) => "UnknownKind",
             DiagnosticPayload::CtorRequiresArgs(_) => "CtorRequiresArgs",
+            DiagnosticPayload::PatCtorArity(_) => "PatCtorArity",
         }
     }
 
@@ -1817,7 +1835,7 @@ from_diagnostic! {
     DriveUndeclaredPlatformPort, UseUndeclaredPlatformPort,
     PlatformPortTypeMismatch, PlatformWireRegPort, DefaultOutsidePlatformPort, UnknownAnnotation, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,
-    CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, PlatformNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
+    CtorRequiresArgs, PatCtorArity, ExtModGenerics, NotPub, ReferencedWhileNotPub, PlatformNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
     UnusedImport,
     DomainMismatch, MissingDomainClause, AsyncRegister, DriverDomainMismatch,
     FlexibleInstanceClockConflict,

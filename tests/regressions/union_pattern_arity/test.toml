@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Regression: ctor patterns were never validated when a match inferred successfully, so @Bar() with too few sub-patterns, @Bar(a, b) with too many, unknown ctors, and ill-typed sub-patterns passed vir check in both statement- and expression-position matches"
+filecheck = "src/union_pattern_arity.vir"

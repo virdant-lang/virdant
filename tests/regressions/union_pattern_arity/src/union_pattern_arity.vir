@@ -1,0 +1,166 @@
+// Regression: arm patterns were only validated by the typing pass
+// when a match failed to infer its type, and never for
+// statement-level matches.  A ctor pattern with too few or too many
+// sub-patterns (`with @Bar()`, `with @Bar(a, b)`), an unknown ctor
+// name, or an ill-typed sub-pattern passed `vir check` silently.
+
+pub union type Inner {
+    Val(x : Word[4])
+}
+
+pub union type Foo {
+    Bar(value : Bit)
+    Pair(inner : Inner)
+}
+
+pub mod StmtMatchTooFew {
+    incoming clock : Clock
+    incoming sel : Foo
+    reg r : Bit
+    unused r
+    match sel {
+        // CHECK: Pattern @Bar has wrong number of arguments: expected 1, but found 0
+        with @Bar()   { r <= true }
+        with @Pair(_) { r <= false }
+    }
+}
+
+pub mod StmtMatchTooMany {
+    incoming clock : Clock
+    incoming sel : Foo
+    reg r : Bit
+    unused r
+    match sel {
+        // CHECK: Pattern @Bar has wrong number of arguments: expected 1, but found 2
+        with @Bar(a, b) { r <= true }
+        with @Pair(_)   { r <= false }
+    }
+}
+
+pub mod StmtMatchNestedArity {
+    incoming clock : Clock
+    incoming sel : Foo
+    reg r : Bit
+    unused r
+    match sel {
+        with @Bar(_) {
+            r <= true
+        }
+        // CHECK: Pattern @Val has wrong number of arguments: expected 1, but found 0
+        with @Pair(@Val()) {
+            r <= false
+        }
+    }
+}
+
+pub mod StmtMatchUnknownCtor {
+    incoming clock : Clock
+    incoming sel : Foo
+    reg r : Bit
+    unused r
+    match sel {
+        // CHECK: Unresolved constructor Nope
+        with @Nope()  { r <= true }
+        with @Pair(_) { r <= false }
+    }
+}
+
+pub mod StmtMatchWordSubPattern {
+    incoming clock : Clock
+    incoming sel : Foo
+    reg r : Bit
+    unused r
+    match sel {
+        // CHECK: Expected type Bit which is not a Word type
+        with @Bar(0w4) { r <= true }
+        with @Pair(_)  { r <= false }
+    }
+}
+
+pub mod StmtMatchWrongWidthSubPattern {
+    incoming clock : Clock
+    incoming sel : Inner
+    reg r : Bit
+    unused r
+    match sel {
+        // CHECK: Wrong type: Expected Word[4] but found Word[8]
+        with @Val(1w8) { r <= true }
+    }
+}
+
+pub mod ExprMatchTooFew {
+    incoming clock : Clock
+    reg foo : Foo {
+        initial it <= @Bar(false)
+        if {
+            when false { it <= @Bar(true) }
+        }
+    }
+    wire ready : Bit {
+        unused it
+        it := match foo {
+            // CHECK: Pattern @Bar has wrong number of arguments: expected 1, but found 0
+            with @Bar()   => true
+            with @Pair(_) => false
+        }
+    }
+}
+
+pub mod ExprMatchTooMany {
+    incoming clock : Clock
+    reg foo : Foo {
+        initial it <= @Bar(false)
+        if {
+            when false { it <= @Bar(true) }
+        }
+    }
+    wire ready : Bit {
+        unused it
+        it := match foo {
+            // CHECK: Pattern @Bar has wrong number of arguments: expected 1, but found 2
+            with @Bar(a, b) => true
+            with @Pair(_)   => false
+        }
+    }
+}
+
+pub mod ExprMatchNestedArity {
+    incoming clock : Clock
+    reg foo : Foo {
+        initial it <= @Bar(false)
+        if {
+            when false { it <= @Bar(true) }
+        }
+    }
+    wire ready : Bit {
+        unused it
+        it := match foo {
+            with @Bar(_) => true
+            // CHECK: Pattern @Val has wrong number of arguments: expected 1, but found 0
+            with @Pair(@Val()) => false
+        }
+    }
+}
+
+pub mod ExprMatchUnknownCtor {
+    incoming clock : Clock
+    reg foo : Foo {
+        initial it <= @Bar(false)
+        if {
+            when false { it <= @Bar(true) }
+        }
+    }
+    wire ready : Bit {
+        unused it
+        it := match foo {
+            // CHECK: Unresolved constructor Nope
+            with @Nope()  => true
+            with @Bar(_)  => false
+            with @Pair(_) => false
+        }
+    }
+}
+
+// CHECK: FAILED with
+// CHECK: 10 ERROR
+// CHECK: Check failed

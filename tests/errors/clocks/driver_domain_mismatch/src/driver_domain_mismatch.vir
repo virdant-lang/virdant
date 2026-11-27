@@ -46,7 +46,7 @@ pub mod Mixed {
         initial it <= 0
         // CHECK: Domain mismatch: cannot drive `picked` (clocked by `clock`) with async
         match ext_data[1..0] {
-            with 0w2 {
+            with 0w1 {
                 it <= it + 1w4
             }
         }

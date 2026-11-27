@@ -786,18 +786,15 @@ impl Typing {
                 let ctor_name = node.parsing().string(pat_ctor.name);
                 let children = node.children();
 
+                // Pattern-shape diagnostics (unknown ctor name, arity,
+                // sub-pattern types) are the single authority of the
+                // match-coverage pass, which sees every match in both
+                // positions; fail here without re-reporting.
                 let Type::Usual(typedef_id, args) = expected_typ else {
-                    self.diagnostics.push(Diagnostic::new(
-                        node.region(),
-                        diagnostics::UnresolvedCtor {
-                            ctor: ctor_name.to_owned(),
-                        },
-                    ));
                     return Err(());
                 };
                 let symboltable = builder.get_symboltable();
                 let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
-                    self.flag_unknown(node, "Unknown ctor name in pattern");
                     return Err(());
                 };
                 let sig = builder.get_ctor_signature(ctor_symbol.id());
@@ -807,14 +804,6 @@ impl Typing {
                     .map(|(name, typ)| (name.clone(), substitute(typ, args)))
                     .collect();
                 if parameters.len() != children.len() {
-                    self.flag_unknown(
-                        node,
-                        format!(
-                            "Pattern has wrong number of arguments: expected {}, but found {}",
-                            parameters.len(),
-                            children.len(),
-                        ),
-                    );
                     return Err(());
                 }
                 let mut arm_context = context;
@@ -830,13 +819,11 @@ impl Typing {
             }
             AstNodePayload::PatEnumerant(pat_enumerant) => {
                 let Type::Usual(typedef_id, _args) = expected_typ else {
-                    self.flag_unknown(node, "PatEnumerant expects an enum type");
                     return Err(());
                 };
                 let enumerant_name = node.parsing().string(pat_enumerant.name);
                 let symboltable = builder.get_symboltable();
                 let Some(enumerant_symbol) = symboltable.slot(*typedef_id, enumerant_name) else {
-                    self.flag_unknown(node, "Unknown enumerant name in pattern");
                     return Err(());
                 };
                 // An enumerant carrying payload parameters must be
@@ -846,19 +833,12 @@ impl Typing {
                     .parameters
                     .is_empty()
                 {
-                    self.diagnostics.push(Diagnostic::new(
-                        node.region(),
-                        diagnostics::CtorRequiresArgs {
-                            ctor: enumerant_name.to_owned(),
-                        },
-                    ));
                     return Err(());
                 }
                 Ok(context)
             }
             AstNodePayload::PatWordLit(_pat_word_lit) => {
                 let Type::Word(width) = expected_typ else {
-                    self.flag_not_word_type(builder, node, expected_typ);
                     return Err(());
                 };
 
@@ -867,21 +847,12 @@ impl Typing {
                 if let Some(explicit_width) = explicit_width {
                     let actual = Type::Word(explicit_width);
                     if actual != *expected_typ {
-                        self.flag_wrong_type(builder, node, expected_typ, &actual);
                         return Err(());
                     }
                 }
 
                 let minwidth = min_word_width(value);
                 if minwidth > *width {
-                    self.diagnostics.push(Diagnostic::new(
-                        node.region(),
-                        diagnostics::DoesntFit {
-                            value,
-                            width: *width,
-                            minwidth,
-                        },
-                    ));
                     return Err(());
                 }
 
@@ -890,7 +861,6 @@ impl Typing {
             }
             AstNodePayload::PatBitLit(_pat_bit_lit) => {
                 if !matches!(expected_typ, Type::Bit | Type::Reset) {
-                    self.flag_wrong_type(builder, node, expected_typ, &Type::Bit);
                     return Err(());
                 }
                 self.annotate(node, expected_typ);
