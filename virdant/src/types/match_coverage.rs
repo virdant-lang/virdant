@@ -492,11 +492,21 @@ fn compute_missing(
             (missing, exhausted)
         }
         Category::Enum { slots } => {
+            // A nullary enumerant may be matched either as `#Name` or
+            // `@Name()`.  In an enum which also carries payload
+            // enumerants (like builtin `Valid[T]`), the ctor form
+            // `@Name()` is the canonical spelling; in a plain enum,
+            // `#Name` is.
+            let has_payload = slots.iter().any(|(_, _, params)| !params.is_empty());
             let missing: Vec<BString> = slots.iter()
                 .filter(|(id, _, _)| !covered_syms.contains_key(id))
                 .map(|(_, name, params)| {
                     if params.is_empty() {
-                        format!("#{name}").into()
+                        if has_payload {
+                            format!("@{name}()").into()
+                        } else {
+                            format!("#{name}").into()
+                        }
                     } else {
                         format!("@{}({})", name, params.join(", ")).into()
                     }

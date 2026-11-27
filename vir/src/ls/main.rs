@@ -614,7 +614,6 @@ fn missing_match_cases_action(
     if missing.is_empty() { return None; }
 
     let is_stmt = !match_node.is_expression_position();
-    let arm_body = if is_stmt { "{ }" } else { "?" };
 
     // A `with` clause is always indented 4 spaces relative to its `match`.
     let indent_col = match_node.span().start().col().saturating_add(4);
@@ -645,8 +644,17 @@ fn missing_match_cases_action(
         new_text.push_str(&indent_str);
         new_text.push_str("with ");
         new_text.push_str(pat);
-        new_text.push_str(" => ");
-        new_text.push_str(arm_body);
+        if is_stmt {
+            // Statement position: arms *perform*, so the arm is a driver
+            // block (no `=>`).  The closing brace aligns with the `with`.
+            new_text.push_str(" {\n");
+            new_text.push_str(&indent_str);
+            new_text.push('}');
+        } else {
+            // Expression position: arms *produce*, so the arm is a
+            // `?` hole for the user to fill in.
+            new_text.push_str(" => ?");
+        }
     }
 
     let edit = TextEdit {
@@ -752,26 +760,39 @@ fn missing_match_patterns(
         Type::Usual(td, _args) => {
             let sym = symboltable.symbol(*td);
             match sym.kind() {
-                SymbolKind::EnumDef => symboltable
-                    .slots(*td)
-                    .iter()
-                    .filter(|s| !covered_syms.contains(&s.id()))
-                    .map(|s| {
-                        // Enumerants carrying payload parameters are
-                        // matched with `@Name(params)`, others with `#Name`.
-                        let params = db
-                            .get_ctor_signature(s.id())
-                            .parameters
-                            .iter()
-                            .map(|(name, _)| name.to_str_lossy().into_owned())
-                            .collect::<Vec<_>>();
-                        if params.is_empty() {
-                            format!("#{}", s.name().to_str_lossy())
-                        } else {
-                            format!("@{}({})", s.name().to_str_lossy(), params.join(", "))
-                        }
-                    })
-                    .collect(),
+                SymbolKind::EnumDef => {
+                    // A nullary enumerant may be matched either as
+                    // `#Name` or `@Name()`.  In an enum which also
+                    // carries payload enumerants (like builtin
+                    // `Valid[T]`), the ctor form `@Name()` is the
+                    // canonical spelling; in a plain enum, `#Name` is.
+                    let has_payload = symboltable
+                        .slots(*td)
+                        .iter()
+                        .any(|s| !db.get_ctor_signature(s.id()).parameters.is_empty());
+                    symboltable
+                        .slots(*td)
+                        .iter()
+                        .filter(|s| !covered_syms.contains(&s.id()))
+                        .map(|s| {
+                            let params = db
+                                .get_ctor_signature(s.id())
+                                .parameters
+                                .iter()
+                                .map(|(name, _)| name.to_str_lossy().into_owned())
+                                .collect::<Vec<_>>();
+                            if params.is_empty() {
+                                if has_payload {
+                                    format!("@{}()", s.name().to_str_lossy())
+                                } else {
+                                    format!("#{}", s.name().to_str_lossy())
+                                }
+                            } else {
+                                format!("@{}({})", s.name().to_str_lossy(), params.join(", "))
+                            }
+                        })
+                        .collect()
+                }
                 SymbolKind::UnionDef => symboltable
                     .slots(*td)
                     .iter()

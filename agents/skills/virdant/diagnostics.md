@@ -199,7 +199,10 @@ module's incoming clock ports. See ./driver-blocks.md and ./memory.md.
 
 * Non-exhaustive matches — cover every case or end with `else`:
   * `Non-exhaustive match on Bit: not covered: false`
-  * `not covered: #Blue` (enum — one enumerant omitted)
+  * `not covered: #Blue` (plain enum — one enumerant omitted; a
+    union-like enum — one with payload enumerants, like builtin
+    `Valid[T]` — spells nullary enumerants in ctor form:
+    `not covered: @Invalid()`)
   * `not covered: @Bar` (union — one constructor omitted)
   * `Non-exhaustive match` (Word subject — add `else` or cover all values)
 * `Overlapping match arm: X` — a later arm covers an already-covered case:

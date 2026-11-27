@@ -102,6 +102,11 @@ enum type Opt[T : Type] {
   a union variant: `o := @Some(14w4)`.
 * An enumerant WITHOUT parameters is constructed with `#`, and may
   also be written with an empty argument list: `#None` or `@None()`.
+* In an enum which also carries payload enumerants (a union-like
+  enum, like builtin `Valid[T]` with `@Invalid()` / `@Valid(t)`),
+  spell nullary enumerants in the ctor form `@None()` — that is what
+  the compiler uses when reporting and autofilling missing cases. In
+  a plain enum (no payload enumerants anywhere), use `#Name`.
 * Using `#Name` on a parameter-carrying enumerant is an error:
   `o := #Some` reports `Ctor Some requires arguments: use @Some(...)`.
 * Match parameter-carrying enumerants with `with @Name(pattern)`,
@@ -112,7 +117,7 @@ enum type Opt[T : Type] {
 wire inner : Word[4]
 inner := match opt {
     with @Some(v) => v
-    with #None    => 0
+    with @None()  => 0
 }
 ```
 
