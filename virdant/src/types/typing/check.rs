@@ -33,7 +33,7 @@ impl Typing {
                         return match cached {
                             Some(rhs_typ) => {
                                 if !Self::compatible_typs(&rhs_typ, expected_typ) {
-                                    self.flag_wrong_type(node, expected_typ, &rhs_typ);
+                                    self.flag_wrong_type(builder, node, expected_typ, &rhs_typ);
                                     Err(())
                                 } else {
                                     self.annotate(node, expected_typ);
@@ -66,13 +66,13 @@ impl Typing {
             if Self::compatible_typs(&existing_typ, expected_typ) {
                 return Ok(());
             }
-            self.flag_wrong_type(node, expected_typ, &existing_typ);
+            self.flag_wrong_type(builder, node, expected_typ, &existing_typ);
             return Err(());
         }
 
         if let Some(actual_typ) = self.infer(builder, context.clone(), node)? {
             if !Self::compatible_typs(&actual_typ, expected_typ) {
-                self.flag_wrong_type(node, expected_typ, &actual_typ);
+                self.flag_wrong_type(builder, node, expected_typ, &actual_typ);
                 return Err(());
             } else {
                 return Ok(());
@@ -82,9 +82,9 @@ impl Typing {
         match node.payload() {
             AstNodePayload::ExprParen                => self.check_paren(builder, context, node, expected_typ),
             AstNodePayload::If                     => self.check_if(builder, context, node, expected_typ),
-            AstNodePayload::ExprWordLit(_)           => self.check_word_lit(node, expected_typ),
+            AstNodePayload::ExprWordLit(_)           => self.check_word_lit(builder, node, expected_typ),
             AstNodePayload::ExprIndex(expr_index)    => self.check_index(builder, context, node, expr_index.index, expected_typ),
-            AstNodePayload::ExprHole                 => self.check_hole(node, expected_typ),
+            AstNodePayload::ExprHole                 => self.check_hole(builder, node, expected_typ),
             AstNodePayload::ExprDontcare             => self.check_dontcare(node, expected_typ),
             AstNodePayload::Match                    => self.check_match(builder, context, node, expected_typ),
             AstNodePayload::ExprFn                   => self.check_fn(builder, context, node, expected_typ),
@@ -256,9 +256,9 @@ impl Typing {
         }
     }
 
-    fn check_word_lit<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+    fn check_word_lit<'p>(&mut self, builder: &Builder, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
         let Type::Word(width) = expected_typ else {
-            self.flag_not_word_type(node, expected_typ);
+            self.flag_not_word_type(builder, node, expected_typ);
             return Err(());
         };
 
@@ -269,7 +269,7 @@ impl Typing {
                 self.annotate(node, &actual);
                 return Ok(());
             } else {
-                self.flag_wrong_type(node, expected_typ, &actual);
+                self.flag_wrong_type(builder, node, expected_typ, &actual);
                 return Err(());
             }
         }
@@ -443,11 +443,11 @@ impl Typing {
                 Ok(())
             }
             Type::Word(width) => {
-                self.flag_wrong_type(subject, &Type::Word(elem_width), &Type::Word(*width));
+                self.flag_wrong_type(builder, subject, &Type::Word(elem_width), &Type::Word(*width));
                 Err(())
             }
             other => {
-                self.flag_not_word_type(subject, other);
+                self.flag_not_word_type(builder, subject, other);
                 Err(())
             }
         }
@@ -485,12 +485,12 @@ impl Typing {
                     self.annotate(node, &Type::Bit);
                     Ok(())
                 } else {
-                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
+                    self.flag_wrong_type(builder, node, expected_typ, &Type::Bit);
                     Err(())
                 }
             }
             other => {
-                self.flag_not_word_type(&subject, &other);
+                self.flag_not_word_type(builder, &subject, &other);
                 Err(())
             }
         }
@@ -504,7 +504,7 @@ impl Typing {
         expected_typ: &Type,
     ) -> Result<(), ()> {
         let Type::Word(target_width) = expected_typ else {
-            self.flag_not_word_type(node, expected_typ);
+            self.flag_not_word_type(builder, node, expected_typ);
             return Err(());
         };
 
@@ -522,13 +522,13 @@ impl Typing {
             Type::Bit | Type::Clock | Type::Reset => 1,
             Type::Word(width) => width,
             other => {
-                self.flag_not_word_type(&subject, &other);
+                self.flag_not_word_type(builder, &subject, &other);
                 return Err(());
             }
         };
 
         if subject_width > *target_width {
-            self.flag_wrong_type(node, &Type::Word(subject_width), expected_typ);
+            self.flag_wrong_type(builder, node, &Type::Word(subject_width), expected_typ);
             return Err(());
         }
 
@@ -544,7 +544,7 @@ impl Typing {
         expected_typ: &Type,
     ) -> Result<(), ()> {
         let Type::Word(target_width) = expected_typ else {
-            self.flag_not_word_type(node, expected_typ);
+            self.flag_not_word_type(builder, node, expected_typ);
             return Err(());
         };
 
@@ -562,7 +562,7 @@ impl Typing {
             Type::Bit | Type::Clock | Type::Reset => 1,
             Type::Word(width) => width,
             other => {
-                self.flag_not_word_type(&subject, &other);
+                self.flag_not_word_type(builder, &subject, &other);
                 return Err(());
             }
         };
@@ -623,13 +623,20 @@ impl Typing {
         Ok(())
     }
 
-    fn check_hole<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+    fn check_hole<'p>(&mut self, builder: &Builder, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
         self.annotate(node, &expected_typ);
         self.diagnostics.push(Diagnostic::new(
             node.region(),
             diagnostics::UnfilledHole {
                 name: None,
-                typ: Some(format!("{expected_typ:?}").into()),
+                typ: Some(
+                    crate::types::render::render_type_in_package(
+                        builder.db(),
+                        node.region().package(),
+                        expected_typ,
+                    )
+                    .into(),
+                ),
             },
         ));
         Ok(())
@@ -761,7 +768,7 @@ impl Typing {
             self.annotate(node, &expected_typ);
         } else {
             self.flag_unknown(node, format!("Unknown field {field_name}"));
-            self.flag_wrong_type(node, expected_typ, &field_typ);
+            self.flag_wrong_type(builder, node, expected_typ, &field_typ);
         }
 
         Ok(())
@@ -851,7 +858,7 @@ impl Typing {
             }
             AstNodePayload::PatWordLit(_pat_word_lit) => {
                 let Type::Word(width) = expected_typ else {
-                    self.flag_not_word_type(node, expected_typ);
+                    self.flag_not_word_type(builder, node, expected_typ);
                     return Err(());
                 };
 
@@ -860,7 +867,7 @@ impl Typing {
                 if let Some(explicit_width) = explicit_width {
                     let actual = Type::Word(explicit_width);
                     if actual != *expected_typ {
-                        self.flag_wrong_type(node, expected_typ, &actual);
+                        self.flag_wrong_type(builder, node, expected_typ, &actual);
                         return Err(());
                     }
                 }
@@ -883,7 +890,7 @@ impl Typing {
             }
             AstNodePayload::PatBitLit(_pat_bit_lit) => {
                 if !matches!(expected_typ, Type::Bit | Type::Reset) {
-                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
+                    self.flag_wrong_type(builder, node, expected_typ, &Type::Bit);
                     return Err(());
                 }
                 self.annotate(node, expected_typ);

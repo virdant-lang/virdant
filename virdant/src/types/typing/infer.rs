@@ -356,7 +356,7 @@ impl Typing {
                 match (lhs_typ, rhs_typ) {
                     (Some(lhs_typ), Some(rhs_typ)) => {
                         if !Self::compatible_typs(&lhs_typ, &rhs_typ) {
-                            self.flag_wrong_type(node, &lhs_typ, &rhs_typ);
+                            self.flag_wrong_type(builder, node, &lhs_typ, &rhs_typ);
                             return Err(());
                         }
                     }
@@ -385,7 +385,7 @@ impl Typing {
                 let typ = match (lhs_typ, rhs_typ) {
                     (Some(lhs_typ), Some(rhs_typ)) => {
                         if !Self::compatible_typs(&lhs_typ, &rhs_typ) {
-                            self.flag_wrong_type(node, &lhs_typ, &rhs_typ);
+                            self.flag_wrong_type(builder, node, &lhs_typ, &rhs_typ);
                             return Err(());
                         }
                         lhs_typ
@@ -419,7 +419,7 @@ impl Typing {
                 let typ = match (lhs_typ, rhs_typ) {
                     (Some(lhs_typ), Some(rhs_typ)) => {
                         if !Self::compatible_typs(&lhs_typ, &rhs_typ) {
-                            self.flag_wrong_type(node, &lhs_typ, &rhs_typ);
+                            self.flag_wrong_type(builder, node, &lhs_typ, &rhs_typ);
                             return Err(());
                         }
                         lhs_typ
@@ -494,7 +494,12 @@ impl Typing {
             self.diagnostics.push(Diagnostic::new(
                 subject.region(),
                 diagnostics::IndexNotWordType {
-                    typ: subject_typ.to_string().into(),
+                    typ: crate::types::render::render_type_in_package(
+                        builder.db(),
+                        subject.region().package(),
+                        &subject_typ,
+                    )
+                    .into(),
                 },
             ));
             return Err(());
@@ -702,7 +707,12 @@ impl Typing {
                 self.diagnostics.push(Diagnostic::new(
                     subject.region(),
                     diagnostics::IndexNotWordType {
-                        typ: subject_typ.to_string().into(),
+                        typ: crate::types::render::render_type_in_package(
+                            builder.db(),
+                            subject.region().package(),
+                            &subject_typ,
+                        )
+                        .into(),
                     },
                 ));
                 Err(())
@@ -775,7 +785,12 @@ impl Typing {
                 self.diagnostics.push(Diagnostic::new(
                     subject.region(),
                     diagnostics::IndexNotWordType {
-                        typ: subject_typ.to_string().into(),
+                        typ: crate::types::render::render_type_in_package(
+                            builder.db(),
+                            subject.region().package(),
+                            &subject_typ,
+                        )
+                        .into(),
                     },
                 ));
                 Err(())
@@ -902,7 +917,7 @@ impl Typing {
                         Ok(Some(Type::Clock))
                     }
                     Some(typ) => {
-                        self.flag_wrong_type(node, &Type::Bit, &typ);
+                        self.flag_wrong_type(builder, node, &Type::Bit, &typ);
                         Err(())
                     }
                     None => Ok(None),
@@ -945,7 +960,7 @@ impl Typing {
             (None, None) => return Ok(None),
             (Some(a_typ), Some(b_typ)) => {
                 if !Self::compatible_typs(&a_typ, &b_typ) {
-                    self.flag_wrong_type(node, &a_typ, &b_typ);
+                    self.flag_wrong_type(builder, node, &a_typ, &b_typ);
                     return Err(());
                 }
                 a_typ
@@ -988,7 +1003,7 @@ impl Typing {
                     self.annotate(&node, &Type::Word(width));
                     Ok(Some(Type::Word(width)))
                 } else {
-                    self.flag_not_word_type(&subject, &subject_typ);
+                    self.flag_not_word_type(builder, &subject, &subject_typ);
                     Err(())
                 }
             }
@@ -1002,7 +1017,7 @@ impl Typing {
                     self.annotate(&node, &Type::Bit);
                     Ok(Some(Type::Bit))
                 } else {
-                    self.flag_wrong_type(&subject, &Type::Bit, &subject_typ);
+                    self.flag_wrong_type(builder, &subject, &Type::Bit, &subject_typ);
                     Err(())
                 }
             }

@@ -948,8 +948,8 @@ pub struct PlatformPortDirMismatch {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlatformPortTypeMismatch {
     pub port: BString,
-    pub expected: crate::types::Type,
-    pub actual: crate::types::Type,
+    pub expected: BString,
+    pub actual: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1498,7 +1498,7 @@ impl Diagnostic {
             }
             DiagnosticPayload::PlatformPortTypeMismatch(d) => {
                 format!(
-                    "Port {} has type {:?} but platform expects {:?}",
+                    "Port {} has type {} but platform expects {}",
                     d.port, d.actual, d.expected,
                 ).into()
             }

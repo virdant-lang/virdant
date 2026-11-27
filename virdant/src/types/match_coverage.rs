@@ -177,7 +177,12 @@ pub(crate) fn check_match_coverage(
                         diagnostics.push(Diagnostic::new(
                             pat.region(),
                             diagnostics::NotWordType {
-                                typ: subject_typ.to_string().into(),
+                                typ: crate::types::render::render_type_in_package(
+                                    builder.db(),
+                                    pat.region().package(),
+                                    subject_typ,
+                                )
+                                .into(),
                             },
                         ));
                     }
@@ -198,8 +203,18 @@ pub(crate) fn check_match_coverage(
                         diagnostics.push(Diagnostic::new(
                             pat.region(),
                             diagnostics::WrongType {
-                                expected: subject_typ.to_string().into(),
-                                actual: Type::Bit.to_string().into(),
+                                expected: crate::types::render::render_type_in_package(
+                                    builder.db(),
+                                    pat.region().package(),
+                                    subject_typ,
+                                )
+                                .into(),
+                                actual: crate::types::render::render_type_in_package(
+                                    builder.db(),
+                                    pat.region().package(),
+                                    &Type::Bit,
+                                )
+                                .into(),
                             },
                         ));
                     }
@@ -251,7 +266,12 @@ pub(crate) fn check_match_coverage(
         diagnostics.push(Diagnostic::new(
             match_node.region(),
             diagnostics::MatchNotExhaustive {
-                subject_typ: subject_typ.to_string().into(),
+                subject_typ: crate::types::render::render_type_in_package(
+                    builder.db(),
+                    match_node.region().package(),
+                    subject_typ,
+                )
+                .into(),
                 missing: format_missing(&missing),
             },
         ));

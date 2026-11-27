@@ -381,8 +381,18 @@ fn check_socketdef_and_platform_on_clauses(
                     diagnostics.push(Diagnostic::new(
                         *on_region,
                         diagnostics::WrongType {
-                            expected: crate::types::Type::Clock.to_string().into(),
-                            actual: sibling_typ.to_string().into(),
+                            expected: crate::types::render::render_type_in_package(
+                                builder.db(),
+                                on_region.package(),
+                                &crate::types::Type::Clock,
+                            )
+                            .into(),
+                            actual: crate::types::render::render_type_in_package(
+                                builder.db(),
+                                on_region.package(),
+                                sibling_typ,
+                            )
+                            .into(),
                         },
                     ));
                 }
@@ -1339,8 +1349,18 @@ fn check_connection_nodes(
                             diagnostics.push(Diagnostic::new(
                                 node.region(),
                                 diagnostics::WrongType {
-                                    expected: lhs_typ.to_string().into(),
-                                    actual: rhs_typ.to_string().into(),
+                                    expected: crate::types::render::render_type_in_package(
+                                        builder.db(),
+                                        node.region().package(),
+                                        &lhs_typ,
+                                    )
+                                    .into(),
+                                    actual: crate::types::render::render_type_in_package(
+                                        builder.db(),
+                                        node.region().package(),
+                                        &rhs_typ,
+                                    )
+                                    .into(),
                                 },
                             ));
                         }
@@ -1466,8 +1486,9 @@ pub(crate) fn resolve_mono_socket(
         .collect();
 
     let params = crate::types::typedef::params_of_item(builder, &socket_symbol);
-    let rendered = crate::types::render::render_mono_item(
+    let rendered = crate::types::render::render_mono_item_in_package(
         builder.db(),
+        symboltable.symbol(current_moddef).location().package(),
         socket_symbol.id(),
         &params,
         &args,

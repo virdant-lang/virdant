@@ -8,16 +8,19 @@ use bstr::ByteSlice;
 
 use crate::analysis::symbols::SymbolId;
 use crate::db::Db;
+use crate::package::PackageId;
 use crate::types::typ::{ParamId, Type};
 use crate::types::typedef::TypeParam;
 
-/// Render a `Usual` type's item name: the fully-qualified name,
-/// except that the `builtin` package's implicit scope is elided
-/// (`Bit`, not `builtin::Bit`), matching how the source writes it.
-fn render_item_name(db: &Db, symbol_id: SymbolId) -> String {
+/// Render a `Usual` type's item name the way it would be referenced
+/// in the file of package `current`: the bare name when the item is
+/// builtin (implicit scope) or defined in `current` itself, and the
+/// fully-qualified name (`package::Name`) for foreign types.
+fn render_item_name(db: &Db, symbol_id: SymbolId, current: Option<PackageId>) -> String {
     let symbol = db.get_symboltable().symbol(symbol_id);
     let packages = db.get_packages();
-    if symbol.location.package() == packages.builtin() {
+    let pkg = symbol.location.package();
+    if pkg == packages.builtin() || Some(pkg) == current {
         symbol.name().to_str_lossy().into_owned()
     } else {
         symbol.fqn().to_str_lossy().into_owned()
@@ -33,13 +36,37 @@ pub fn render_mono_item(
     params: &[TypeParam],
     args: &[Type],
 ) -> String {
-    let name = render_item_name(db, def_symbol);
+    render_mono_item_inner(db, None, def_symbol, params, args)
+}
+
+/// Like [`render_mono_item`], but elides the bare name for items of
+/// `current` as well as for builtins, matching how the source of
+/// `current` would reference them.
+pub fn render_mono_item_in_package(
+    db: &Db,
+    current: PackageId,
+    def_symbol: SymbolId,
+    params: &[TypeParam],
+    args: &[Type],
+) -> String {
+    render_mono_item_inner(db, Some(current), def_symbol, params, args)
+}
+
+/// Shared core for the `render_mono_item*` wrappers.
+fn render_mono_item_inner(
+    db: &Db,
+    current: Option<PackageId>,
+    def_symbol: SymbolId,
+    params: &[TypeParam],
+    args: &[Type],
+) -> String {
+    let name = render_item_name(db, def_symbol, current);
     if args.is_empty() {
         name
     } else {
         let rendered_args: Vec<String> = args
             .iter()
-            .map(|arg| render_type_with(db, arg, params))
+            .map(|arg| render_type_inner(db, current, arg, params))
             .collect();
         format!("{name}[{}]", rendered_args.join(", "))
     }
@@ -48,13 +75,33 @@ pub fn render_mono_item(
 /// Render a type in Virdant-source-like syntax, without a parameter
 /// context (`Param` renders as `Param`).
 pub fn render_type(db: &Db, typ: &Type) -> String {
-    render_type_with(db, typ, &[])
+    render_type_inner(db, None, typ, &[])
+}
+
+/// Render a type the way it would be referenced in the file of
+/// package `current`: builtin types and types of `current` itself
+/// by bare name, foreign types by fully-qualified name.
+pub fn render_type_in_package(db: &Db, current: PackageId, typ: &Type) -> String {
+    render_type_inner(db, Some(current), typ, &[])
 }
 
 /// Render a type in Virdant-source-like syntax; a `Param(id)` renders
 /// as the parameter's declared name when `params` is the declaring
 /// def's parameter list.
 pub fn render_type_with(db: &Db, typ: &Type, params: &[TypeParam]) -> String {
+    render_type_inner(db, None, typ, params)
+}
+
+/// Shared core for the `render_type*` wrappers: renders a type with
+/// `current` = the package whose file the text is rendered for (elides
+/// that package's own names to bare names, and builtins to bare names),
+/// and `params` = the generic-parameter list that names `Type::Param`s.
+fn render_type_inner(
+    db: &Db,
+    current: Option<PackageId>,
+    typ: &Type,
+    params: &[TypeParam],
+) -> String {
     match typ {
         Type::Bit => "Bit".to_string(),
         Type::Clock => "Clock".to_string(),
@@ -62,13 +109,13 @@ pub fn render_type_with(db: &Db, typ: &Type, params: &[TypeParam]) -> String {
         Type::Word(width) => format!("Word[{width}]"),
         Type::Param(param_id) => render_param(*param_id, params),
         Type::Usual(symbol_id, args) => {
-            let name = render_item_name(db, *symbol_id);
+            let name = render_item_name(db, *symbol_id, current);
             if args.is_empty() {
                 name
             } else {
                 let rendered_args: Vec<String> = args
                     .iter()
-                    .map(|arg| render_type_with(db, arg, params))
+                    .map(|arg| render_type_inner(db, current, arg, params))
                     .collect();
                 format!("{name}[{}]", rendered_args.join(", "))
             }

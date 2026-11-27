@@ -426,12 +426,18 @@ pub fn check_platform_ports_for(
         }
 
         if module_port.typ != platform_port.typ {
+            let region = module_port_region(builder, moddef_symbol_id, &module_port.path);
+            let current = region.package();
+            let db = builder.db();
+            let render = |typ: &Type| {
+                crate::types::render::render_type_in_package(db, current, typ)
+            };
             diagnostics.push(Diagnostic::new(
-                module_port_region(builder, moddef_symbol_id, &module_port.path),
+                region,
                 diagnostics::PlatformPortTypeMismatch {
                     port: module_port.path.clone(),
-                    expected: platform_port.typ.clone().unwrap_or(Type::Bit),
-                    actual: module_port.typ.clone().unwrap_or(Type::Bit),
+                    expected: render(platform_port.typ.as_ref().unwrap_or(&Type::Bit)).into(),
+                    actual: render(module_port.typ.as_ref().unwrap_or(&Type::Bit)).into(),
                 },
             ));
         }

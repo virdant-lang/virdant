@@ -149,12 +149,14 @@ impl Typing {
             )
     }
 
-    fn flag_wrong_type<'p>(&mut self, node: &AstNode<'p>, expected: &Type, actual: &Type) {
+    fn flag_wrong_type<'p>(&mut self, builder: &Builder, node: &AstNode<'p>, expected: &Type, actual: &Type) {
+        let db = builder.db();
+        let current = node.region().package();
         let diag: Diagnostic = Diagnostic::new(
             node.region(),
             diagnostics::WrongType {
-                expected: expected.to_string().into(),
-                actual: actual.to_string().into(),
+                expected: crate::types::render::render_type_in_package(db, current, expected).into(),
+                actual: crate::types::render::render_type_in_package(db, current, actual).into(),
             },
         );
         self.diagnostics.push(diag);
@@ -169,11 +171,13 @@ impl Typing {
         ));
     }
 
-    fn flag_not_word_type<'p>(&mut self, node: &AstNode<'p>, typ: &Type) {
+    fn flag_not_word_type<'p>(&mut self, builder: &Builder, node: &AstNode<'p>, typ: &Type) {
+        let db = builder.db();
+        let current = node.region().package();
         self.diagnostics.push(Diagnostic::new(
             node.region(),
             diagnostics::NotWordType {
-                typ: typ.to_string().into(),
+                typ: crate::types::render::render_type_in_package(db, current, typ).into(),
             },
         ));
     }

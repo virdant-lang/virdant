@@ -19,7 +19,7 @@ pub mod Top {
 }
 
 // CHECK: Ctor Some requires arguments: use @Some(...)
-// CHECK: Non-exhaustive match on Usual(
+// CHECK: Non-exhaustive match on Opt[Word[4]]
 // CHECK: Ctor Some requires arguments: use @Some(...)
 // CHECK: FAILED with
 // CHECK: 3 ERROR
