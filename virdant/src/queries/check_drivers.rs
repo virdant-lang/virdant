@@ -83,7 +83,11 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
         if component.can_sink() {
             match drivers {
                 None => {
-                    let region = builder.get_location_region(component.location());
+                    // Underline just the declared name, not the whole
+                    // declaration (which can include a driver block).
+                    let region = component
+                        .name_region()
+                        .unwrap_or_else(|| builder.get_location_region(component.location()));
                     // An outgoing Clock-typed port with no definition
                     // is an undriven clock source: it originates a fresh
                     // clock rather than aliasing one, so the no-driver

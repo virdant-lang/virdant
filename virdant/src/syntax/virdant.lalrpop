@@ -673,7 +673,7 @@ ServerKw: () = {
 
 ModDefStmtSocket: AstNodeId = {
     <docstring:DocString?> <annotations:Annotations> <ll:@L> ClientKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Client, doc_string: docstring });
+        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, name_span: name.span, role: SocketRole::Client, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
@@ -683,7 +683,7 @@ ModDefStmtSocket: AstNodeId = {
         parser.add_node(payload, span, num_children)
     },
     <docstring:DocString?> <annotations:Annotations> <ll:@L> ServerKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <it:ItBlock?> <where_:WhereClause?> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Server, doc_string: docstring });
+        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, name_span: name.span, role: SocketRole::Server, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
@@ -696,7 +696,7 @@ ModDefStmtSocket: AstNodeId = {
     // better before the `{ ... }` it annotates, and the two are
     // unambiguous (`where` starts a clause, `{` starts a block).
     <docstring:DocString?> <annotations:Annotations> <ll:@L> ClientKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Client, doc_string: docstring });
+        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, name_span: name.span, role: SocketRole::Client, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }
@@ -706,7 +706,7 @@ ModDefStmtSocket: AstNodeId = {
         parser.add_node(payload, span, num_children)
     },
     <docstring:DocString?> <annotations:Annotations> <ll:@L> ServerKw "socket" <name:Ident> "of" <ofness:Ofness> <args:GenericsParams?> <where_:WhereClause> <it:ItBlock> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, role: SocketRole::Server, doc_string: docstring });
+        let payload = AstNodePayload::Socket(payload::Socket { name: name.text, name_span: name.span, role: SocketRole::Server, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16
             + if args.is_none() { 0u16 } else { 1u16 }

@@ -942,9 +942,14 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     id,
                                     path: path.clone(),
                                     location: stmt.location(),
+                                    // A socket channel's declaration lives
+                                    // in the socketdef; keep the warning
+                                    // instance-local by pointing at the
+                                    // submodule instance's name in the
+                                    // parent.
                                     name_region: Some(Region::new(
-                                        channel_stmt.package(),
-                                        channel.name.span,
+                                        stmt.package(),
+                                        module.name.span,
                                     )),
                                     typ,
                                     flow,
@@ -1109,9 +1114,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         id,
                         path: path.clone(),
                         location: stmt.location(),
+                        // A socket channel's declaration lives in the
+                        // socketdef; keep the warning instance-local by
+                        // pointing at the socket instance's name in the
+                        // parent.
                         name_region: Some(Region::new(
-                            socket_stmt.package(),
-                            channel.name.span,
+                            stmt.package(),
+                            socket.name_span,
                         )),
                         typ,
                         flow,

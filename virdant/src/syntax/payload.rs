@@ -354,6 +354,10 @@ pub struct ModDefStmtBlock;
 #[derive(Clone, Debug)]
 pub struct Socket {
     pub name: InternedString,
+    /// The span of the socket's name occurrence: lets diagnostics
+    /// point at just the name rather than the whole `socket p of ...`
+    /// statement (which may include a driver block).
+    pub name_span: Span,
     pub role: SocketRole,
     pub doc_string: Option<InternedString>,
 }
