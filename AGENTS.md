@@ -1,6 +1,9 @@
 # Project Summary
 * This is the repository for Virdant, a modern Hardware Description Language
 
+# MANDATORY
+* Always start with using the Virdant skill.
+
 # Codebase organization
 * Documentation for agents (ie, for you) are in `agents/`
 * Examples of Virdant code can be found in `tests/` and `assets/tutorial/`.
