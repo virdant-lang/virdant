@@ -225,8 +225,8 @@ module's incoming clock ports. See ./driver-blocks.md and ./memory.md.
 * A ctor pattern needs exactly one sub-pattern per payload parameter,
   too few or too many:
   `Pattern @Bar has wrong number of arguments: expected 1, but found 0`.
-  Bind or discard each payload with a name or `_`
-  (`with @Bar(value)`, `with @Bar(_)`).
+  Bind or discard each payload with a name or `?`
+  (`with @Bar(value)`, `with @Bar(?)`).
 * Literal sub-patterns must fit the payload's type and width
   (`with @Val(1w8)` against a `Word[4]` payload:
   `Wrong type: Expected Word[4] but found Word[8]`).

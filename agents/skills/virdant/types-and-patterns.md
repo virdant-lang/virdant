@@ -110,7 +110,7 @@ enum type Opt[T : Type] {
 * Using `#Name` on a parameter-carrying enumerant is an error:
   `o := #Some` reports `Ctor Some requires arguments: use @Some(...)`.
 * Match parameter-carrying enumerants with `with @Name(pattern)`,
-  which binds the parameters positionally. Use `_` to discard a
+  which binds the parameters positionally. Use `?` to discard a
   payload value:
 
 ```virdant
@@ -284,8 +284,8 @@ out := match u {
 You can mix concrete and variable sub-patterns in the same arm,
 as shown with `@Pair(x, false)` above.
 
-Use `_` to discard a payload value you do not need:
-`with @Pair(_, false) => true`.
+Use `?` to discard a payload value you do not need:
+`with @Pair(?, false) => true`.
 
 ### Using `@Invalid()` and `@Valid(x)` with `Valid[T]`
 
@@ -348,10 +348,12 @@ it := 0w8 : Word[8]
 it := @Valid(3) : Valid[Word[8]]
 ```
 
-## Patterns that parse but are not supported
+## Wildcard patterns and patterns that parse but are not supported
 
-* The grammar also admits bare `Ident` and `?` patterns, but
-  the match-coverage checker does not yet handle them correctly.
-* Do NOT use bare-Ident or bare-`?` patterns in `match` arms.
-* To discard a payload value in a constructor pattern, use `_`:
-  `with @Some(_) => true`.
+* A bare `?` pattern is the canonical wildcard: it matches any value
+  and binds nothing (like `_` in Haskell or Rust). The match-coverage
+  checker treats it as matching everything, so it must come last.
+* Do NOT use bare-`Ident` patterns in `match` arms; the
+  match-coverage checker does not yet handle them correctly.
+* To discard a payload value in a constructor pattern, use `?`:
+  `with @Some(?) => true`.
