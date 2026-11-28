@@ -6,6 +6,7 @@
 //! phase (`queries/check.rs`); the simulator and the Verilog backend
 //! load images best-effort on top of it.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use bstr::{BStr, BString};
@@ -16,6 +17,13 @@ use crate::common::Width;
 use crate::common::WordValue;
 use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;
+
+/// Simulator memory-image overrides, keyed by elaborated memory
+/// component path (e.g. `top.cpu.ram`).  Supplied by `vir run
+/// --memory PATH:FILE`; each override replaces any
+/// `@image`/`@image_hex`/`@image_inline` annotation on that memory
+/// with `FILE` loaded as a raw binary image (like `@image`).
+pub type MemoryImageOverrides = BTreeMap<BString, PathBuf>;
 
 /// The image format declared by the annotation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -221,7 +221,7 @@ pub fn run(
         return 1;
     }
 
-    let sim = Sim::new(&db, top_symbol.id(), InitStrategy::Random);
+    let sim = Sim::new(&db, top_symbol.id(), InitStrategy::Random, &Default::default());
     let mut session = Session {
         db,
         sim,

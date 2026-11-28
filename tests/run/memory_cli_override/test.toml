@@ -1,0 +1,4 @@
+kind = "run"
+description = "`--memory PATH:FILE` (`-m`) preloads the memory at an elaborated component path with a raw binary file, overriding its `@image`/`@image_hex`/`@image_inline` annotation: the ROM here is annotated `@image_inline(\"AAAA\")` but `run_args` preloads it with `src/rom.bin` (BBBB), and the readback checks the preloaded bytes"
+cycle_limit = 16
+run_args = ["-m", "top.rom:src/rom.bin"]

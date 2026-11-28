@@ -100,6 +100,11 @@ pub mod Top for virt::Virt {
   - `--fps` — print `Average clock frequency: X MHz` on exit or Ctrl-C.
     Tests commonly combine both: `vir run --fps-no-cap --fps --verbose`.
   - `--flash <FILE>` — preload the simulated 16 MiB SPI flash device.
+  - `-m PATH:FILE` / `--memory PATH:FILE` — preload the memory at
+    elaborated component path `PATH` (e.g. `top.cpu.ram`) with the raw
+    binary `FILE`, word-packed like `@image`. Repeatable. Overrides any
+    `@image`/`@image_hex`/`@image_inline` annotation on that memory.
+    `PATH` must resolve to a `memory` component of the design.
   - `--baud <BAUD>` — UART baud rate for the board (default 115200;
     `[virt].baud` in `virdant.toml` is another way to set it, and the
     CLI wins when both are given). The board decodes `tx` and drives

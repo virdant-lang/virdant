@@ -43,6 +43,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use virdant::analysis::elaboration::SignalId;
+use virdant::analysis::memory_image::MemoryImageOverrides;
 use virdant::analysis::symbols::SymbolId;
 use virdant::db::Db;
 use virdant::sim::{Clock, Sim, Value};
@@ -64,6 +65,10 @@ pub enum VirtBoard {
 pub struct VirtOptions {
     /// Preload the SPI flash image (up to 16 MiB).
     pub flash: Option<PathBuf>,
+    /// `--memory PATH:FILE` overrides: raw binary images replacing any
+    /// `@image`/`@image_hex`/`@image_inline` annotation on the memory
+    /// at elaborated component path `PATH`.
+    pub memory_images: MemoryImageOverrides,
     /// Write a VCD trace to this file (defaults to `trace.vcd`).
     pub trace: Option<PathBuf>,
     /// Disable the real-time (FPS) pace cap.
@@ -117,7 +122,7 @@ struct VgaPorts {
 /// Run the `virt::Virt` or `virt::VirtVga` board for the elaborated
 /// design rooted at `top`.  Returns the process exit code.
 pub fn run(db: &Db, top: SymbolId, clock_hz: u64, board: VirtBoard, opts: VirtOptions) -> i32 {
-    let mut sim = Sim::new(db, top, Default::default());
+    let mut sim = Sim::new(db, top, Default::default(), &opts.memory_images);
     virdant::sim::builtins::attach(&mut sim, db, opts.verbose);
 
     let port = |sim: &Sim, name: &str| -> SignalId {

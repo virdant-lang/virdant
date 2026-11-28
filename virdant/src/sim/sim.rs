@@ -6,6 +6,7 @@
 
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::elaboration::{SignalId, Elaboration};
+use crate::analysis::memory_image::MemoryImageOverrides;
 use crate::common::{ComponentKind, SocketRole, Width};
 use crate::db::Db;
 use crate::sim::bits::BitPat;
@@ -179,8 +180,13 @@ impl std::fmt::Debug for Sim {
 }
 
 impl Sim {
-    pub fn new(db: &Db, top: SymbolId, strategy: InitStrategy) -> Sim {
-        let circuit = Circuit::new(db, top);
+    pub fn new(
+        db: &Db,
+        top: SymbolId,
+        strategy: InitStrategy,
+        memory_image_overrides: &MemoryImageOverrides,
+    ) -> Sim {
+        let circuit = Circuit::new(db, top, memory_image_overrides);
 
         let mut sim = Sim {
             state: State::new(circuit.elaboration.as_ref(), &circuit.type_layout_index, &strategy, &circuit.memories),

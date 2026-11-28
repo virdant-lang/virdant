@@ -1,0 +1,58 @@
+//! Self-checking `kind = "run"` test for `vir run --memory PATH:FILE`
+//! (`-m`): the CLI preloads the memory at component path `top.rom`
+//! with the raw binary `src/rom.bin` (the bytes `BBBB`), overriding
+//! this file's `@image_inline("AAAA")` annotation.  The harness checks
+//! every read against `0x42` — the preloaded bytes — so the test only
+//! passes when the override took effect.
+
+import virt
+
+//> Self-checking ROM: the CLI `--memory` override must win over the
+//> `@image_inline` annotation.
+pub mod CliOverrideTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every read matched the preloaded image,
+    //> `@Valid(1)` on a mismatch.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> The annotation's bytes are deliberately *not* what the CLI
+    //> preloads: if the override did not apply, reads return 0x41.
+    @image_inline("AAAA")
+    memory rom[4] : Word[8]
+
+    // Free-running address walker over the four ROM words.
+    reg index : Word[2] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    reg started : Bit {
+        initial it <= false
+        it <= true
+    }
+
+    reg finished : Bit {
+        initial it <= false
+        if {
+            when started && index == 3 {
+                it <= true
+            }
+        }
+    }
+
+    reg all_ok : Bit {
+        initial it <= true
+        if {
+            when started && !finished {
+                it <= it && rom[dyn index] == 0x42
+            }
+        }
+    }
+}

@@ -16,7 +16,7 @@ use indexmap::{IndexMap, IndexSet};
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::Location;
 use crate::analysis::drivers::{Driver, WriteIndex};
-use crate::analysis::memory_image::{self, MemoryImageKind};
+use crate::analysis::memory_image::{self, MemoryImage, MemoryImageOverrides, MemoryImageSource, MemoryImageKind};
 use crate::types::Type;
 use crate::common::ComponentKind;
 use crate::sim::eval::Value;
@@ -92,7 +92,11 @@ impl Circuit {
     /// table the runtime needs.  Walks the elaboration once inside
     /// `build_dependencies` (per-component reference walk to derive `deps`),
     /// then collects `registers` and per-component driver `exprs`.
-    pub(super) fn new(db: &Db, top: SymbolId) -> Circuit {
+    pub(super) fn new(
+        db: &Db,
+        top: SymbolId,
+        memory_image_overrides: &MemoryImageOverrides,
+    ) -> Circuit {
         let elaboration = db.get_elaboration(top);
 
         let mut deps = build_dependencies(db, &elaboration);
@@ -124,7 +128,21 @@ impl Circuit {
                 let Some(depth) = elab_component.depth() else { continue };
                 let elem_typ = elab_component.typ();
                 let addr_width = depth.trailing_zeros() as crate::common::Width;
-                let image = load_memory_image(elab_component, &elem_typ, &mut interner);
+                // A `--memory PATH:FILE` override (if any) replaces the
+                // memory's `@image`/`@image_hex`/`@image_inline`
+                // annotation entirely.
+                let image_override = memory_image_overrides
+                    .get(elab_component.path())
+                    .map(|path| MemoryImage {
+                        kind: MemoryImageKind::Raw,
+                        source: MemoryImageSource::File(path.clone()),
+                    });
+                let image = load_memory_image(
+                    elab_component,
+                    image_override.as_ref(),
+                    &elem_typ,
+                    &mut interner,
+                );
                 // The fallback location is only carried by synthetic
                 // never-firing constant exprs (no-write arms); any
                 // location works because they are never re-resolved.
@@ -684,11 +702,16 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
 /// value.
 fn load_memory_image(
     elab_component: &crate::analysis::elaboration::ElaboratedComponent,
+    image_override: Option<&MemoryImage>,
     elem_typ: &Type,
     interner: &mut TypeInterner,
 ) -> Vec<Option<Value>> {
-    let Some(image) = elab_component.image() else {
-        return vec![];
+    let image = match image_override {
+        Some(image) => image,
+        None => match elab_component.image() {
+            Some(image) => image,
+            None => return vec![],
+        },
     };
     let bytes: Vec<u8> = match image.bytes() {
         Ok(bytes) => bytes.into(),

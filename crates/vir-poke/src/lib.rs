@@ -904,7 +904,7 @@ impl Session {
     /// statements re-run).  Registered watches/breaks do not survive a
     /// restart.
     pub fn restart(&mut self) {
-        self.sim = Sim::new(&self.db, self.top, InitStrategy::Random);
+        self.sim = Sim::new(&self.db, self.top, InitStrategy::Random, &Default::default());
         self.break_flag.set(None);
         self.it = None;
         // A VCD trace was attached to the old `Sim` (its watchers died
@@ -957,7 +957,7 @@ impl Session {
             }
         };
         self.top = new_top.id;
-        self.sim = Sim::new(&self.db, new_top.id, InitStrategy::Random);
+        self.sim = Sim::new(&self.db, new_top.id, InitStrategy::Random, &Default::default());
         self.cwd.clear();
         self.it = None;
         self.break_flag.set(None);

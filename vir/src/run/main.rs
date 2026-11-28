@@ -20,10 +20,13 @@ use common::{
     read_virt_baud, ProjectLocation,
 };
 
-use bstr::ByteSlice;
+use bstr::{BString, ByteSlice};
 use clap::{value_parser, Arg, ArgAction};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+use virdant::analysis::memory_image::MemoryImageOverrides;
 use virdant::analysis::symbols::SymbolKind;
+use virdant::common::ComponentKind;
 use virdant::util::check_db;
 
 /// Assemble the `vir-run` command line interface.
@@ -47,6 +50,9 @@ fn command() -> clap::Command {
             .value_name("BAUD")
             .value_parser(value_parser!(u64))
             .help("UART baud rate for the virt board (default 115200, overridable via [virt] in virdant.toml)"))
+        .arg(Arg::new("memory").short('m').long("memory").num_args(1).action(ArgAction::Append)
+            .value_name("PATH:FILE")
+            .help("Preload the memory at component path PATH (e.g. top.cpu.ram) with the raw binary FILE, overriding any @image annotation"))
         .arg(Arg::new("verbose").short('v').long("verbose").action(ArgAction::SetTrue)
             .help("Print informational board messages"));
     common::add_project_args(&mut cmd, false);
@@ -61,6 +67,9 @@ fn main() {
     let flash = matches.get_one::<PathBuf>("flash").cloned();
     let cycles = matches.get_one::<u64>("cycles").copied();
     let baud = matches.get_one::<u64>("baud").copied();
+    let memory_args = matches.get_many::<String>("memory")
+        .map(|values| values.cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
 
     run(
         &location,
@@ -70,11 +79,12 @@ fn main() {
         &flash,
         &cycles,
         &baud,
+        &memory_args,
         matches.get_flag("verbose"),
     );
 }
 
-fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>, baud: &Option<u64>, verbose: bool) {
+fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>, baud: &Option<u64>, memory_args: &[String], verbose: bool) {
     let cwd = location.resolve_cwd();
     let manifest = project_manifest_or_exit(&cwd);
     let Some(top_name) = read_prog_key_from(&manifest, "top") else {
@@ -105,6 +115,8 @@ fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps
             std::process::exit(1);
         });
 
+    let memory_images = resolve_memory_overrides(&db, top_symbol.id(), memory_args);
+
     // The top module's `for` clause selects the platform; `vir run`
     // simulates the `virt::Virt` and `virt::VirtVga` boards.
     let mut builder = virdant::db::Builder::new(&db);
@@ -129,7 +141,7 @@ fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps
         (platform_name, _) => {
             eprintln!(
                 "Top module '{top_name}' implements platform '{platform_name}', \
-                 but `vir run` simulates virt::Virt and virt::VirtVga only"
+                 but `vir run` simulates virt::Virt and virt::VirtVga only",
             );
             std::process::exit(1);
         }
@@ -160,7 +172,7 @@ fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps
     }
     if baud > clock_hz / 2 {
         eprintln!(
-            "error: baud {baud} is too fast for a {clock_hz} Hz clock (need at least 2 cycles per bit)"
+            "error: baud {baud} is too fast for a {clock_hz} Hz clock (need at least 2 cycles per bit)",
         );
         std::process::exit(1);
     }
@@ -178,7 +190,58 @@ fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps
             baud,
             fps: fps,
             verbose,
+            memory_images,
         },
     );
     std::process::exit(exit_code);
+}
+
+/// Parse the `--memory PATH:FILE` arguments, checking each `PATH` is an
+/// elaborated `memory` component of the design.
+fn resolve_memory_overrides(
+    db: &virdant::db::Db,
+    top: virdant::analysis::symbols::SymbolId,
+    memory_args: &[String],
+) -> MemoryImageOverrides {
+    let mut overrides = BTreeMap::new();
+    for arg in memory_args {
+        let Some((path, file)) = arg.split_once(':') else {
+            eprintln!(
+                "error: --memory expects PATH:FILE (got '{arg}'), where PATH is a memory component path like top.cpu.ram",
+            );
+            std::process::exit(1);
+        };
+        if file.is_empty() {
+            eprintln!("error: --memory '{arg}': empty FILE");
+            std::process::exit(1);
+        }
+        if path == "top" || !path.starts_with("top.") || path.ends_with('.') {
+            eprintln!(
+                "error: --memory '{arg}': PATH must be a component path beginning with 'top.' (got '{path}')",
+            );
+            std::process::exit(1);
+        }
+
+        let elaboration = db.get_elaboration(top);
+        let component = elaboration.components().iter()
+            .find(|component| component.path().as_bytes() == path.as_bytes());
+        let component = match component {
+            Some(component) => component,
+            None => {
+                eprintln!(
+                    "error: --memory '{arg}': no component at path '{path}'",
+                );
+                std::process::exit(1);
+            }
+        };
+        if component.component_kind() != ComponentKind::Memory {
+            eprintln!(
+                "error: --memory '{arg}': '{path}' is not a memory component",
+            );
+            std::process::exit(1);
+        }
+
+        overrides.insert(BString::from(path), PathBuf::from(file));
+    }
+    overrides
 }

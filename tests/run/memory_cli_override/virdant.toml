@@ -1,0 +1,5 @@
+[project]
+name = "memory_cli_override"
+
+[prog]
+top = "cli_override::CliOverrideTest"
